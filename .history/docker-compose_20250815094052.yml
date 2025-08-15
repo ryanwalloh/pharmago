@@ -1,0 +1,61 @@
+
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: pharmago_postgres
+    environment:
+      POSTGRES_DB: pharmago
+      POSTGRES_USER: pharmago_user
+      POSTGRES_PASSWORD: pharmago_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: pharmago_backend
+    env_file:
+      - ./backend/.env
+    volumes:
+      - ./backend:/app
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+
+web:
+  build:
+    context: ./web-frontend
+    dockerfile: Dockerfile
+  container_name: pharmago_web
+  environment:
+    - CHOKIDAR_USEPOLLING=true   # helps with file change detection on Windows
+    - WATCHPACK_POLLING=true
+    - REACT_APP_API_URL=http://backend:8000/api
+  volumes:
+    - ./web-frontend:/app:cached
+    - /app/node_modules
+  ports:
+    - "3000:3000"
+  depends_on:
+    - backend
+
+
+  # Optional: pgAdmin UI
+  pgadmin:
+    image: dpage/pgadmin4:8
+    container_name: pharmago_pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@local.dev
+      PGADMIN_DEFAULT_PASSWORD: admin123
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+
+volumes:
+  pgdata:

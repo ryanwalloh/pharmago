@@ -1,0 +1,18 @@
+# web-frontend/Dockerfile
+FROM node:18-alpine
+
+
+WORKDIR /app
+COPY package*.json ./
+RUN npm install
+
+# Copy source
+COPY . .
+
+# Ensure CRA binds to 0.0.0.0 inside container
+ENV HOST=0.0.0.0
+# Backend API URL for the web app (override via compose env)
+ENV REACT_APP_API_URL=http://localhost:8000/api
+
+EXPOSE 3000
+CMD ["npm", "start"]
