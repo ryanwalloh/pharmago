@@ -19,7 +19,7 @@ A full-stack medicine delivery platform built with Django backend, React fronten
 
 ### 1. Clone the Repository
 ```bash
-git clone <your-repository-url>
+git clone https://github.com/ryanwalloh/pharmago
 cd pharmago
 ```
 
