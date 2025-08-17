@@ -535,3 +535,5 @@ INFO 2025-08-17 22:50:11,073 autoreload 112 139693344234368 /app/pharmago/settin
 INFO 2025-08-17 22:50:12,941 autoreload 114 139911708650368 Watching for file changes with StatReloader
 INFO 2025-08-17 22:50:15,190 autoreload 114 139911708650368 /app/pharmago/settings.py changed, reloading.
 INFO 2025-08-17 22:50:17,612 autoreload 116 139651089324928 Watching for file changes with StatReloader
+INFO 2025-08-17 23:07:48,855 autoreload 116 139651089324928 /app/api/inventory/models.py changed, reloading.
+INFO 2025-08-17 23:07:52,068 autoreload 124 140098992950144 Watching for file changes with StatReloader
