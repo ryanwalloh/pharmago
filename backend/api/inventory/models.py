@@ -2,7 +2,7 @@ from django.db import models
 from django.utils.translation import gettext_lazy as _
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.core.exceptions import ValidationError
-from api.pharmacies.models import Pharmacy
+from api.users.models import Pharmacy
 
 
 class MedicineCategory(models.Model):
@@ -364,8 +364,6 @@ class MedicineCatalog(models.Model):
     
     def is_available_for_pharmacy(self, pharmacy):
         """Check if medicine is available for a specific pharmacy."""
-        from .pharmacy_inventory import PharmacyInventory
-        
         return PharmacyInventory.objects.filter(
             pharmacy=pharmacy,
             medicine=self,
@@ -374,8 +372,6 @@ class MedicineCatalog(models.Model):
     
     def get_pharmacy_prices(self):
         """Get all pharmacy prices for this medicine."""
-        from .pharmacy_inventory import PharmacyInventory
-        
         return PharmacyInventory.objects.filter(
             medicine=self,
             is_available=True
@@ -383,8 +379,6 @@ class MedicineCatalog(models.Model):
     
     def get_average_price(self):
         """Get average price across all pharmacies."""
-        from .pharmacy_inventory import PharmacyInventory
-        
         inventory = PharmacyInventory.objects.filter(
             medicine=self,
             is_available=True

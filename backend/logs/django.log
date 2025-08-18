@@ -537,3 +537,56 @@ INFO 2025-08-17 22:50:15,190 autoreload 114 139911708650368 /app/pharmago/settin
 INFO 2025-08-17 22:50:17,612 autoreload 116 139651089324928 Watching for file changes with StatReloader
 INFO 2025-08-17 23:07:48,855 autoreload 116 139651089324928 /app/api/inventory/models.py changed, reloading.
 INFO 2025-08-17 23:07:52,068 autoreload 124 140098992950144 Watching for file changes with StatReloader
+INFO 2025-08-18 20:13:29,499 autoreload 7 139749974506368 Watching for file changes with StatReloader
+INFO 2025-08-18 20:24:53,108 autoreload 7 139749974506368 /app/api/inventory/models.py changed, reloading.
+INFO 2025-08-18 20:24:55,374 autoreload 9 140474467281792 Watching for file changes with StatReloader
+INFO 2025-08-18 20:25:00,302 autoreload 9 140474467281792 /app/api/inventory/models.py changed, reloading.
+INFO 2025-08-18 20:25:02,588 autoreload 11 140126758701952 Watching for file changes with StatReloader
+INFO 2025-08-18 20:25:08,697 autoreload 11 140126758701952 /app/api/inventory/models.py changed, reloading.
+INFO 2025-08-18 20:25:10,882 autoreload 13 140454049033088 Watching for file changes with StatReloader
+INFO 2025-08-18 20:25:53,674 autoreload 13 140454049033088 /app/api/inventory/models.py changed, reloading.
+INFO 2025-08-18 20:25:55,849 autoreload 15 140532272839552 Watching for file changes with StatReloader
+INFO 2025-08-18 20:27:33,815 autoreload 15 140532272839552 /app/api/inventory/models.py changed, reloading.
+INFO 2025-08-18 20:27:35,821 autoreload 17 140645834959744 Watching for file changes with StatReloader
+INFO 2025-08-18 23:07:16,705 autoreload 17 140645834959744 /app/api/users/models.py changed, reloading.
+INFO 2025-08-18 23:07:20,288 autoreload 19 140522305186688 Watching for file changes with StatReloader
+INFO 2025-08-18 23:07:45,258 autoreload 19 140522305186688 /app/api/users/models.py changed, reloading.
+INFO 2025-08-18 23:07:47,584 autoreload 21 140163419282304 Watching for file changes with StatReloader
+INFO 2025-08-18 23:10:14,805 autoreload 21 140163419282304 /app/api/users/models.py changed, reloading.
+INFO 2025-08-18 23:10:16,587 autoreload 23 139897809193856 Watching for file changes with StatReloader
+INFO 2025-08-18 23:12:21,809 autoreload 23 139897809193856 /app/api/users/models.py changed, reloading.
+INFO 2025-08-18 23:12:23,914 autoreload 25 140325910018944 Watching for file changes with StatReloader
+INFO 2025-08-18 23:15:13,563 autoreload 25 140325910018944 /app/api/users/models.py changed, reloading.
+INFO 2025-08-18 23:15:15,305 autoreload 27 139837722434432 Watching for file changes with StatReloader
+INFO 2025-08-18 23:18:08,526 autoreload 27 139837722434432 /app/api/users/models.py changed, reloading.
+INFO 2025-08-18 23:18:11,275 autoreload 29 140326518553472 Watching for file changes with StatReloader
+INFO 2025-08-18 23:36:09,486 autoreload 29 140326518553472 /app/api/pharmacies/models.py changed, reloading.
+INFO 2025-08-18 23:36:12,069 autoreload 147 140176517921664 Watching for file changes with StatReloader
+INFO 2025-08-18 23:36:42,324 autoreload 147 140176517921664 /app/api/pharmacies/models.py changed, reloading.
+INFO 2025-08-18 23:36:45,008 autoreload 149 140654076775296 Watching for file changes with StatReloader
+INFO 2025-08-18 23:38:49,715 autoreload 149 140654076775296 /app/api/inventory/models.py changed, reloading.
+INFO 2025-08-18 23:38:52,064 autoreload 170 140504278199168 Watching for file changes with StatReloader
+INFO 2025-08-18 23:39:16,396 autoreload 170 140504278199168 /app/api/inventory/models.py changed, reloading.
+INFO 2025-08-18 23:39:18,623 autoreload 172 139723075701632 Watching for file changes with StatReloader
+INFO 2025-08-18 23:39:24,070 autoreload 172 139723075701632 /app/api/inventory/models.py changed, reloading.
+INFO 2025-08-18 23:39:26,085 autoreload 174 140437384870784 Watching for file changes with StatReloader
+INFO 2025-08-18 23:40:14,656 autoreload 174 140437384870784 /app/api/pharmacies/models.py changed, reloading.
+INFO 2025-08-18 23:40:16,651 autoreload 194 140510138129280 Watching for file changes with StatReloader
+INFO 2025-08-18 23:41:54,614 autoreload 194 140510138129280 /app/api/users/models.py changed, reloading.
+INFO 2025-08-18 23:41:56,813 autoreload 214 140425606531968 Watching for file changes with StatReloader
+INFO 2025-08-18 23:42:02,752 autoreload 214 140425606531968 /app/api/users/models.py changed, reloading.
+INFO 2025-08-18 23:42:04,605 autoreload 216 140304600353664 Watching for file changes with StatReloader
+INFO 2025-08-18 23:42:12,646 autoreload 216 140304600353664 /app/api/users/models.py changed, reloading.
+INFO 2025-08-18 23:42:14,507 autoreload 218 139640680196992 Watching for file changes with StatReloader
+INFO 2025-08-18 23:42:21,790 autoreload 218 139640680196992 /app/api/users/models.py changed, reloading.
+INFO 2025-08-18 23:42:23,960 autoreload 220 139660684266368 Watching for file changes with StatReloader
+INFO 2025-08-18 23:52:00,026 autoreload 13 139793830943616 Watching for file changes with StatReloader
+INFO 2025-08-18 23:54:23,618 autoreload 13 139793830943616 /app/api/delivery/migrations/0003_deliveryzone_remove_riderassignment_rider_and_more.py changed, reloading.
+INFO 2025-08-18 23:54:27,455 autoreload 64 139621855374208 Watching for file changes with StatReloader
+INFO 2025-08-18 23:57:28,485 autoreload 7 140652333681536 Watching for file changes with StatReloader
+INFO 2025-08-18 23:58:11,607 autoreload 7 140018148244352 Watching for file changes with StatReloader
+INFO 2025-08-19 00:02:36,831 autoreload 13 140516416736128 Watching for file changes with StatReloader
+INFO 2025-08-19 00:05:48,252 autoreload 13 140658441337728 Watching for file changes with StatReloader
+INFO 2025-08-19 00:08:36,831 autoreload 13 139659976780672 Watching for file changes with StatReloader
+INFO 2025-08-19 00:14:29,387 autoreload 13 140027988056960 Watching for file changes with StatReloader
+INFO 2025-08-19 00:17:08,126 autoreload 13 140179191430016 Watching for file changes with StatReloader
