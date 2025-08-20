@@ -81,12 +81,21 @@ This document outlines the complete Django app architecture for the Pharmago med
 - `MedicineCatalog`: Master catalog of all available medicines
 - `PharmacyInventory`: Pharmacy's medicine inventory and pricing
 
+**File Structure**:
+```
+api/inventory/
+├── models.py              # All inventory models (MedicineCategory, MedicineCatalog, PharmacyInventory)
+├── apps.py               # App configuration
+└── migrations/           # Database migrations
+```
+
 **Features**:
 - Master medicine catalog
 - Custom product creation
 - Stock level monitoring
 - Price management and discounts
 - Expiry date tracking
+- **Refactored Architecture**: PharmacyInventory separated for better code organization
 
 ---
 
@@ -268,6 +277,7 @@ api.chat (depends on users, orders)
 - **Related Names**: Clear, descriptive related_name attributes
 - **Meta Options**: Proper verbose names, ordering, and indexes
 - **Constraints**: Database-level validation and constraints
+- **Code Organization**: Large models separated into dedicated files for maintainability
 
 ### **3. Performance Optimization**
 - **Indexing Strategy**: Strategic indexes on frequently queried fields
@@ -348,6 +358,25 @@ python manage.py createsuperuser
 - **PEP 8 Compliance**: Python code style adherence
 - **Documentation**: Comprehensive docstrings and comments
 - **Type Hints**: Python type annotation support
+- **Code Organization**: Large models separated for maintainability
+
+---
+
+## Recent Architecture Updates
+
+### **Inventory App Consolidation (Latest)**
+- **Consolidated Models**: All inventory models now in single `models.py` file
+- **Improved Maintainability**: Eliminated duplicate model definitions and circular imports
+- **Cleaner Codebase**: Single source of truth for all inventory-related models
+- **Enhanced Organization**: Better code structure with all related models in one place
+
+**File Structure**:
+```
+api/inventory/
+├── models.py              # All inventory models (MedicineCategory, MedicineCatalog, PharmacyInventory)
+├── apps.py               # App configuration
+└── migrations/           # Database migrations
+```
 
 ---
 
@@ -374,10 +403,11 @@ python manage.py createsuperuser
 
 The Pharmago Django app architecture provides a robust, scalable foundation for the medicine delivery platform. The modular design ensures:
 
-- **Maintainability**: Clear separation of concerns
+- **Maintainability**: Clear separation of concerns and improved code organization
 - **Scalability**: Independent app scaling and deployment
 - **Security**: Role-based access control and input validation
 - **Performance**: Optimized database design and query patterns
 - **Flexibility**: Easy to extend and modify individual components
+- **Code Quality**: Better organization with consolidated models in focused files
 
-This architecture follows Django best practices and industry standards, making it suitable for both development and production environments.
+This architecture follows Django best practices and industry standards, making it suitable for both development and production environments. The recent consolidation of the inventory app demonstrates our commitment to maintainable, well-organized code.

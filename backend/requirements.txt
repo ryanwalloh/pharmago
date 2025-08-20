@@ -4,3 +4,10 @@ psycopg2-binary==2.9.9
 python-dotenv==1.0.1
 django-cors-headers==4.4.0
 gunicorn==22.0.0
+
+# Additional packages for enhanced features
+boto3                    # AWS S3 integration for file storage
+django-storages          # Django storage backends (S3, etc.)
+Pillow                   # Image processing for profile pictures
+django-phonenumber-field # Phone number validation and formatting
+phonenumbers             # Phone number parsing and validation
