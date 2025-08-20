@@ -45,8 +45,12 @@ ehthumbs.db
 Thumbs.db
 
 # Docker
+<<<<<<< HEAD
 .dockerignore
 
 # Logs
 *.log
 backend/logs/
+=======
+.dockerignore
+>>>>>>> feature/user-models-implementation
