@@ -4,7 +4,7 @@ from django.core.validators import MinValueValidator, MaxValueValidator
 from django.core.exceptions import ValidationError
 from django.db.models import Sum, F
 from api.users.models import User
-from api.users.customer import Customer
+from api.users.models import Customer
 from api.locations.models import Address
 
 
