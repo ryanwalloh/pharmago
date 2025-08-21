@@ -324,6 +324,230 @@ class Order(models.Model):
         
         return base_delivery_time
     
+    # Delivery Integration Methods
+    def get_current_rider_assignment(self):
+        """Get the current rider assignment for this order."""
+        try:
+            return self.rider_assignments.filter(
+                assignment__status__in=[
+                    'assigned', 'accepted', 'picked_up', 'delivering'
+                ]
+            ).first()
+        except:
+            return None
+    
+    def get_rider(self):
+        """Get the rider assigned to this order."""
+        assignment = self.get_current_rider_assignment()
+        if assignment:
+            return assignment.assignment.rider
+        return None
+    
+    def get_rider_name(self):
+        """Get the name of the rider assigned to this order."""
+        rider = self.get_rider()
+        if rider:
+            return rider.full_name
+        return None
+    
+    def is_assigned_to_rider(self):
+        """Check if this order is currently assigned to a rider."""
+        return self.get_current_rider_assignment() is not None
+    
+    def get_delivery_status(self):
+        """Get detailed delivery status information."""
+        assignment = self.get_current_rider_assignment()
+        if not assignment:
+            return {
+                'status': 'unassigned',
+                'rider': None,
+                'pickup_sequence': None,
+                'delivery_sequence': None,
+                'estimated_pickup': None,
+                'estimated_delivery': None
+            }
+        
+        return {
+            'status': assignment.assignment.status,
+            'rider': assignment.assignment.rider.full_name,
+            'pickup_sequence': assignment.pickup_sequence,
+            'delivery_sequence': assignment.delivery_sequence,
+            'estimated_pickup': assignment.assignment.assigned_at,
+            'estimated_delivery': assignment.assignment.estimated_completion
+        }
+    
+    def is_part_of_batch(self):
+        """Check if this order is part of a batched delivery."""
+        assignment = self.get_current_rider_assignment()
+        if assignment:
+            return assignment.assignment.is_batch
+        return False
+    
+    def get_batch_info(self):
+        """Get information about the batch this order belongs to."""
+        assignment = self.get_current_rider_assignment()
+        if not assignment or not assignment.assignment.is_batch:
+            return None
+        
+        batch_orders = assignment.assignment.order_assignments.order_by('pickup_sequence')
+        return {
+            'batch_size': assignment.assignment.batch_size,
+            'batch_orders': [
+                {
+                    'order_number': order_assignment.order.order_number,
+                    'customer_name': order_assignment.order.customer.full_name,
+                    'pickup_sequence': order_assignment.pickup_sequence,
+                    'delivery_sequence': order_assignment.delivery_sequence,
+                    'address': order_assignment.order.delivery_address.full_address
+                }
+                for order_assignment in batch_orders
+            ]
+        }
+    
+    def get_delivery_tracking(self):
+        """Get comprehensive delivery tracking information."""
+        assignment = self.get_current_rider_assignment()
+        if not assignment:
+            return {
+                'status': 'unassigned',
+                'message': 'Order not yet assigned to a rider'
+            }
+        
+        # Get rider's current location if available
+        rider_location = None
+        if assignment.assignment.rider.location_updates.exists():
+            rider_location = assignment.assignment.rider.location_updates.order_by('-timestamp').first()
+        
+        tracking_info = {
+            'assignment_id': assignment.assignment.assignment_id,
+            'rider_name': assignment.assignment.rider.full_name,
+            'rider_phone': assignment.assignment.rider.user.phone_number,
+            'status': assignment.assignment.status,
+            'pickup_sequence': assignment.pickup_sequence,
+            'delivery_sequence': assignment.delivery_sequence,
+            'assigned_at': assignment.assignment.assigned_at,
+            'estimated_completion': assignment.assignment.estimated_completion,
+            'is_batch': assignment.assignment.is_batch,
+            'batch_size': assignment.assignment.batch_size if assignment.assignment.is_batch else 1
+        }
+        
+        if rider_location:
+            tracking_info['rider_location'] = {
+                'latitude': float(rider_location.latitude),
+                'longitude': float(rider_location.longitude),
+                'timestamp': rider_location.timestamp,
+                'distance_to_delivery': rider_location.distance_to(
+                    self.delivery_address.latitude,
+                    self.delivery_address.longitude
+                ) if self.delivery_address.has_coordinates() else None
+            }
+        
+        # Add order-specific delivery status
+        if assignment.picked_up_at:
+            tracking_info['picked_up_at'] = assignment.picked_up_at
+        if assignment.delivered_at:
+            tracking_info['delivered_at'] = assignment.delivered_at
+        
+        return tracking_info
+    
+    def can_be_batched(self):
+        """Check if this order can be batched with other orders."""
+        from api.delivery.models import OrderBatchingService
+        
+        # Check if order has coordinates
+        if not self.delivery_address.has_coordinates():
+            return False
+        
+        # Check if order is in a suitable status for batching
+        if self.order_status not in [self.OrderStatus.PENDING, self.OrderStatus.ACCEPTED]:
+            return False
+        
+        # Check if order already has a rider assignment
+        if self.is_assigned_to_rider():
+            return False
+        
+        return True
+    
+    def sync_delivery_status(self):
+        """Synchronize order status with delivery assignment status."""
+        assignment = self.get_current_rider_assignment()
+        if not assignment:
+            return
+        
+        # Sync pickup status
+        if assignment.picked_up_at and self.order_status == self.OrderStatus.READY_FOR_PICKUP:
+            self.order_status = self.OrderStatus.PICKED_UP
+            self.save()
+        
+        # Sync delivery status
+        if assignment.delivered_at and self.order_status == self.OrderStatus.PICKED_UP:
+            self.order_status = self.OrderStatus.DELIVERED
+            self.save()
+    
+    def update_delivery_status(self, new_status, sync_with_assignment=True):
+        """Update order delivery status and optionally sync with rider assignment."""
+        old_status = self.order_status
+        self.order_status = new_status
+        
+        # Update delivery time if delivered
+        if new_status == self.OrderStatus.DELIVERED:
+            from django.utils import timezone
+            self.actual_delivery = timezone.now()
+        
+        self.save()
+        
+        # Sync with rider assignment if requested
+        if sync_with_assignment:
+            self.sync_delivery_status()
+        
+        return {
+            'old_status': old_status,
+            'new_status': new_status,
+            'updated_at': self.updated_at
+        }
+    
+    def get_delivery_analytics(self):
+        """Get delivery performance analytics for this order."""
+        assignment = self.get_current_rider_assignment()
+        if not assignment:
+            return None
+        
+        # Calculate delivery metrics
+        assigned_time = assignment.assignment.assigned_at
+        pickup_time = assignment.picked_up_at
+        delivery_time = assignment.delivered_at
+        
+        analytics = {
+            'assignment_to_pickup_minutes': None,
+            'pickup_to_delivery_minutes': None,
+            'total_delivery_minutes': None,
+            'rider_performance': None
+        }
+        
+        if pickup_time and assigned_time:
+            from django.utils import timezone
+            pickup_delta = pickup_time - assigned_time
+            analytics['assignment_to_pickup_minutes'] = pickup_delta.total_seconds() / 60
+        
+        if delivery_time and pickup_time:
+            delivery_delta = delivery_time - pickup_time
+            analytics['pickup_to_delivery_minutes'] = delivery_delta.total_seconds() / 60
+        
+        if delivery_time and assigned_time:
+            total_delta = delivery_time - assigned_time
+            analytics['total_delivery_minutes'] = total_delta.total_seconds() / 60
+        
+        # Get rider performance if available
+        if assignment.assignment.rider:
+            rider = assignment.assignment.rider
+            analytics['rider_performance'] = {
+                'total_deliveries': rider.total_deliveries,
+                'average_rating': float(rider.average_rating),
+                'total_earnings': float(rider.total_earnings)
+            }
+        
+        return analytics
+    
     def get_order_summary(self):
         """Get order summary for display."""
         return {
