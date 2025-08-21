@@ -34,11 +34,11 @@
 #### **1.1 User Models COMPLETED (100%)** 
 ```bash
 # File: backend/api/users/models.py
-- [ ] Custom User model extending AbstractUser
-- [ ] Customer model with senior citizen features  
-- [ ] User role management (customer, pharmacy, rider, admin)
-- [ ] User verification system
-- [ ] Profile management features
+- [x] Custom User model extending AbstractUser
+- [x] Customer model with senior citizen features  
+- [x] User role management (customer, pharmacy, rider, admin)
+- [x] User verification system
+- [x] Profile management features
 ```
 
 #### **1.2 Location Models** ⏳ **NOT STARTED**
