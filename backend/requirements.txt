@@ -5,6 +5,11 @@ python-dotenv==1.0.1
 django-cors-headers==4.4.0
 gunicorn==22.0.0
 
+# JWT Authentication
+djangorestframework-simplejwt==5.3.0
+
+# Geographic and GIS support (using basic calculations instead)
+
 # Additional packages for enhanced features
 boto3                    # AWS S3 integration for file storage
 django-storages          # Django storage backends (S3, etc.)
