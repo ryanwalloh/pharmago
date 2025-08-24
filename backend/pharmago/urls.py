@@ -11,7 +11,7 @@ Class-based views
     1. Add an import:  from other_app.views import Home
     2. Add a URL to urlpatterns:  path('', Home.as_view(), name='home')
 Including another URLconf
-    1. Import the include() function: from django.urls import include, path
+    1. Import the include() function: from my_app import views
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
@@ -30,8 +30,8 @@ urlpatterns = [
     path('api/test/', test_api),
     path('api/ping/', views.ping),
     
-    # Include API URLs
-    path('', include('api.urls')),
+    # Include API URLs at the correct path
+    path('api/', include('api.urls')),
 ]
 
 # Serve static files in development
