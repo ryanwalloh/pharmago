@@ -8,6 +8,8 @@ gunicorn==22.0.0
 # JWT Authentication
 djangorestframework-simplejwt==5.3.0
 
+# Filtering and Search (CRITICAL - Missing!)
+django-filter==23.5
 # Geographic and GIS support (using basic calculations instead)
 
 # Additional packages for enhanced features
