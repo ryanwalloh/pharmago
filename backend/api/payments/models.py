@@ -377,6 +377,17 @@ class Payment(models.Model):
         }
         return status_names.get(self.payment_status, self.payment_status.title())
     
+    def get_payment_type_display(self):
+        """Get formatted payment type name."""
+        type_names = {
+            'order_payment': 'Order Payment',
+            'delivery_fee': 'Delivery Fee',
+            'service_fee': 'Service Fee',
+            'refund': 'Refund',
+            'top_up': 'Wallet Top-up',
+        }
+        return type_names.get(self.payment_type, self.payment_type.title())
+    
     def save(self, *args, **kwargs):
         """Override save to generate payment ID if not set."""
         if not self.payment_id:
