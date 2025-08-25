@@ -154,3 +154,52 @@ class IsVerifiedOrAdmin(permissions.BasePermission):
     
     def has_object_permission(self, request, view, obj):
         return request.user.is_authenticated and (request.user.is_staff or request.user.is_verified)
+
+
+# Additional permission classes for delivery and payment views
+class IsRider(permissions.BasePermission):
+    """
+    Custom permission to only allow rider users.
+    """
+    
+    def has_permission(self, request, view):
+        return (
+            request.user.is_authenticated and 
+            hasattr(request.user, 'role') and 
+            request.user.role == 'rider'
+        )
+
+
+class IsAdmin(permissions.BasePermission):
+    """
+    Custom permission to only allow admin users.
+    """
+    
+    def has_permission(self, request, view):
+        return request.user.is_authenticated and request.user.is_staff
+
+
+class IsPharmacy(permissions.BasePermission):
+    """
+    Custom permission to only allow pharmacy users.
+    """
+    
+    def has_permission(self, request, view):
+        return (
+            request.user.is_authenticated and 
+            hasattr(request.user, 'role') and 
+            request.user.role == 'pharmacy'
+        )
+
+
+class IsCustomer(permissions.BasePermission):
+    """
+    Custom permission to only allow customer users.
+    """
+    
+    def has_permission(self, request, view):
+        return (
+            request.user.is_authenticated and 
+            hasattr(request.user, 'role') and 
+            request.user.role == 'customer'
+        )
