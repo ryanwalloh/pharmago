@@ -176,6 +176,30 @@ class Order(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
+    @property
+    def delivery_status(self):
+        """Get current delivery status from rider assignment."""
+        latest_assignment = self.rider_assignments.order_by('-created_at').first()
+        if latest_assignment:
+            return latest_assignment.assignment.status
+        return 'unassigned'
+    
+    @property
+    def rider_name(self):
+        """Get current rider name from rider assignment."""
+        latest_assignment = self.rider_assignments.order_by('-created_at').first()
+        if latest_assignment and latest_assignment.assignment.rider:
+            return latest_assignment.assignment.rider.full_name
+        return None
+    
+    @property
+    def estimated_delivery(self):
+        """Get estimated delivery time from rider assignment."""
+        latest_assignment = self.rider_assignments.order_by('-created_at').first()
+        if latest_assignment:
+            return latest_assignment.assignment.estimated_completion
+        return None
+    
     class Meta:
         verbose_name = _('Order')
         verbose_name_plural = _('Orders')

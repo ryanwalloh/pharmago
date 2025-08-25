@@ -1,13 +1,16 @@
-from rest_framework import viewsets, status, permissions
+from rest_framework import viewsets, status, filters, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework_simplejwt.tokens import RefreshToken
-from django.contrib.auth import authenticate, login, logout
-from django.contrib.auth.password_validation import validate_password
-from django.core.exceptions import ValidationError
-from django.db import transaction
+from rest_framework.permissions import IsAuthenticated
+# from rest_framework_simplejwt.tokens import RefreshToken
+from django_filters.rest_framework import DjangoFilterBackend
+from django.db.models import Q, Count, Avg, Sum, F
 from django.utils import timezone
 from django.shortcuts import get_object_or_404
+from django.core.exceptions import ValidationError
+from django.utils.translation import gettext_lazy as _
+from django.contrib.auth import authenticate, login, logout
+from django.db import transaction
 
 from .models import User, Customer, Pharmacy, Rider
 from .serializers import (
@@ -60,14 +63,14 @@ class UserViewSet(viewsets.ModelViewSet):
                         Customer.objects.create(user=user)  # All users get customer profile
                     
                     # Generate tokens
-                    refresh = RefreshToken.for_user(user)
+                    # refresh = RefreshToken.for_user(user)
                     
                     return Response({
                         'message': 'User registered successfully',
                         'user': UserSerializer(user).data,
                         'tokens': {
-                            'refresh': str(refresh),
-                            'access': str(refresh.access_token),
+                            # 'refresh': str(refresh),
+                            # 'access': str(refresh.access_token),
                         }
                     }, status=status.HTTP_201_CREATED)
             except Exception as e:
@@ -86,7 +89,7 @@ class UserViewSet(viewsets.ModelViewSet):
             user = serializer.validated_data['user']
             
             # Generate tokens
-            refresh = RefreshToken.for_user(user)
+            # refresh = RefreshToken.for_user(user)
             
             # Update last login
             user.last_login = timezone.now()
@@ -96,8 +99,8 @@ class UserViewSet(viewsets.ModelViewSet):
                 'message': 'Login successful',
                 'user': UserSerializer(user).data,
                 'tokens': {
-                    'refresh': str(refresh),
-                    'access': str(refresh.access_token),
+                    # 'refresh': str(refresh),
+                    # 'access': str(refresh.access_token),
                 }
             }, status=status.HTTP_200_OK)
         
