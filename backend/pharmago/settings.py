@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     # Third-party apps
     'rest_framework',
     'corsheaders',
+    'drf_spectacular',
     
     # Local apps
     'api.apps.ApiConfig',
@@ -58,6 +59,7 @@ INSTALLED_APPS = [
     'api.payments.apps.PaymentsConfig',
     'api.notifications.apps.NotificationsConfig',
     'api.chat.apps.ChatConfig',
+    'api.global_api.apps.GlobalApiConfig',
 ]
 
 MIDDLEWARE = [
@@ -69,6 +71,8 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'api.global_api.middleware.ApiUsageTrackingMiddleware',
+    'api.global_api.middleware.SystemHealthMiddleware',
 ]
 
 ROOT_URLCONF = 'pharmago.urls'
@@ -183,6 +187,15 @@ REST_FRAMEWORK = {
         'rest_framework.parsers.MultiPartParser',
         'rest_framework.parsers.FormParser',
     ],
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '100/hour',
+        'user': '1000/hour',
+        'burst': '20/minute',
+    },
 }
 
 # JWT Settings
@@ -295,10 +308,17 @@ DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10MB
 # Cache settings (for development)
 CACHES = {
     'default': {
-        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
-        'LOCATION': 'unique-snowflake',
+        'BACKEND': 'django_redis.cache.RedisCache',
+        'LOCATION': 'redis://127.0.0.1:6379/1',
+        'OPTIONS': {
+            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+        }
     }
 }
+
+# Use Redis for session storage
+SESSION_ENGINE = 'django.contrib.sessions.backends.cache'
+SESSION_CACHE_ALIAS = 'default'
 
 # Celery settings (if using async tasks)
 CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', 'redis://localhost:6379/0')
@@ -307,3 +327,23 @@ CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
+
+# API Documentation with drf-spectacular
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'PharmaGo API',
+    'DESCRIPTION': 'Comprehensive medicine delivery platform API',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    'COMPONENT_SPLIT_REQUEST': True,
+    'SCHEMA_PATH_PREFIX': '/api/v1/',
+    'TAGS': [
+        {'name': 'users', 'description': 'User management endpoints'},
+        {'name': 'orders', 'description': 'Order management endpoints'},
+        {'name': 'inventory', 'description': 'Medicine inventory endpoints'},
+        {'name': 'delivery', 'description': 'Delivery and rider management'},
+        {'name': 'payments', 'description': 'Payment processing endpoints'},
+        {'name': 'notifications', 'description': 'Notification system endpoints'},
+        {'name': 'chat', 'description': 'Real-time chat system endpoints'},
+        {'name': 'global-api', 'description': 'Global API infrastructure endpoints'},
+    ],
+}
