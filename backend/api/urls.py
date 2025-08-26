@@ -23,6 +23,13 @@ from api.delivery.views import (
     DeliveryZoneViewSet, RiderAssignmentViewSet, RiderLocationViewSet, OrderRiderAssignmentViewSet
 )
 from api.payments.views import PaymentViewSet
+from api.notifications.views import NotificationViewSet
+from api.chat.views import ChatRoomViewSet, ChatParticipantViewSet, ChatMessageViewSet
+from api.global_api.views import (
+    SystemHealthViewSet, ApiUsageViewSet, GlobalSearchViewSet, 
+    BulkOperationsViewSet, ExportImportViewSet, GlobalStatisticsViewSet, 
+    BulkOperationLogViewSet
+)
 
 # Create router and register viewsets
 router = DefaultRouter()
@@ -60,6 +67,23 @@ router.register(r'order-rider-assignments', OrderRiderAssignmentViewSet, basenam
 
 # Payment management
 router.register(r'payments', PaymentViewSet, basename='payment')
+
+# Notification management
+router.register(r'notifications', NotificationViewSet, basename='notification')
+
+# Chat management
+router.register(r'chat-rooms', ChatRoomViewSet, basename='chat-room')
+router.register(r'chat-participants', ChatParticipantViewSet, basename='chat-participant')
+router.register(r'chat-messages', ChatMessageViewSet, basename='chat-message')
+
+# Global API Infrastructure
+router.register(r'system-health', SystemHealthViewSet, basename='system-health')
+router.register(r'api-usage', ApiUsageViewSet, basename='api-usage')
+router.register(r'global-search', GlobalSearchViewSet, basename='global-search')
+router.register(r'bulk-operations', BulkOperationsViewSet, basename='bulk-operations')
+router.register(r'export-import', ExportImportViewSet, basename='export-import')
+router.register(r'global-statistics', GlobalStatisticsViewSet, basename='global-statistics')
+router.register(r'bulk-operation-logs', BulkOperationLogViewSet, basename='bulk-operation-log')
 
 # API URL patterns
 urlpatterns = [
@@ -264,6 +288,115 @@ urlpatterns = [
             path('refund/', PaymentViewSet.as_view({'post': 'refund'}), name='payment-refund'),
             path('cancel/', PaymentViewSet.as_view({'post': 'cancel_payment'}), name='payment-cancel'),
             path('receipt/', PaymentViewSet.as_view({'get': 'receipt'}), name='payment-receipt'),
+        ])),
+        
+        # Notification endpoints
+        path('notifications/', include([
+            path('unread/', NotificationViewSet.as_view({'get': 'unread'}), name='notification-unread'),
+            path('urgent/', NotificationViewSet.as_view({'get': 'urgent'}), name='notification-urgent'),
+            path('scheduled/', NotificationViewSet.as_view({'get': 'scheduled'}), name='notification-scheduled'),
+            path('expired/', NotificationViewSet.as_view({'get': 'expired'}), name='notification-expired'),
+            path('by-type/', NotificationViewSet.as_view({'get': 'by_type'}), name='notification-by-type'),
+            path('by-priority/', NotificationViewSet.as_view({'get': 'by_priority'}), name='notification-by-priority'),
+            path('stats/', NotificationViewSet.as_view({'get': 'stats'}), name='notification-stats'),
+            path('filter/', NotificationViewSet.as_view({'post': 'filter'}), name='notification-filter'),
+            path('bulk-update/', NotificationViewSet.as_view({'post': 'bulk_update'}), name='notification-bulk-update'),
+            path('mark-all-read/', NotificationViewSet.as_view({'post': 'mark_all_read'}), name='notification-mark-all-read'),
+            path('create-system/', NotificationViewSet.as_view({'post': 'create_system_notification'}), name='notification-create-system'),
+            path('create-order/', NotificationViewSet.as_view({'post': 'create_order_notification'}), name='notification-create-order'),
+            path('create-payment/', NotificationViewSet.as_view({'post': 'create_payment_notification'}), name='notification-create-payment'),
+        ])),
+        
+        # Individual notification endpoints
+        path('notifications/<int:pk>/', include([
+            path('mark-read/', NotificationViewSet.as_view({'post': 'mark_as_read'}), name='notification-mark-read'),
+            path('mark-unread/', NotificationViewSet.as_view({'post': 'mark_as_unread'}), name='notification-mark-unread'),
+            path('send-now/', NotificationViewSet.as_view({'post': 'send_now'}), name='notification-send-now'),
+            path('schedule/', NotificationViewSet.as_view({'post': 'schedule'}), name='notification-schedule'),
+            path('cancel-schedule/', NotificationViewSet.as_view({'post': 'cancel_schedule'}), name='notification-cancel-schedule'),
+            path('extend-expiration/', NotificationViewSet.as_view({'post': 'extend_expiration'}), name='notification-extend-expiration'),
+        ])),
+        
+        # Chat room endpoints
+        path('chat-rooms/', include([
+            path('my-rooms/', ChatRoomViewSet.as_view({'get': 'my_rooms'}), name='chat-room-my-rooms'),
+            path('active/', ChatRoomViewSet.as_view({'get': 'active'}), name='chat-room-active'),
+            path('create-with-participants/', ChatRoomViewSet.as_view({'post': 'create_with_participants'}), name='chat-room-create-with-participants'),
+        ])),
+        
+        # Individual chat room endpoints
+        path('chat-rooms/<int:pk>/', include([
+            path('close/', ChatRoomViewSet.as_view({'post': 'close_room'}), name='chat-room-close'),
+            path('archive/', ChatRoomViewSet.as_view({'post': 'archive_room'}), name='chat-room-archive'),
+            path('participants/', ChatRoomViewSet.as_view({'get': 'participants'}), name='chat-room-participants'),
+            path('messages/', ChatRoomViewSet.as_view({'get': 'messages'}), name='chat-room-messages'),
+            path('stats/', ChatRoomViewSet.as_view({'get': 'stats'}), name='chat-room-stats'),
+        ])),
+        
+        # Chat participant endpoints
+        path('chat-participants/<int:pk>/', include([
+            path('leave-room/', ChatParticipantViewSet.as_view({'post': 'leave_room'}), name='chat-participant-leave'),
+            path('mute/', ChatParticipantViewSet.as_view({'post': 'mute'}), name='chat-participant-mute'),
+            path('unmute/', ChatParticipantViewSet.as_view({'post': 'unmute'}), name='chat-participant-unmute'),
+            path('block/', ChatParticipantViewSet.as_view({'post': 'block'}), name='chat-participant-block'),
+            path('unblock/', ChatParticipantViewSet.as_view({'post': 'unblock'}), name='chat-participant-unblock'),
+        ])),
+        
+        # Chat message endpoints
+        path('chat-messages/', include([
+            path('search/', ChatMessageViewSet.as_view({'post': 'search'}), name='chat-message-search'),
+            path('my-messages/', ChatMessageViewSet.as_view({'get': 'my_messages'}), name='chat-message-my-messages'),
+            path('unread/', ChatMessageViewSet.as_view({'get': 'unread'}), name='chat-message-unread'),
+            path('mark-all-read/', ChatMessageViewSet.as_view({'post': 'mark_all_read'}), name='chat-message-mark-all-read'),
+        ])),
+        
+        # Individual chat message endpoints
+        path('chat-messages/<int:pk>/', include([
+            path('reply/', ChatMessageViewSet.as_view({'post': 'reply'}), name='chat-message-reply'),
+            path('mark-read/', ChatMessageViewSet.as_view({'post': 'mark_as_read'}), name='chat-message-mark-read'),
+            path('edit/', ChatMessageViewSet.as_view({'post': 'edit'}), name='chat-message-edit'),
+            path('delete/', ChatMessageViewSet.as_view({'post': 'delete'}), name='chat-message-delete'),
+        ])),
+        
+        # Global API Infrastructure endpoints
+        path('system-health/', include([
+            path('overall-status/', SystemHealthViewSet.as_view({'get': 'overall_status'}), name='system-health-overall'),
+            path('component-status/', SystemHealthViewSet.as_view({'get': 'component_status'}), name='system-health-component'),
+            path('check-health/', SystemHealthViewSet.as_view({'post': 'check_health'}), name='system-health-check'),
+        ])),
+        
+        path('api-usage/', include([
+            path('stats/', ApiUsageViewSet.as_view({'get': 'stats'}), name='api-usage-stats'),
+            path('my-usage/', ApiUsageViewSet.as_view({'get': 'my_usage'}), name='api-usage-my-usage'),
+        ])),
+        
+        path('global-search/', include([
+            path('searchable-models/', GlobalSearchViewSet.as_view({'get': 'searchable_models'}), name='global-search-models'),
+        ])),
+        
+        path('bulk-operations/', include([
+            path('bulk-create/', BulkOperationsViewSet.as_view({'post': 'bulk_create'}), name='bulk-operations-create'),
+            path('bulk-update/', BulkOperationsViewSet.as_view({'post': 'bulk_update'}), name='bulk-operations-update'),
+            path('bulk-delete/', BulkOperationsViewSet.as_view({'post': 'bulk_delete'}), name='bulk-operations-delete'),
+        ])),
+        
+        path('export-import/', include([
+            path('export-data/', ExportImportViewSet.as_view({'post': 'export_data'}), name='export-import-export'),
+            path('import-data/', ExportImportViewSet.as_view({'post': 'import_data'}), name='export-import-import'),
+        ])),
+        
+        path('global-statistics/', include([
+            path('overview/', GlobalStatisticsViewSet.as_view({'get': 'overview'}), name='global-statistics-overview'),
+            path('model-stats/', GlobalStatisticsViewSet.as_view({'get': 'model_stats'}), name='global-statistics-model'),
+            path('performance/', GlobalStatisticsViewSet.as_view({'get': 'performance'}), name='global-statistics-performance'),
+        ])),
+        
+        path('bulk-operation-logs/<int:pk>/', include([
+            path('cancel/', BulkOperationLogViewSet.as_view({'post': 'cancel'}), name='bulk-operation-log-cancel'),
+        ])),
+        
+        path('bulk-operation-logs/', include([
+            path('my-operations/', BulkOperationLogViewSet.as_view({'get': 'my_operations'}), name='bulk-operation-log-my-operations'),
         ])),
     ])),
     
