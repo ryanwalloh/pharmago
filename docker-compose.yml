@@ -13,6 +13,15 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
 
+  redis:
+    image: redis:7-alpine
+    container_name: pharmago_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+
   backend:
     build:
       context: ./backend
@@ -26,6 +35,7 @@ services:
       - "8000:8000"
     depends_on:
       - postgres
+      - redis
     command: python manage.py runserver 0.0.0.0:8000
 
   web:
@@ -65,3 +75,4 @@ services:
 volumes:
   pgdata:
   pgadmin_data:
+  redis_data:
