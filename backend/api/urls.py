@@ -1,14 +1,17 @@
 from django.contrib import admin
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-# from rest_framework_simplejwt.views import (
-#     TokenObtainPairView,
-#     TokenRefreshView,
-#     TokenVerifyView,
-# )
+from rest_framework_simplejwt.views import (
+    TokenObtainPairView,
+    TokenRefreshView,
+    TokenVerifyView,
+)
 
 from api.users.views import (
     UserViewSet, CustomerViewSet, PharmacyViewSet, RiderViewSet
+)
+from api.users.jwt_views import (
+    jwt_login, jwt_refresh, jwt_logout, jwt_verify
 )
 from api.locations.views import AddressViewSet
 from api.pharmacies.views import PharmacyViewSet as PharmacyViewSetV2
@@ -93,11 +96,16 @@ urlpatterns = [
         path('', include(router.urls)),
         
         # Authentication endpoints
-        # path('auth/', include([
-        #     path('token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
-        #     path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
-        #     path('token/verify/', TokenVerifyView.as_view(), name='token_verify'),
-        # ])),
+        path('auth/', include([
+            path('token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
+            path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+            path('token/verify/', TokenVerifyView.as_view(), name='token_verify'),
+            # Custom JWT endpoints with enhanced security
+            path('jwt/login/', jwt_login, name='jwt_login'),
+            path('jwt/refresh/', jwt_refresh, name='jwt_refresh'),
+            path('jwt/logout/', jwt_logout, name='jwt_logout'),
+            path('jwt/verify/', jwt_verify, name='jwt_verify'),
+        ])),
         
         # User-specific endpoints
         path('users/', include([
