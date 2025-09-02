@@ -1,10 +1,65 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Header from './Header';
 import Hero from './Hero';
+import { useRegistration } from '../contexts/RegistrationContext';
 
 
 
 const LandingPage = () => {
+  const navigate = useNavigate();
+  const { updateUserAccount, logRegistrationData } = useRegistration();
+  
+  // Local state for form inputs
+  const [formData, setFormData] = useState({
+    pharmacyName: '',
+    firstName: '',
+    lastName: '',
+    email: '',
+    phone: '',
+    birForm: ''
+  });
+
+  // Handle input changes
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+
+    // Update registration context in real-time
+    updateUserAccount({
+      pharmacy_name: name === 'pharmacyName' ? value : formData.pharmacyName,
+      first_name: name === 'firstName' ? value : formData.firstName,
+      last_name: name === 'lastName' ? value : formData.lastName,
+      email: name === 'email' ? value : formData.email,
+      phone: name === 'phone' ? value : formData.phone
+    });
+  };
+
+  // Handle radio button changes
+  const handleRadioChange = (e) => {
+    const { value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      birForm: value
+    }));
+  };
+
+  // Handle form submission
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    
+    // Log all collected data
+    console.log('=== LANDING PAGE FORM SUBMISSION ===');
+    console.log('Form Data:', formData);
+    logRegistrationData();
+    
+    // Navigate to pharmacy registration
+    navigate('/pharmacy-registration');
+  };
+
   return (
     <div className="min-h-screen bg-white">
       <Header />
@@ -32,14 +87,18 @@ const LandingPage = () => {
                     Ready to serve more people?
                   </h2>
                   
-                  <form className="space-y-6">
+                  <form className="space-y-6" onSubmit={handleSubmit}>
                     {/* Pharmacy Name */}
                     <div className="relative">
                       <input
                         type="text"
                         id="pharmacyName"
+                        name="pharmacyName"
+                        value={formData.pharmacyName}
+                        onChange={handleInputChange}
                         className="peer w-full px-4 py-3 border-2 border-[#D5E8D4] rounded-lg text-gray-700 placeholder-transparent focus:outline-none focus:border-[#6BBF9A] focus:ring-2 focus:ring-[#6BBF9A] focus:ring-opacity-20 transition-all duration-200"
                         placeholder="Your Pharmacy Name"
+                        required
                       />
                       <label
                         htmlFor="pharmacyName"
@@ -54,8 +113,12 @@ const LandingPage = () => {
                       <input
                         type="text"
                         id="firstName"
+                        name="firstName"
+                        value={formData.firstName}
+                        onChange={handleInputChange}
                         className="peer w-full px-4 py-3 border-2 border-[#D5E8D4] rounded-lg text-gray-700 placeholder-transparent focus:outline-none focus:border-[#6BBF9A] focus:ring-2 focus:ring-[#6BBF9A] focus:ring-opacity-20 transition-all duration-200"
                         placeholder="Pharmacy Owner First Name"
+                        required
                       />
                       <label
                         htmlFor="firstName"
@@ -70,8 +133,12 @@ const LandingPage = () => {
                       <input
                         type="text"
                         id="lastName"
+                        name="lastName"
+                        value={formData.lastName}
+                        onChange={handleInputChange}
                         className="peer w-full px-4 py-3 border-2 border-[#D5E8D4] rounded-lg text-gray-700 placeholder-transparent focus:outline-none focus:border-[#6BBF9A] focus:ring-2 focus:ring-[#6BBF9A] focus:ring-opacity-20 transition-all duration-200"
                         placeholder="Pharmacy Owner Last Name"
+                        required
                       />
                       <label
                         htmlFor="lastName"
@@ -86,8 +153,12 @@ const LandingPage = () => {
                       <input
                         type="email"
                         id="email"
+                        name="email"
+                        value={formData.email}
+                        onChange={handleInputChange}
                         className="peer w-full px-4 py-3 border-2 border-[#D5E8D4] rounded-lg text-gray-700 placeholder-transparent focus:outline-none focus:border-[#6BBF9A] focus:ring-2 focus:ring-[#6BBF9A] focus:ring-opacity-20 transition-all duration-200"
                         placeholder="Enter your Business Email"
+                        required
                       />
                       <label
                         htmlFor="email"
@@ -102,8 +173,12 @@ const LandingPage = () => {
                       <input
                         type="tel"
                         id="phone"
+                        name="phone"
+                        value={formData.phone}
+                        onChange={handleInputChange}
                         className="peer w-full px-4 py-3 border-2 border-[#D5E8D4] rounded-lg text-gray-700 placeholder-transparent focus:outline-none focus:border-[#6BBF9A] focus:ring-2 focus:ring-[#6BBF9A] focus:ring-opacity-20 transition-all duration-200"
                         placeholder="Mobile Phone Number"
+                        required
                       />
                       <label
                         htmlFor="phone"
@@ -124,7 +199,10 @@ const LandingPage = () => {
                             type="radio"
                             name="birForm"
                             value="yes"
+                            checked={formData.birForm === 'yes'}
+                            onChange={handleRadioChange}
                             className="h-4 w-4 text-[#6BBF9A] border-[#D5E8D4] focus:ring-[#6BBF9A] focus:ring-2"
+                            required
                           />
                           <span className="ml-2 text-gray-700">Yes</span>
                         </label>
@@ -133,7 +211,10 @@ const LandingPage = () => {
                             type="radio"
                             name="birForm"
                             value="no"
+                            checked={formData.birForm === 'no'}
+                            onChange={handleRadioChange}
                             className="h-4 w-4 text-[#6BBF9A] border-[#D5E8D4] focus:ring-[#6BBF9A] focus:ring-2"
+                            required
                           />
                           <span className="ml-2 text-gray-700">No</span>
                         </label>
@@ -156,9 +237,9 @@ const LandingPage = () => {
                       <a href="#login" className="text-[#6BBF9A] hover:text-[#4DAF7C] transition-colors duration-200">
                         Login
                       </a>
-                    </div>
+                    </div>end me command
                     <div className="text-sm">
-                      <span className="text-gray-700">Do you want to be a foodpanda rider? </span>
+                      <span className="text-gray-700">Do you want to be a PharmaGo rider? </span>
                       <a href="#rider" className="text-[#6BBF9A] hover:text-[#4DAF7C] transition-colors duration-200">
                         Click here
                       </a>
