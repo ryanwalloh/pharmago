@@ -1,8 +1,33 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useRegistration } from '../contexts/RegistrationContext';
 
 const PharmacyRegistration = () => {
   const { logRegistrationData, getAllRegistrationData } = useRegistration();
+
+  // Form state
+  const [formData, setFormData] = useState({
+    businessName: '',
+    businessType: 'pharmacy',
+    businessCategory: 'pharmacy',
+    mobileNumber: '',
+    sameNumber: true
+  });
+
+  // Handle input changes
+  const handleInputChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value
+    }));
+  };
+
+  // Handle form submission
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    console.log('Form submitted:', formData);
+    logRegistrationData();
+  };
 
   // Log the current registration data when component mounts
   React.useEffect(() => {
@@ -10,63 +35,164 @@ const PharmacyRegistration = () => {
   }, [logRegistrationData]);
 
   return (
-    <div className="min-h-screen bg-gray-50 py-12">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="bg-white rounded-lg shadow-lg p-8">
-          <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold text-gray-900 mb-4">
-              Pharmacy Registration
-            </h1>
-            <p className="text-lg text-gray-600">
-              Complete your pharmacy registration in a few simple steps
-            </p>
-          </div>
-
-          {/* Progress Indicator */}
-          <div className="mb-8">
-            <div className="flex items-center justify-between">
-              {[1, 2, 3, 4, 5, 6, 7].map((step) => (
-                <div key={step} className="flex items-center">
-                  <div className="flex items-center justify-center w-8 h-8 bg-gray-200 rounded-full text-sm font-medium text-gray-600">
-                    {step}
-                  </div>
-                  {step < 7 && (
-                    <div className="w-16 h-1 bg-gray-200 ml-2"></div>
-                  )}
+    <div className="h-screen overflow-hidden font-roboto">
+      {/* Header - Simplified version with only logo */}
+      <nav className="bg-white shadow-lg border-b border-[#D5E8D4]">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center py-6">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <div className="flex items-center space-x-3">
+                  <img 
+                    src="/assets/logosvgdark.svg" 
+                    alt="PharmaGo Logo" 
+                    className="h-10 w-auto"
+                  />
                 </div>
-              ))}
+              </div>
             </div>
-            <div className="mt-2 text-sm text-gray-500 text-center">
-              Step 1 of 7: User Account Information
-            </div>
-          </div>
-
-          {/* Placeholder Content */}
-          <div className="text-center py-12">
-            <div className="text-gray-400 mb-4">
-              <svg className="mx-auto h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-            </div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">
-              Registration Form Wizard
-            </h3>
-            <p className="text-gray-500 mb-4">
-              This is where the step-by-step registration form will be implemented.
-            </p>
-            <p className="text-sm text-gray-400">
-              Check the browser console to see the collected registration data.
-            </p>
-          </div>
-
-          {/* Debug Information (remove in production) */}
-          <div className="mt-8 p-4 bg-gray-100 rounded-lg">
-            <h4 className="text-sm font-medium text-gray-700 mb-2">Debug: Current Registration Data</h4>
-            <pre className="text-xs text-gray-600 overflow-auto max-h-40">
-              {JSON.stringify(getAllRegistrationData(), null, 2)}
-            </pre>
+            {/* Empty div to maintain spacing - no buttons on right */}
+            <div></div>
           </div>
         </div>
+      </nav>
+
+      {/* Main Container - Grid Layout */}
+      <div className="grid grid-cols-2 h-[calc(100vh-88px)]">
+        {/* Left Image Container */}
+        <div className="relative overflow-hidden">
+          <div className="w-full h-full">
+            <img 
+              src="/images/regbg1.png" 
+              alt="Pharmacy Staff" 
+              className="w-full h-full object-cover"
+            />
+          </div>
+        </div>
+
+        {/* Right Form Container */}
+        <div className="flex flex-col justify-start items-center h-full text-center relative overflow-y-auto pb-16">
+          <div className="flex justify-center relative top-6 pt-6">
+            <div className="flex flex-col absolute w-[22vw] justify-start items-start text-[#2c2c2c]">
+              {/* Header */}
+              <h1 className="text-3xl font-bold leading-10 flex text-left justify-left text-[#2c2c2c]">
+                Tell us about your business
+              </h1>
+              <p className="text-base mt-[-7px] text-[#8d8c8c] text-left leading-5 font-normal">
+                This information will be shown on the app so that customers can search and contact
+                you in case they have any questions.
+              </p>
+
+              {/* Form */}
+              <div className="w-[22vw] pb-5 pt-2.5 flex flex-col text-[#2c2c2c]">
+                <form className="w-[22vw] pb-5 pt-2.5 flex flex-col text-[#2c2c2c]" onSubmit={handleSubmit}>
+                  {/* Business Name */}
+                  <div className="relative my-2.5 z-10">
+                    <input
+                      type="text"
+                      name="businessName"
+                      value={formData.businessName}
+                      onChange={handleInputChange}
+                      className="w-full px-6 py-7 border-none rounded-sm text-base box-border bg-gray-100 pt-8 pb-1.5 h-15 mb-2.5 focus:outline-none focus:ring-2 focus:ring-[#2c786c]"
+                      placeholder=" "
+                      required
+                    />
+                    <label className="absolute top-4 left-6 transition-all duration-200 ease-in-out text-[#8d8c8c] font-normal text-sm">
+                      Your Business Name<span className="text-[#2c786c] text-xl relative top-1"> *</span>
+                    </label>
+                  </div>
+
+                  {/* Business Type */}
+                  <div className="relative my-2.5 z-10">
+                    <input
+                      type="text"
+                      name="businessType"
+                      value={formData.businessType}
+                      onChange={handleInputChange}
+                      className="w-full px-6 py-7 border-none rounded-sm text-base box-border bg-gray-100 pt-8 pb-1.5 h-15 mb-2.5 focus:outline-none focus:ring-2 focus:ring-[#2c786c]"
+                      placeholder=" "
+                      required
+                    />
+                    <label className="absolute top-4 left-6 transition-all duration-200 ease-in-out text-[#8d8c8c] font-normal text-sm">
+                      Business Type<span className="text-[#2c786c] text-xl relative top-1"> *</span>
+                    </label>
+                  </div>
+
+                  {/* Business Category */}
+                  <div className="relative my-2.5 z-10">
+                    <input
+                      type="text"
+                      name="businessCategory"
+                      value={formData.businessCategory}
+                      onChange={handleInputChange}
+                      className="w-full px-6 py-7 border-none rounded-sm text-base box-border bg-gray-100 pt-8 pb-1.5 h-15 mb-2.5 focus:outline-none focus:ring-2 focus:ring-[#2c786c]"
+                      placeholder=" "
+                      required
+                    />
+                    <label className="absolute top-4 left-6 transition-all duration-200 ease-in-out text-[#8d8c8c] font-normal text-sm">
+                      Business Category<span className="text-[#2c786c] text-xl relative top-1"> *</span>
+                    </label>
+                  </div>
+
+                  {/* Mobile Number */}
+                  <div className="relative my-2.5 z-10">
+                    <input
+                      type="tel"
+                      name="mobileNumber"
+                      value={formData.mobileNumber}
+                      onChange={handleInputChange}
+                      className="w-full px-6 py-7 border-none rounded-sm text-base box-border bg-gray-100 pt-8 pb-1.5 h-15 mb-2.5 focus:outline-none focus:ring-2 focus:ring-[#2c786c]"
+                      placeholder=" "
+                      pattern="^(09|\+639)\d{9}$"
+                      title="Please enter a valid Philippine mobile number (e.g., 09123456789 or +639123456789)"
+                      required
+                    />
+                    <label className="absolute top-4 left-6 transition-all duration-200 ease-in-out text-[#8d8c8c] font-normal text-sm">
+                      Mobile Number<span className="text-[#2c786c] text-xl relative top-1"> *</span>
+                    </label>
+                  </div>
+
+                  {/* Checkbox */}
+                  <div className="text-base mt-2.5 flex">
+                    <input
+                      type="checkbox"
+                      name="sameNumber"
+                      checked={formData.sameNumber}
+                      onChange={handleInputChange}
+                      className="accent-[#2c786c] w-6 h-6 cursor-pointer mr-2.5 mt-[-3px]"
+                    />
+                    <label className="text-[#2c2c2c]">
+                      My Business and Mobile Phone numbers are the same
+                    </label>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Progress Bar */}
+      <div className="flex flex-row justify-between items-center fixed right-0 bottom-20 w-[50vw] h-1.5 bg-[#c2bdbd] z-30">
+        <div className="w-[20%] h-1.5 bg-[#004445]"></div>
+      </div>
+
+      {/* Footer */}
+      <div className="flex flex-row justify-between items-center w-[48vw] fixed right-2.5 bottom-0 p-5 z-10 gap-2.5">
+        <button 
+          type="button"
+          className="text-base bg-white text-[#2c786c] border-none py-1.5 px-5 font-bold rounded hover:bg-gray-100 transition-colors"
+        >
+          Back
+        </button>
+        <p className="text-gray-500">4 step(s) to complete</p>
+        <button 
+          type="submit"
+          onClick={handleSubmit}
+          className="text-base bg-[#2c786c] text-white border-none py-1.5 px-5 font-bold rounded hover:bg-[#004445] transition-colors"
+        >
+          Next
+        </button>
       </div>
     </div>
   );
