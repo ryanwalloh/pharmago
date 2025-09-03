@@ -1,4 +1,21 @@
-import React, { createContext, useContext, useReducer } from 'react';
+import React, { createContext, useContext, useReducer, useEffect } from 'react';
+
+// Load saved data from localStorage or use default state
+const loadSavedData = () => {
+  try {
+    const savedData = localStorage.getItem('pharmago_registration_data');
+    if (savedData) {
+      const parsedData = JSON.parse(savedData);
+      console.log('=== LOADED SAVED REGISTRATION DATA ===');
+      console.log('Saved data found:', parsedData);
+      console.log('=====================================');
+      return parsedData;
+    }
+  } catch (error) {
+    console.error('Error loading saved registration data:', error);
+  }
+  return null;
+};
 
 // Initial state for registration data
 const initialState = {
@@ -83,6 +100,10 @@ const initialState = {
   validationErrors: {},
   isSubmitting: false
 };
+
+// Initialize state with saved data if available
+const savedData = loadSavedData();
+const initialStateWithSavedData = savedData ? { ...initialState, ...savedData } : initialState;
 
 // Action types
 const REGISTRATION_ACTIONS = {
@@ -196,9 +217,22 @@ const RegistrationContext = createContext();
 
 // Provider component
 export const RegistrationProvider = ({ children }) => {
-  const [state, dispatch] = useReducer(registrationReducer, initialState);
+  const [state, dispatch] = useReducer(registrationReducer, initialStateWithSavedData);
 
-  // Action creators
+  // Auto-save to localStorage whenever state changes
+  useEffect(() => {
+    try {
+      localStorage.setItem('pharmago_registration_data', JSON.stringify(state));
+      console.log('=== AUTO-SAVED REGISTRATION DATA TO LOCALSTORAGE ===');
+      console.log('Current step:', state.currentStep);
+      console.log('Data saved successfully');
+      console.log('===================================================');
+    } catch (error) {
+      console.error('Error auto-saving registration data to localStorage:', error);
+    }
+  }, [state]);
+
+  // Action creators (simplified - auto-saving handled by useEffect)
   const updateUserAccount = (data) => {
     dispatch({ type: REGISTRATION_ACTIONS.UPDATE_USER_ACCOUNT, payload: data });
   };
@@ -239,8 +273,23 @@ export const RegistrationProvider = ({ children }) => {
     dispatch({ type: REGISTRATION_ACTIONS.SET_SUBMITTING, payload: isSubmitting });
   };
 
+  // Save data to localStorage
+  const saveToLocalStorage = (data) => {
+    try {
+      localStorage.setItem('pharmago_registration_data', JSON.stringify(data));
+      console.log('=== SAVED REGISTRATION DATA TO LOCALSTORAGE ===');
+      console.log('Data saved:', data);
+      console.log('===============================================');
+    } catch (error) {
+      console.error('Error saving registration data to localStorage:', error);
+    }
+  };
+
   const resetRegistration = () => {
     dispatch({ type: REGISTRATION_ACTIONS.RESET_REGISTRATION });
+    // Clear localStorage when resetting
+    localStorage.removeItem('pharmago_registration_data');
+    console.log('=== CLEARED REGISTRATION DATA FROM LOCALSTORAGE ===');
   };
 
   // Get all registration data
