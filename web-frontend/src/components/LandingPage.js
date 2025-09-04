@@ -47,6 +47,38 @@ const LandingPage = () => {
     }));
   };
 
+  // Form validation
+  const isFormValid = () => {
+    return (
+      formData.pharmacyName.trim() !== '' &&
+      formData.firstName.trim() !== '' &&
+      formData.lastName.trim() !== '' &&
+      formData.email.trim() !== '' &&
+      formData.phone.trim() !== '' &&
+      formData.birForm !== ''
+    );
+  };
+
+  // Check if specific field is valid
+  const isFieldValid = (fieldName) => {
+    switch (fieldName) {
+      case 'pharmacyName':
+        return formData.pharmacyName.trim() !== '';
+      case 'firstName':
+        return formData.firstName.trim() !== '';
+      case 'lastName':
+        return formData.lastName.trim() !== '';
+      case 'email':
+        return formData.email.trim() !== '';
+      case 'phone':
+        return formData.phone.trim() !== '';
+      case 'birForm':
+        return formData.birForm !== '';
+      default:
+        return true;
+    }
+  };
+
   // Handle form submission
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -96,13 +128,21 @@ const LandingPage = () => {
                         name="pharmacyName"
                         value={formData.pharmacyName}
                         onChange={handleInputChange}
-                        className="peer w-full px-4 py-3 border-2 border-[#D5E8D4] rounded-lg text-gray-700 placeholder-transparent focus:outline-none focus:border-[#6BBF9A] focus:ring-2 focus:ring-[#6BBF9A] focus:ring-opacity-20 transition-all duration-200"
+                        className={`peer w-full px-4 py-3 border-2 rounded-lg text-gray-700 placeholder-transparent focus:outline-none focus:ring-2 focus:ring-opacity-20 transition-all duration-200 ${
+                          isFieldValid('pharmacyName') 
+                            ? 'border-[#D5E8D4] focus:border-[#6BBF9A] focus:ring-[#6BBF9A]' 
+                            : 'border-red-300 focus:border-red-500 focus:ring-red-500'
+                        }`}
                         placeholder="Your Pharmacy Name"
                         required
                       />
                       <label
                         htmlFor="pharmacyName"
-                        className="absolute left-4 -top-2.5 bg-white px-2 text-sm text-[#4DAF7C] transition-all duration-200 peer-placeholder-shown:text-base peer-placeholder-shown:text-gray-400 peer-placeholder-shown:top-3 peer-focus:-top-2.5 peer-focus:text-sm peer-focus:text-[#6BBF9A]"
+                        className={`absolute left-4 -top-2.5 bg-white px-2 text-sm transition-all duration-200 peer-placeholder-shown:text-base peer-placeholder-shown:text-gray-400 peer-placeholder-shown:top-3 peer-focus:-top-2.5 peer-focus:text-sm ${
+                          isFieldValid('pharmacyName') 
+                            ? 'text-[#4DAF7C] peer-focus:text-[#6BBF9A]' 
+                            : 'text-red-500 peer-focus:text-red-500'
+                        }`}
                       >
                         Your Pharmacy Name *
                       </label>
@@ -224,7 +264,12 @@ const LandingPage = () => {
                     {/* Register Button */}
                     <button
                       type="submit"
-                      className="w-full bg-[#4DAF7C] hover:bg-[#2C7A5D] text-white font-semibold py-4 px-6 rounded-lg transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+                      disabled={!isFormValid()}
+                      className={`w-full font-semibold py-4 px-6 rounded-lg transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 ${
+                        isFormValid() 
+                          ? 'bg-[#4DAF7C] hover:bg-[#2C7A5D] text-white' 
+                          : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                      }`}
                     >
                       Register
                     </button>
@@ -237,7 +282,7 @@ const LandingPage = () => {
                       <a href="#login" className="text-[#6BBF9A] hover:text-[#4DAF7C] transition-colors duration-200">
                         Login
                       </a>
-                    </div>end me command
+                    </div>
                     <div className="text-sm">
                       <span className="text-gray-700">Do you want to be a PharmaGo rider? </span>
                       <a href="#rider" className="text-[#6BBF9A] hover:text-[#4DAF7C] transition-colors duration-200">

@@ -8,7 +8,7 @@ from rest_framework_simplejwt.views import (
 )
 
 from api.users.views import (
-    UserViewSet, CustomerViewSet, PharmacyViewSet, RiderViewSet
+    UserViewSet, CustomerViewSet, PharmacyViewSet, RiderViewSet, DocumentUploadViewSet
 )
 from api.users.jwt_views import (
     jwt_login, jwt_refresh, jwt_logout, jwt_verify
@@ -42,6 +42,7 @@ router.register(r'users', UserViewSet, basename='user')
 router.register(r'customers', CustomerViewSet, basename='customer')
 router.register(r'pharmacies', PharmacyViewSet, basename='pharmacy')
 router.register(r'riders', RiderViewSet, basename='rider')
+router.register(r'document-uploads', DocumentUploadViewSet, basename='document-upload')
 
 # Location management
 router.register(r'addresses', AddressViewSet, basename='address')

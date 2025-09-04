@@ -234,3 +234,35 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
         if attrs['new_password'] != attrs['new_password_confirm']:
             raise serializers.ValidationError("Passwords don't match")
         return attrs
+
+
+class UserDocumentSerializer(serializers.ModelSerializer):
+    """Serializer for user document uploads"""
+    
+    class Meta:
+        model = UserDocument
+        fields = [
+            'id', 'user', 'id_type', 'document_file', 'document_number',
+            'expiry_date', 'status', 'admin_notes', 'verified_by', 'verified_at',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'status', 'admin_notes', 'verified_by', 'verified_at', 'created_at', 'updated_at']
+    
+    def validate_document_file(self, value):
+        """Validate uploaded document file"""
+        # Check file size (10MB limit)
+        if value.size > 10 * 1024 * 1024:
+            raise serializers.ValidationError("File size must be less than 10MB")
+        
+        # Check file type
+        allowed_types = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png']
+        if hasattr(value, 'content_type') and value.content_type not in allowed_types:
+            raise serializers.ValidationError("Only PDF, JPG, and PNG files are allowed")
+        
+        return value
+    
+    def validate_expiry_date(self, value):
+        """Validate expiry date"""
+        if value and value < timezone.now().date():
+            raise serializers.ValidationError("Document expiry date cannot be in the past")
+        return value

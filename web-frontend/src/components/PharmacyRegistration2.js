@@ -19,6 +19,9 @@ const PharmacyRegistration2 = () => {
   const [formData, setFormData] = useState({
     pharmacyName: userAccount.pharmacy_name || '',
     barangay: locationInfo.barangay || '',
+    city: locationInfo.city || 'Iligan',
+    province: locationInfo.province || 'Lanao del Norte',
+    zipCode: locationInfo.zip_code || '9200',
     coordinates: locationInfo.latitude && locationInfo.longitude ? 
       `${locationInfo.latitude}, ${locationInfo.longitude}` : '',
     address: locationInfo.street_address || ''
@@ -35,6 +38,9 @@ const PharmacyRegistration2 = () => {
       ...prev,
       pharmacyName: userAccount.pharmacy_name || prev.pharmacyName,
       barangay: locationInfo.barangay || prev.barangay,
+      city: locationInfo.city || prev.city,
+      province: locationInfo.province || prev.province,
+      zipCode: locationInfo.zip_code || prev.zipCode,
       coordinates: locationInfo.latitude && locationInfo.longitude ? 
         `${locationInfo.latitude}, ${locationInfo.longitude}` : prev.coordinates,
       address: locationInfo.street_address || prev.address
@@ -172,6 +178,9 @@ const PharmacyRegistration2 = () => {
     updateLocationInfo({
       street_address: formData.address,
       barangay: formData.barangay,
+      city: formData.city,
+      province: formData.province,
+      zip_code: formData.zipCode,
       latitude: lat,
       longitude: lng
     });
@@ -182,6 +191,9 @@ const PharmacyRegistration2 = () => {
     console.log('Updated Location Info:', {
       street_address: formData.address,
       barangay: formData.barangay,
+      city: formData.city,
+      province: formData.province,
+      zip_code: formData.zipCode,
       latitude: lat,
       longitude: lng
     });
@@ -189,6 +201,9 @@ const PharmacyRegistration2 = () => {
     console.log('===============================================');
     
     logRegistrationData();
+    
+    // Navigate to next step
+    navigate('/pharmacy-registration-3');
   };
 
   // Log the current registration data when component mounts
@@ -201,6 +216,35 @@ const PharmacyRegistration2 = () => {
     console.log('=============================================');
     logRegistrationData();
   }, [logRegistrationData, userAccount, locationInfo, formData]);
+
+  // Form validation
+  const isFormValid = () => {
+    return (
+      formData.barangay.trim() !== '' &&
+      formData.city.trim() !== '' &&
+      formData.province.trim() !== '' &&
+      formData.zipCode.trim() !== '' &&
+      formData.coordinates.trim() !== ''
+    );
+  };
+
+  // Check if specific field is valid
+  const isFieldValid = (fieldName) => {
+    switch (fieldName) {
+      case 'barangay':
+        return formData.barangay.trim() !== '';
+      case 'city':
+        return formData.city.trim() !== '';
+      case 'province':
+        return formData.province.trim() !== '';
+      case 'zipCode':
+        return formData.zipCode.trim() !== '';
+      case 'coordinates':
+        return formData.coordinates.trim() !== '';
+      default:
+        return true;
+    }
+  };
 
   return (
     <div className="h-screen overflow-hidden font-roboto">
@@ -231,7 +275,7 @@ const PharmacyRegistration2 = () => {
         <div className="relative overflow-hidden">
           <div className="w-full h-full">
             <img 
-              src="/images/pharmalocation.png" 
+              src="/images/pharmacie.png" 
               alt="Pharmacy Location" 
               className="w-full h-full object-cover"
             />
@@ -241,7 +285,7 @@ const PharmacyRegistration2 = () => {
         {/* Right Form Container */}
         <div className="flex flex-col justify-start items-center h-full text-center relative overflow-y-auto pb-16">
           <div className="flex justify-center relative top-6 pt-6">
-            <div className="flex flex-col absolute w-[22vw] justify-start items-start text-[#2c2c2c]">
+            <div className="flex flex-col absolute w-[25vw] justify-start items-start text-[#2c2c2c] max-h-[calc(100vh-200px)] overflow-y-auto">
               {/* Header */}
               <h1 className="text-3xl font-bold mb-6 leading-10 flex text-left justify-left text-[#2c2c2c]">
                 Where is your pharmacy located?
@@ -250,9 +294,9 @@ const PharmacyRegistration2 = () => {
                 PharmaGo riders will use this to find your business for pickup and delivery.
               </p>
 
-              {/* Form */}
-              <div className="w-[22vw] pb-5 pt-2.5 flex flex-col text-[#2c2c2c]">
-                <form className="w-[22vw] pb-5 pt-2.5 flex flex-col text-[#2c2c2c]" onSubmit={handleSubmit}>
+                                {/* Form */}
+                  <div className="w-[22vw] pb-5 pt-2.5 flex flex-col text-[#2c2c2c]">
+                    <form className="w-[22vw] h-[50vh] pb-5 pt-2.5 flex flex-col text-[#2c2c2c] space-y-4" onSubmit={handleSubmit}>
                   {/* Google Map */}
                   <div className="relative my-2.5 z-10">
                     <div 
@@ -294,38 +338,87 @@ const PharmacyRegistration2 = () => {
                       name="barangay"
                       value={formData.barangay}
                       onChange={handleInputChange}
-                      className="peer w-full px-4 py-3 border-2 border-[#D5E8D4] rounded-lg text-gray-700 placeholder-transparent focus:outline-none focus:border-[#6BBF9A] focus:ring-2 focus:ring-[#6BBF9A] focus:ring-opacity-20 transition-all duration-200"
+                      className={`peer w-full px-4 py-3 border-2 rounded-lg text-gray-700 placeholder-transparent focus:outline-none focus:ring-2 focus:ring-opacity-20 transition-all duration-200 ${
+                        isFieldValid('barangay') 
+                          ? 'border-[#D5E8D4] focus:border-[#6BBF9A] focus:ring-[#6BBF9A]' 
+                          : 'border-red-300 focus:border-red-500 focus:ring-red-500'
+                      }`}
                       placeholder="Barangay"
                       required
                     />
                     <label
                       htmlFor="barangay"
-                      className="absolute left-4 -top-2.5 bg-white px-2 text-sm text-[#4DAF7C] transition-all duration-200 peer-placeholder-shown:text-base peer-placeholder-shown:text-gray-400 peer-placeholder-shown:top-3 peer-focus:-top-2.5 peer-focus:text-sm peer-focus:text-[#6BBF9A]"
+                      className={`absolute left-4 -top-2.5 bg-white px-2 text-sm transition-all duration-200 peer-placeholder-shown:text-base peer-placeholder-shown:text-gray-400 peer-placeholder-shown:top-3 peer-focus:-top-2.5 peer-focus:text-sm ${
+                        isFieldValid('barangay') 
+                          ? 'text-[#4DAF7C] peer-focus:text-[#6BBF9A]' 
+                          : 'text-red-500 peer-focus:text-red-500'
+                      }`}
                     >
                       Barangay *
                     </label>
                   </div>
 
-                  {/* Coordinates/Address */}
+                  {/* City */}
                   <div className="relative my-2.5 z-10">
                     <input
                       type="text"
-                      id="coordinates"
-                      name="coordinates"
-                      value={formData.coordinates}
+                      id="city"
+                      name="city"
+                      value={formData.city}
                       onChange={handleInputChange}
                       className="peer w-full px-4 py-3 border-2 border-[#D5E8D4] rounded-lg text-gray-700 placeholder-transparent focus:outline-none focus:border-[#6BBF9A] focus:ring-2 focus:ring-[#6BBF9A] focus:ring-opacity-20 transition-all duration-200"
-                      placeholder="Coordinates"
+                      placeholder="City"
                       required
-                      readOnly
                     />
                     <label
-                      htmlFor="coordinates"
+                      htmlFor="city"
                       className="absolute left-4 -top-2.5 bg-white px-2 text-sm text-[#4DAF7C] transition-all duration-200 peer-placeholder-shown:text-base peer-placeholder-shown:text-gray-400 peer-placeholder-shown:top-3 peer-focus:-top-2.5 peer-focus:text-sm peer-focus:text-[#6BBF9A]"
                     >
-                      Coordinates *
+                      City *
                     </label>
                   </div>
+
+                  {/* Province */}
+                  <div className="relative my-2.5 z-10">
+                    <input
+                      type="text"
+                      id="province"
+                      name="province"
+                      value={formData.province}
+                      onChange={handleInputChange}
+                      className="peer w-full px-4 py-3 border-2 border-[#D5E8D4] rounded-lg text-gray-700 placeholder-transparent focus:outline-none focus:border-[#6BBF9A] focus:ring-2 focus:ring-[#6BBF9A] focus:ring-opacity-20 transition-all duration-200"
+                      placeholder="Province"
+                      required
+                    />
+                    <label
+                      htmlFor="province"
+                      className="absolute left-4 -top-2.5 bg-white px-2 text-sm text-[#4DAF7C] transition-all duration-200 peer-placeholder-shown:text-base peer-placeholder-shown:text-gray-400 peer-placeholder-shown:top-3 peer-focus:-top-2.5 peer-focus:text-sm peer-focus:text-[#6BBF9A]"
+                    >
+                      Province *
+                    </label>
+                  </div>
+
+                  {/* Zip Code */}
+                  <div className="relative my-2.5 z-10">
+                    <input
+                      type="text"
+                      id="zipCode"
+                      name="zipCode"
+                      value={formData.zipCode}
+                      onChange={handleInputChange}
+                      className="peer w-full px-4 py-3 border-2 border-[#D5E8D4] rounded-lg text-gray-700 placeholder-transparent focus:outline-none focus:border-[#6BBF9A] focus:ring-2 focus:ring-[#6BBF9A] focus:ring-opacity-20 transition-all duration-200"
+                      placeholder="Zip Code"
+                      required
+                    />
+                    <label
+                      htmlFor="zipCode"
+                      className="absolute left-4 -top-2.5 bg-white px-2 text-sm text-[#4DAF7C] transition-all duration-200 peer-placeholder-shown:text-base peer-placeholder-shown:text-gray-400 peer-placeholder-shown:top-3 peer-focus:-top-2.5 peer-focus:text-sm peer-focus:text-[#6BBF9A]"
+                    >
+                      Zip Code *
+                    </label>
+                  </div>
+
+                  {/* Coordinates field is hidden but managed in state */}
 
                   {/* Address Display */}
                   <div className="relative my-2.5 z-10">
@@ -371,7 +464,12 @@ const PharmacyRegistration2 = () => {
         <button 
           type="submit"
           onClick={handleSubmit}
-          className="text-base bg-[#2c786c] text-white border-none py-1.5 px-5 font-bold rounded hover:bg-[#004445] transition-colors"
+          disabled={!isFormValid()}
+          className={`text-base border-none py-1.5 px-5 font-bold rounded transition-colors ${
+            isFormValid() 
+              ? 'bg-[#2c786c] text-white hover:bg-[#004445]' 
+              : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+          }`}
         >
           Next
         </button>
