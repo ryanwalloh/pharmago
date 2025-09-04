@@ -92,6 +92,29 @@ const PharmacyRegistration = () => {
     logRegistrationData();
   }, [logRegistrationData, userAccount, businessInfo, formData]);
 
+  // Form validation
+  const isFormValid = () => {
+    return (
+      formData.pharmacyName.trim() !== '' &&
+      formData.mobileNumber.trim() !== '' &&
+      formData.email.trim() !== ''
+    );
+  };
+
+  // Check if specific field is valid
+  const isFieldValid = (fieldName) => {
+    switch (fieldName) {
+      case 'pharmacyName':
+        return formData.pharmacyName.trim() !== '';
+      case 'mobileNumber':
+        return formData.mobileNumber.trim() !== '';
+      case 'email':
+        return formData.email.trim() !== '';
+      default:
+        return true;
+    }
+  };
+
   return (
     <div className="h-screen overflow-hidden font-roboto">
       {/* Header - Simplified version with only logo */}
@@ -152,13 +175,21 @@ const PharmacyRegistration = () => {
                       name="pharmacyName"
                       value={formData.pharmacyName}
                       onChange={handleInputChange}
-                      className="peer w-full px-4 py-3 border-2 border-[#D5E8D4] rounded-lg text-gray-700 placeholder-transparent focus:outline-none focus:border-[#6BBF9A] focus:ring-2 focus:ring-[#6BBF9A] focus:ring-opacity-20 transition-all duration-200"
+                      className={`peer w-full px-4 py-3 border-2 rounded-lg text-gray-700 placeholder-transparent focus:outline-none focus:ring-2 focus:ring-opacity-20 transition-all duration-200 ${
+                        isFieldValid('pharmacyName') 
+                          ? 'border-[#D5E8D4] focus:border-[#6BBF9A] focus:ring-[#6BBF9A]' 
+                          : 'border-red-300 focus:border-red-500 focus:ring-red-500'
+                      }`}
                       placeholder="Your Pharmacy Name"
                       required
                     />
                     <label
                       htmlFor="pharmacyName"
-                      className="absolute left-4 -top-2.5 bg-white px-2 text-sm text-[#4DAF7C] transition-all duration-200 peer-placeholder-shown:text-base peer-placeholder-shown:text-gray-400 peer-placeholder-shown:top-3 peer-focus:-top-2.5 peer-focus:text-sm peer-focus:text-[#6BBF9A]"
+                      className={`absolute left-4 -top-2.5 bg-white px-2 text-sm transition-all duration-200 peer-placeholder-shown:text-base peer-placeholder-shown:text-gray-400 peer-placeholder-shown:top-3 peer-focus:-top-2.5 peer-focus:text-sm ${
+                        isFieldValid('pharmacyName') 
+                          ? 'text-[#4DAF7C] peer-focus:text-[#6BBF9A]' 
+                          : 'text-red-500 peer-focus:text-red-500'
+                      }`}
                     >
                       Your Pharmacy Name *
                     </label>
@@ -212,13 +243,21 @@ const PharmacyRegistration = () => {
                       name="email"
                       value={formData.email}
                       onChange={handleInputChange}
-                      className="peer w-full px-4 py-3 border-2 border-[#D5E8D4] rounded-lg text-gray-700 placeholder-transparent focus:outline-none focus:border-[#6BBF9A] focus:ring-2 focus:ring-[#6BBF9A] focus:ring-opacity-20 transition-all duration-200"
+                      className={`peer w-full px-4 py-3 border-2 rounded-lg text-gray-700 placeholder-transparent focus:outline-none focus:ring-2 focus:ring-opacity-20 transition-all duration-200 ${
+                        isFieldValid('email') 
+                          ? 'border-[#D5E8D4] focus:border-[#6BBF9A] focus:ring-[#6BBF9A]' 
+                          : 'border-red-300 focus:border-red-500 focus:ring-red-500'
+                      }`}
                       placeholder="Business Email"
                       required
                     />
                     <label
                       htmlFor="email"
-                      className="absolute left-4 -top-2.5 bg-white px-2 text-sm text-[#4DAF7C] transition-all duration-200 peer-placeholder-shown:text-base peer-placeholder-shown:text-gray-400 peer-placeholder-shown:top-3 peer-focus:-top-2.5 peer-focus:text-sm peer-focus:text-[#6BBF9A]"
+                      className={`absolute left-4 -top-2.5 bg-white px-2 text-sm transition-all duration-200 peer-placeholder-shown:text-base peer-placeholder-shown:text-gray-400 peer-placeholder-shown:top-3 peer-focus:-top-2.5 peer-focus:text-sm ${
+                        isFieldValid('email') 
+                          ? 'text-[#4DAF7C] peer-focus:text-[#6BBF9A]' 
+                          : 'text-red-500 peer-focus:text-red-500'
+                      }`}
                     >
                       Business Email *
                     </label>
@@ -232,7 +271,11 @@ const PharmacyRegistration = () => {
                       name="mobileNumber"
                       value={formData.mobileNumber}
                       onChange={handleInputChange}
-                      className="peer w-full px-4 py-3 border-2 border-[#D5E8D4] rounded-lg text-gray-700 placeholder-transparent focus:outline-none focus:border-[#6BBF9A] focus:ring-2 focus:ring-[#6BBF9A] focus:ring-opacity-20 transition-all duration-200"
+                      className={`peer w-full px-4 py-3 border-2 rounded-lg text-gray-700 placeholder-transparent focus:outline-none focus:ring-2 focus:ring-opacity-20 transition-all duration-200 ${
+                        isFieldValid('mobileNumber') 
+                          ? 'border-[#D5E8D4] focus:border-[#6BBF9A] focus:ring-[#6BBF9A]' 
+                          : 'border-red-300 focus:border-red-500 focus:ring-red-500'
+                      }`}
                       placeholder="Mobile Number"
                       pattern="^(09|\+639)\d{9}$"
                       title="Please enter a valid Philippine mobile number (e.g., 09123456789 or +639123456789)"
@@ -240,7 +283,11 @@ const PharmacyRegistration = () => {
                     />
                     <label
                       htmlFor="mobileNumber"
-                      className="absolute left-4 -top-2.5 bg-white px-2 text-sm text-[#4DAF7C] transition-all duration-200 peer-placeholder-shown:text-base peer-placeholder-shown:text-gray-400 peer-placeholder-shown:top-3 peer-focus:-top-2.5 peer-focus:text-sm peer-focus:text-[#6BBF9A]"
+                      className={`absolute left-4 -top-2.5 bg-white px-2 text-sm transition-all duration-200 peer-placeholder-shown:text-base peer-placeholder-shown:text-gray-400 peer-placeholder-shown:top-3 peer-focus:-top-2.5 peer-focus:text-sm ${
+                        isFieldValid('mobileNumber') 
+                          ? 'text-[#4DAF7C] peer-focus:text-[#6BBF9A]' 
+                          : 'text-red-500 peer-focus:text-red-500'
+                      }`}
                     >
                       Mobile Number *
                     </label>
@@ -283,7 +330,12 @@ const PharmacyRegistration = () => {
         <button 
           type="submit"
           onClick={handleSubmit}
-          className="text-base bg-[#2c786c] text-white border-none py-1.5 px-5 font-bold rounded hover:bg-[#004445] transition-colors"
+          disabled={!isFormValid()}
+          className={`text-base border-none py-1.5 px-5 font-bold rounded transition-colors ${
+            isFormValid() 
+              ? 'bg-[#2c786c] text-white hover:bg-[#004445]' 
+              : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+          }`}
         >
           Next
         </button>
