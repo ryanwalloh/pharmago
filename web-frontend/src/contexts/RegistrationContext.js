@@ -31,16 +31,25 @@ const initialState = {
     phone: '',
     date_of_birth: '',
     gender: '',
-    role: 'pharmacy'
+    role: 'pharmacy',
+    pharmacy_name: '',
+    bir_form: ''
   },
   
   // Step 2: Business Information
   businessInfo: {
     pharmacy_name: '',
+    business_type: '',
+    business_category: '',
     business_permit_number: '',
     business_permit_expiry: '',
     pharmacy_license_number: '',
-    pharmacy_license_expiry: ''
+    pharmacy_license_expiry: '',
+    business_phone: '',
+    business_email: '',
+    operating_hours: {},
+    services_offered: [],
+    payment_methods_accepted: []
   },
   
   // Step 3: Owner Information
@@ -65,6 +74,7 @@ const initialState = {
     city: 'Iligan City',
     province: 'Lanao del Norte',
     postal_code: '',
+    zip_code: '',
     latitude: '',
     longitude: ''
   },
@@ -86,10 +96,29 @@ const initialState = {
   
   // Step 7: Document Uploads
   documents: {
-    owner_primary_id_uploaded: false,
-    business_permit_uploaded: false,
-    pharmacy_license_uploaded: false,
-    storefront_image_uploaded: false
+    pharmacy_license: {
+      file: null,
+      file_url: '',
+      expiry_date: '',
+      uploaded: false
+    },
+    business_permit: {
+      file: null,
+      file_url: '',
+      expiry_date: '',
+      uploaded: false
+    },
+    owner_primary_id: {
+      file: null,
+      file_url: '',
+      expiry_date: '',
+      uploaded: false
+    },
+    storefront_image: {
+      file: null,
+      file_url: '',
+      uploaded: false
+    }
   },
   
   // Current step tracking
@@ -319,6 +348,75 @@ export const RegistrationProvider = ({ children }) => {
     console.log('===================================');
   };
 
+  // Prepare data for final submission to backend
+  const prepareFinalSubmissionData = () => {
+    const submissionData = {
+      // User account data (flattened for backend serializer)
+      // Note: username and password are not required for registration
+      // They will be created during first-time login process
+      email: state.userAccount.email,
+      first_name: state.userAccount.first_name,
+      last_name: state.userAccount.last_name,
+      middle_name: state.userAccount.middle_name || '',
+      phone: state.userAccount.phone,
+      date_of_birth: state.userAccount.date_of_birth,
+      gender: state.userAccount.gender,
+      
+      // Pharmacy business fields
+      pharmacy_name: state.userAccount.pharmacy_name || state.businessInfo.pharmacy_name,
+      business_permit_number: state.businessInfo.business_permit_number,
+      business_permit_expiry: state.businessInfo.business_permit_expiry || state.documents.business_permit?.expiry_date || '',
+      pharmacy_license_number: state.businessInfo.pharmacy_license_number,
+      pharmacy_license_expiry: state.businessInfo.pharmacy_license_expiry || state.documents.pharmacy_license?.expiry_date || '',
+      
+      // Contact information
+      business_phone: state.businessInfo.business_phone || state.userAccount.phone,
+      business_email: state.businessInfo.business_email || state.userAccount.email,
+      
+      // Location information
+      street_address: state.locationInfo.street_address,
+      barangay: state.locationInfo.barangay,
+      city: state.locationInfo.city,
+      province: state.locationInfo.province,
+      postal_code: state.locationInfo.zip_code || state.locationInfo.postal_code,
+      latitude: state.locationInfo.latitude ? parseFloat(state.locationInfo.latitude) : null,
+      longitude: state.locationInfo.longitude ? parseFloat(state.locationInfo.longitude) : null,
+      
+      // Business operations
+      operating_hours: state.businessOperations.operating_hours || {
+        monday: { is_open: true, open_time: '08:00', close_time: '20:00' },
+        tuesday: { is_open: true, open_time: '08:00', close_time: '20:00' },
+        wednesday: { is_open: true, open_time: '08:00', close_time: '20:00' },
+        thursday: { is_open: true, open_time: '08:00', close_time: '20:00' },
+        friday: { is_open: true, open_time: '08:00', close_time: '20:00' },
+        saturday: { is_open: true, open_time: '09:00', close_time: '18:00' },
+        sunday: { is_open: false, open_time: '09:00', close_time: '18:00' }
+      },
+      services_offered: state.businessInfo.services_offered || state.businessOperations.services_offered || [],
+      payment_methods_accepted: state.businessInfo.payment_methods_accepted || state.businessOperations.payment_methods_accepted || [],
+      
+      // Document verification flags
+      owner_primary_id_uploaded: state.documents.owner_primary_id?.uploaded || false,
+      business_permit_uploaded: state.documents.business_permit?.uploaded || false,
+      pharmacy_license_uploaded: state.documents.pharmacy_license?.uploaded || false,
+      storefront_image_uploaded: state.documents.storefront_image?.uploaded || false,
+      
+      // Document files (for upload) - only include if they exist
+      ...(state.documents.pharmacy_license?.file && { pharmacy_license_file: state.documents.pharmacy_license.file }),
+      ...(state.documents.business_permit?.file && { business_permit_file: state.documents.business_permit.file }),
+      ...(state.documents.owner_primary_id?.file && { owner_primary_id_file: state.documents.owner_primary_id.file }),
+      ...(state.documents.storefront_image?.file && { storefront_image_file: state.documents.storefront_image.file })
+    };
+    
+    console.log('=== FINAL SUBMISSION DATA PREPARED ===');
+    console.log('Submission Data:', submissionData);
+    console.log('Services Offered:', submissionData.services_offered);
+    console.log('Payment Methods:', submissionData.payment_methods_accepted);
+    console.log('=====================================');
+    
+    return submissionData;
+  };
+
   const value = {
     // State
     ...state,
@@ -338,7 +436,8 @@ export const RegistrationProvider = ({ children }) => {
     
     // Utilities
     getAllRegistrationData,
-    logRegistrationData
+    logRegistrationData,
+    prepareFinalSubmissionData
   };
 
   return (

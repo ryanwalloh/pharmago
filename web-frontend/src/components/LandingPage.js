@@ -34,7 +34,8 @@ const LandingPage = () => {
       first_name: name === 'firstName' ? value : formData.firstName,
       last_name: name === 'lastName' ? value : formData.lastName,
       email: name === 'email' ? value : formData.email,
-      phone: name === 'phone' ? value : formData.phone
+      phone: name === 'phone' ? value : formData.phone,
+      bir_form: formData.birForm
     });
   };
 
@@ -45,6 +46,16 @@ const LandingPage = () => {
       ...prev,
       birForm: value
     }));
+    
+    // Update registration context in real-time
+    updateUserAccount({
+      pharmacy_name: formData.pharmacyName,
+      first_name: formData.firstName,
+      last_name: formData.lastName,
+      email: formData.email,
+      phone: formData.phone,
+      bir_form: value
+    });
   };
 
   // Form validation
