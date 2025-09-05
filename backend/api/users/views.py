@@ -42,7 +42,7 @@ from .serializers import (
     CustomerSerializer, PharmacySerializer, RiderSerializer,
     UserProfileSerializer, PasswordChangeSerializer,
     PasswordResetRequestSerializer, PasswordResetConfirmSerializer,
-    UserDocumentSerializer
+    UserDocumentSerializer, PharmacyRegistrationSerializer
 )
 from api.pharmacies.serializers import (
     PharmacyCreateSerializer, PharmacyUpdateSerializer, PharmacyDetailSerializer,
@@ -108,6 +108,61 @@ class UserViewSet(viewsets.ModelViewSet):
                 }, status=status.HTTP_400_BAD_REQUEST)
         
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=False, methods=['post'], permission_classes=[permissions.AllowAny])
+    def register_pharmacy(self, request):
+        """Complete pharmacy registration endpoint - creates both User and Pharmacy records"""
+        logger.info(f"=== PHARMACY REGISTRATION REQUEST DEBUG ===")
+        logger.info(f"Request method: {request.method}")
+        logger.info(f"Content type: {request.content_type}")
+        logger.info(f"Raw request data: {request.data}")
+        
+        # Log specific fields that might be causing issues
+        logger.info(f"Business permit expiry: '{request.data.get('business_permit_expiry')}' (type: {type(request.data.get('business_permit_expiry'))})")
+        logger.info(f"Pharmacy license expiry: '{request.data.get('pharmacy_license_expiry')}' (type: {type(request.data.get('pharmacy_license_expiry'))})")
+        logger.info(f"Business permit number: '{request.data.get('business_permit_number')}'")
+        logger.info(f"Pharmacy license number: '{request.data.get('pharmacy_license_number')}'")
+        
+        # Log all keys in request.data
+        logger.info(f"All request data keys: {list(request.data.keys())}")
+        logger.info(f"==========================================")
+        
+        serializer = PharmacyRegistrationSerializer(data=request.data)
+        if serializer.is_valid():
+            try:
+                pharmacy = serializer.save()
+                
+                # Generate JWT tokens for the new user
+                refresh = RefreshToken.for_user(pharmacy.user)
+                
+                logger.info(f"Pharmacy registration successful: User ID {pharmacy.user.id}, Pharmacy ID {pharmacy.id}")
+                
+                return Response({
+                    'message': 'Pharmacy registration completed successfully',
+                    'pharmacy': PharmacySerializer(pharmacy).data,
+                    'user': UserSerializer(pharmacy.user).data,
+                    'tokens': {
+                        'refresh': str(refresh),
+                        'access': str(refresh.access_token),
+                    }
+                }, status=status.HTTP_201_CREATED)
+                
+            except Exception as e:
+                logger.error(f"Pharmacy registration failed during save: {str(e)}")
+                logger.error(f"Request data: {request.data}")
+                return Response({
+                    'error': 'Pharmacy registration failed',
+                    'details': str(e),
+                    'validation_errors': serializer.errors if hasattr(serializer, 'errors') else None
+                }, status=status.HTTP_400_BAD_REQUEST)
+        
+        logger.error(f"Pharmacy registration validation failed: {serializer.errors}")
+        logger.error(f"Request data: {request.data}")
+        return Response({
+            'error': 'Validation failed',
+            'validation_errors': serializer.errors,
+            'details': 'Please check the validation errors and correct the form data'
+        }, status=status.HTTP_400_BAD_REQUEST)
     
     @action(detail=False, methods=['post'], permission_classes=[permissions.AllowAny])
     def login(self, request):
