@@ -805,17 +805,13 @@ class Pharmacy(models.Model):
         help_text=_('Postal/ZIP code.')
     )
     
-    latitude = models.DecimalField(
-        max_digits=10,
-        decimal_places=8,
+    latitude = models.FloatField(
         blank=True,
         null=True,
         help_text=_('GPS latitude coordinate.')
     )
     
-    longitude = models.DecimalField(
-        max_digits=11,
-        decimal_places=8,
+    longitude = models.FloatField(
         blank=True,
         null=True,
         help_text=_('GPS longitude coordinate.')

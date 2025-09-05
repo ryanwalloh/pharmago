@@ -5,17 +5,15 @@ import { useRegistration } from '../contexts/RegistrationContext';
 const PharmacyRegistration4 = () => {
   const navigate = useNavigate();
   const { 
-    userAccount, 
-    businessInfo,
-    locationInfo,
     documents,
-    updateUserAccount, 
-    updateBusinessInfo,
-    updateLocationInfo,
     updateDocuments,
+    updateBusinessInfo,
     logRegistrationData, 
     getAllRegistrationData 
   } = useRegistration();
+
+  // Image preview state
+  const [imagePreviewUrl, setImagePreviewUrl] = useState(null);
 
   // Form state for document uploads
   const [formData, setFormData] = useState({
@@ -36,6 +34,11 @@ const PharmacyRegistration4 = () => {
       fileUrl: documents.owner_primary_id?.file_url || '',
       expiryDate: documents.owner_primary_id?.expiry_date || '',
       uploaded: documents.owner_primary_id_uploaded || false
+    },
+    storefrontImage: {
+      file: null,
+      fileUrl: documents.storefront_image?.file_url || '',
+      uploaded: documents.storefront_image_uploaded || false
     }
   });
 
@@ -44,78 +47,81 @@ const PharmacyRegistration4 = () => {
     setFormData(prev => ({
       pharmacyLicense: {
         ...prev.pharmacyLicense,
+        file: documents.pharmacy_license?.file || prev.pharmacyLicense.file, // Preserve file object
         fileUrl: documents.pharmacy_license?.file_url || prev.pharmacyLicense.fileUrl,
         expiryDate: documents.pharmacy_license?.expiry_date || prev.pharmacyLicense.expiryDate,
-        uploaded: documents.pharmacy_license_uploaded || prev.pharmacyLicense.uploaded
+        uploaded: documents.pharmacy_license?.uploaded || prev.pharmacyLicense.uploaded
       },
       businessPermit: {
         ...prev.businessPermit,
+        file: documents.business_permit?.file || prev.businessPermit.file, // Preserve file object
         fileUrl: documents.business_permit?.file_url || prev.businessPermit.fileUrl,
         expiryDate: documents.business_permit?.expiry_date || prev.businessPermit.expiryDate,
-        uploaded: documents.business_permit_uploaded || prev.businessPermit.uploaded
+        uploaded: documents.business_permit?.uploaded || prev.businessPermit.uploaded
       },
       ownerPrimaryId: {
         ...prev.ownerPrimaryId,
+        file: documents.owner_primary_id?.file || prev.ownerPrimaryId.file, // Preserve file object
         fileUrl: documents.owner_primary_id?.file_url || prev.ownerPrimaryId.fileUrl,
         expiryDate: documents.owner_primary_id?.expiry_date || prev.ownerPrimaryId.expiryDate,
-        uploaded: documents.owner_primary_id_uploaded || prev.ownerPrimaryId.uploaded
+        uploaded: documents.owner_primary_id?.uploaded || prev.ownerPrimaryId.uploaded
+      },
+      storefrontImage: {
+        ...prev.storefrontImage,
+        file: documents.storefront_image?.file || prev.storefrontImage.file, // Preserve file object
+        fileUrl: documents.storefront_image?.file_url || prev.storefrontImage.fileUrl,
+        uploaded: documents.storefront_image?.uploaded || prev.storefrontImage.uploaded
       }
     }));
   }, [documents]);
 
   // Handle file input changes
-  const handleFileChange = async (documentType, e) => {
+  const handleFileChange = (documentType, e) => {
     const file = e.target.files[0];
     if (file) {
-      // Validate file type
-      const allowedTypes = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'];
+      // Validate file type based on document type
+      let allowedTypes;
+      let maxSize;
+      
+      if (documentType === 'storefrontImage') {
+        // Storefront image only accepts image formats
+        allowedTypes = ['image/jpeg', 'image/jpg', 'image/png'];
+        maxSize = 2 * 1024 * 1024; // 2MB limit for images
+      } else {
+        // Documents accept PDF and image formats
+        allowedTypes = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'];
+        maxSize = 10 * 1024 * 1024; // 10MB limit for documents
+      }
+      
       if (!allowedTypes.includes(file.type)) {
-        alert('Please upload only PDF, JPG, or PNG files.');
+        const allowedFormats = documentType === 'storefrontImage' ? 'JPG, or PNG' : 'PDF, JPG, or PNG';
+        alert(`Please upload only ${allowedFormats} files.`);
         return;
       }
 
-      // Validate file size (10MB limit)
-      const maxSize = 10 * 1024 * 1024;
       if (file.size > maxSize) {
-        alert('File size must be less than 10MB.');
+        const sizeLimit = documentType === 'storefrontImage' ? '2MB' : '10MB';
+        alert(`File size must be less than ${sizeLimit}.`);
         return;
       }
 
-      try {
-        // Create FormData for file upload
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('document_type', documentType);
-        
-        // Upload file to backend
-        const response = await fetch('http://localhost:8000/api/v1/document-uploads/', {
-          method: 'POST',
-          body: formData,
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || 'Upload failed');
+      // Store file in state (no upload yet)
+      setFormData(prev => ({
+        ...prev,
+        [documentType]: {
+          ...prev[documentType],
+          file: file,
+          uploaded: true
         }
+      }));
 
-        const uploadResult = await response.json();
-        
-        // Update form data with uploaded file info
-        setFormData(prev => ({
-          ...prev,
-          [documentType]: {
-            ...prev[documentType],
-            file: file,
-            fileUrl: uploadResult.file_url,
-            uploaded: true
-          }
-        }));
-
-        console.log(`File uploaded successfully: ${uploadResult.filename}`);
-      } catch (error) {
-        console.error('Upload error:', error);
-        alert(`Upload failed: ${error.message}`);
+      // Create image preview for storefront image
+      if (documentType === 'storefrontImage') {
+        const previewUrl = createImagePreview(file);
+        setImagePreviewUrl(previewUrl);
       }
+
+      console.log(`File selected: ${file.name} (${file.size} bytes)`);
     }
   };
 
@@ -130,47 +136,96 @@ const PharmacyRegistration4 = () => {
     }));
   };
 
+  // Safe image preview creation
+  const createImagePreview = (file) => {
+    try {
+      if (file && file instanceof File) {
+        return URL.createObjectURL(file);
+      }
+      return null;
+    } catch (error) {
+      console.error('Error creating image preview:', error);
+      return null;
+    }
+  };
+
+  // Cleanup object URLs on component unmount
+  useEffect(() => {
+    return () => {
+      // Cleanup any object URLs to prevent memory leaks
+      if (imagePreviewUrl) {
+        try {
+          URL.revokeObjectURL(imagePreviewUrl);
+        } catch (error) {
+          console.error('Error revoking object URL:', error);
+        }
+      }
+    };
+  }, [imagePreviewUrl]);
+
   // Handle form submission
   const handleSubmit = (e) => {
     e.preventDefault();
     
-    // Update context with document data
+    // Update context with document data (including file objects)
     updateDocuments({
       pharmacy_license: {
+        file: formData.pharmacyLicense.file,
         file_url: formData.pharmacyLicense.fileUrl,
-        expiry_date: formData.pharmacyLicense.expiryDate
+        expiry_date: formData.pharmacyLicense.expiryDate,
+        uploaded: formData.pharmacyLicense.uploaded
       },
       business_permit: {
+        file: formData.businessPermit.file,
         file_url: formData.businessPermit.fileUrl,
-        expiry_date: formData.businessPermit.expiryDate
+        expiry_date: formData.businessPermit.expiryDate,
+        uploaded: formData.businessPermit.uploaded
       },
       owner_primary_id: {
+        file: formData.ownerPrimaryId.file,
         file_url: formData.ownerPrimaryId.fileUrl,
-        expiry_date: formData.ownerPrimaryId.expiryDate
+        expiry_date: formData.ownerPrimaryId.expiryDate,
+        uploaded: formData.ownerPrimaryId.uploaded
       },
-      pharmacy_license_uploaded: formData.pharmacyLicense.uploaded,
-      business_permit_uploaded: formData.businessPermit.uploaded,
-      owner_primary_id_uploaded: formData.ownerPrimaryId.uploaded
+      storefront_image: {
+        file: formData.storefrontImage.file,
+        file_url: formData.storefrontImage.fileUrl,
+        uploaded: formData.storefrontImage.uploaded
+      }
+    });
+
+    // Also update business info with expiry dates for easier access during submission
+    updateBusinessInfo({
+      business_permit_expiry: formData.businessPermit.expiryDate,
+      pharmacy_license_expiry: formData.pharmacyLicense.expiryDate
     });
 
     console.log('=== PHARMACY REGISTRATION STEP 4 SUBMITTED ===');
     console.log('Form Data:', formData);
     console.log('Updated Documents:', {
       pharmacy_license: {
+        file: formData.pharmacyLicense.file?.name || 'No file',
         file_url: formData.pharmacyLicense.fileUrl,
-        expiry_date: formData.pharmacyLicense.expiryDate
+        expiry_date: formData.pharmacyLicense.expiryDate,
+        uploaded: formData.pharmacyLicense.uploaded
       },
       business_permit: {
+        file: formData.businessPermit.file?.name || 'No file',
         file_url: formData.businessPermit.fileUrl,
-        expiry_date: formData.businessPermit.expiryDate
+        expiry_date: formData.businessPermit.expiryDate,
+        uploaded: formData.businessPermit.uploaded
       },
       owner_primary_id: {
+        file: formData.ownerPrimaryId.file?.name || 'No file',
         file_url: formData.ownerPrimaryId.fileUrl,
-        expiry_date: formData.ownerPrimaryId.expiryDate
+        expiry_date: formData.ownerPrimaryId.expiryDate,
+        uploaded: formData.ownerPrimaryId.uploaded
       },
-      pharmacy_license_uploaded: formData.pharmacyLicense.uploaded,
-      business_permit_uploaded: formData.businessPermit.uploaded,
-      owner_primary_id_uploaded: formData.ownerPrimaryId.uploaded
+      storefront_image: {
+        file: formData.storefrontImage.file?.name || 'No file',
+        file_url: formData.storefrontImage.fileUrl,
+        uploaded: formData.storefrontImage.uploaded
+      }
     });
     console.log('All Registration Data:', getAllRegistrationData());
     console.log('===============================================');
@@ -189,17 +244,55 @@ const PharmacyRegistration4 = () => {
     console.log('All Registration Data:', getAllRegistrationData());
     console.log('=============================================');
     logRegistrationData();
-  }, [logRegistrationData, documents, formData]);
+  }, [logRegistrationData, documents, formData, getAllRegistrationData]);
+
+  // Debug form validation state
+  useEffect(() => {
+    const formValid = (
+      formData.pharmacyLicense.file &&
+      formData.pharmacyLicense.expiryDate !== '' &&
+      formData.businessPermit.file &&
+      formData.businessPermit.expiryDate !== '' &&
+      formData.ownerPrimaryId.file &&
+      formData.ownerPrimaryId.expiryDate !== '' &&
+      formData.storefrontImage.file
+    );
+    
+    console.log('=== FORM VALIDATION DEBUG ===');
+    console.log('Pharmacy License:', {
+      file: formData.pharmacyLicense.file?.name || 'No file',
+      expiryDate: formData.pharmacyLicense.expiryDate,
+      isValid: formData.pharmacyLicense.file && formData.pharmacyLicense.expiryDate !== ''
+    });
+    console.log('Business Permit:', {
+      file: formData.businessPermit.file?.name || 'No file',
+      expiryDate: formData.businessPermit.expiryDate,
+      isValid: formData.businessPermit.file && formData.businessPermit.expiryDate !== ''
+    });
+    console.log('Owner Primary ID:', {
+      file: formData.ownerPrimaryId.file?.name || 'No file',
+      expiryDate: formData.ownerPrimaryId.expiryDate,
+      isValid: formData.ownerPrimaryId.file && formData.ownerPrimaryId.expiryDate !== ''
+    });
+    console.log('Storefront Image:', {
+      file: formData.storefrontImage.file?.name || 'No file',
+      isValid: formData.storefrontImage.file
+    });
+    console.log('Overall Form Valid:', formValid);
+    console.log('Next Button Enabled:', formValid);
+    console.log('=============================');
+  }, [formData]);
 
   // Form validation
   const isFormValid = () => {
     return (
-      formData.pharmacyLicense.uploaded &&
+      formData.pharmacyLicense.file &&
       formData.pharmacyLicense.expiryDate !== '' &&
-      formData.businessPermit.uploaded &&
+      formData.businessPermit.file &&
       formData.businessPermit.expiryDate !== '' &&
-      formData.ownerPrimaryId.uploaded &&
-      formData.ownerPrimaryId.expiryDate !== ''
+      formData.ownerPrimaryId.file &&
+      formData.ownerPrimaryId.expiryDate !== '' &&
+      formData.storefrontImage.file
     );
   };
 
@@ -207,11 +300,13 @@ const PharmacyRegistration4 = () => {
   const isFieldValid = (fieldName) => {
     switch (fieldName) {
       case 'pharmacyLicense':
-        return formData.pharmacyLicense.uploaded && formData.pharmacyLicense.expiryDate !== '';
+        return formData.pharmacyLicense.file && formData.pharmacyLicense.expiryDate !== '';
       case 'businessPermit':
-        return formData.businessPermit.uploaded && formData.businessPermit.expiryDate !== '';
+        return formData.businessPermit.file && formData.businessPermit.expiryDate !== '';
       case 'ownerPrimaryId':
-        return formData.ownerPrimaryId.uploaded && formData.ownerPrimaryId.expiryDate !== '';
+        return formData.ownerPrimaryId.file && formData.ownerPrimaryId.expiryDate !== '';
+      case 'storefrontImage':
+        return formData.storefrontImage.file;
       default:
         return true;
     }
@@ -416,12 +511,60 @@ const PharmacyRegistration4 = () => {
                     </div>
                   </div>
 
+                  {/* Storefront Image */}
+                  <div className="relative my-2.5 z-10">
+                    <div className={`border-2 rounded-lg p-4 transition-all duration-200 ${
+                      isFieldValid('storefrontImage') 
+                        ? 'border-[#D5E8D4]' 
+                        : 'border-red-300'
+                    }`}>
+                      <label className={`block text-sm mb-3 font-medium ${
+                        isFieldValid('storefrontImage') 
+                          ? 'text-[#4DAF7C]' 
+                          : 'text-red-500'
+                      }`}>
+                        Storefront Image *
+                      </label>
+                      
+                      {/* File Upload */}
+                      <div className="mb-3">
+                        <input
+                          type="file"
+                          accept=".jpg,.jpeg,.png"
+                          onChange={(e) => handleFileChange('storefrontImage', e)}
+                          className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-[#6BBF9A] file:text-white hover:file:bg-[#4DAF7C]"
+                        />
+                        {formData.storefrontImage.file && (
+                          <p className="text-xs text-green-600 mt-1">
+                            ✓ {formData.storefrontImage.file.name}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Image Preview */}
+                      {imagePreviewUrl && (
+                        <div className="mt-3">
+                          <img
+                            src={imagePreviewUrl}
+                            alt="Storefront preview"
+                            className="w-full h-32 object-cover rounded-lg border border-gray-200"
+                            onError={(e) => {
+                              console.error('Image preview failed:', e);
+                              e.target.style.display = 'none';
+                            }}
+                          />
+                          <p className="text-xs text-gray-500 mt-1">Image preview</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
                                      {/* File Requirements Info */}
                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4">
                      <h4 className="text-sm font-medium text-blue-800 mb-2">Document Requirements:</h4>
                      <ul className="text-xs text-blue-700 space-y-1">
-                       <li>• Accepted formats: PDF, JPG, PNG</li>
-                       <li>• Maximum file size: 10MB per document</li>
+                       <li>• Documents: PDF, JPG, PNG (max 10MB each)</li>
+                       <li>• Storefront Image: JPG, PNG only (max 2MB)</li>
                        <li>• All documents must be valid and not expired</li>
                        <li>• Clear, readable copies are required</li>
                      </ul>
@@ -436,7 +579,7 @@ const PharmacyRegistration4 = () => {
 
       {/* Progress Bar */}
       <div className="flex flex-row justify-between items-center fixed right-0 bottom-20 w-[50vw] h-1.5 bg-[#c2bdbd] z-30">
-        <div className="w-[80%] h-1.5 bg-[#004445]"></div>
+        <div className="w-[67%] h-1.5 bg-[#004445]"></div>
       </div>
 
       {/* Footer */}
@@ -448,7 +591,7 @@ const PharmacyRegistration4 = () => {
         >
           Back
         </button>
-        <p className="text-gray-500">5 step(s) to complete</p>
+        <p className="text-gray-500">2 step(s) to complete</p>
         <button 
           type="submit"
           onClick={handleSubmit}

@@ -111,6 +111,7 @@ urlpatterns = [
         # User-specific endpoints
         path('users/', include([
             path('register/', UserViewSet.as_view({'post': 'register'}), name='user-register'),
+            path('register-pharmacy/', UserViewSet.as_view({'post': 'register_pharmacy'}), name='pharmacy-register'),
             path('login/', UserViewSet.as_view({'post': 'login'}), name='user-login'),
             path('logout/', UserViewSet.as_view({'post': 'logout'}), name='user-logout'),
             path('profile/', UserViewSet.as_view({'get': 'profile'}), name='user-profile'),

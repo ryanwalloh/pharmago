@@ -18,9 +18,7 @@ const PharmacyRegistration3 = () => {
   // Form state - pre-populate with data from previous steps
   const [formData, setFormData] = useState({
     businessPermitNumber: businessInfo.business_permit_number || '',
-    businessPermitExpiry: businessInfo.business_permit_expiry || '',
     pharmacyLicenseNumber: businessInfo.pharmacy_license_number || '',
-    pharmacyLicenseExpiry: businessInfo.pharmacy_license_expiry || '',
     businessPhone: businessInfo.business_phone || userAccount.phone || '',
     businessEmail: businessInfo.business_email || userAccount.email || '',
     operatingHours: businessInfo.operating_hours || {
@@ -92,9 +90,7 @@ const PharmacyRegistration3 = () => {
     // Update context with form data
     updateBusinessInfo({
       business_permit_number: formData.businessPermitNumber,
-      business_permit_expiry: formData.businessPermitExpiry,
       pharmacy_license_number: formData.pharmacyLicenseNumber,
-      pharmacy_license_expiry: formData.pharmacyLicenseExpiry,
       business_phone: formData.businessPhone,
       business_email: formData.businessEmail,
       operating_hours: formData.operatingHours,
@@ -106,9 +102,7 @@ const PharmacyRegistration3 = () => {
     console.log('Form Data:', formData);
     console.log('Updated Business Info:', {
       business_permit_number: formData.businessPermitNumber,
-      business_permit_expiry: formData.businessPermitExpiry,
       pharmacy_license_number: formData.pharmacyLicenseNumber,
-      pharmacy_license_expiry: formData.pharmacyLicenseExpiry,
       business_phone: formData.businessPhone,
       business_email: formData.businessEmail,
       operating_hours: formData.operatingHours,
@@ -174,12 +168,8 @@ const PharmacyRegistration3 = () => {
     switch (fieldName) {
       case 'businessPermitNumber':
         return formData.businessPermitNumber.trim() !== '';
-      case 'businessPermitExpiry':
-        return formData.businessPermitExpiry !== '';
       case 'pharmacyLicenseNumber':
         return formData.pharmacyLicenseNumber.trim() !== '';
-      case 'pharmacyLicenseExpiry':
-        return formData.pharmacyLicenseExpiry !== '';
       case 'businessPhone':
         return formData.businessPhone.trim() !== '';
       case 'businessEmail':
@@ -273,32 +263,6 @@ const PharmacyRegistration3 = () => {
                      </label>
                    </div>
 
-                                     {/* Business Permit Expiry */}
-                   <div className="relative my-2.5 z-10">
-                     <input
-                       type="date"
-                       id="businessPermitExpiry"
-                       name="businessPermitExpiry"
-                       value={formData.businessPermitExpiry}
-                       onChange={handleInputChange}
-                       className={`peer w-full px-4 py-3 border-2 rounded-lg text-gray-700 placeholder-transparent focus:outline-none focus:ring-2 focus:ring-opacity-20 transition-all duration-200 ${
-                         isFieldValid('businessPermitExpiry') 
-                           ? 'border-[#D5E8D4] focus:border-[#6BBF9A] focus:ring-[#6BBF9A]' 
-                           : 'border-red-300 focus:border-red-500 focus:ring-red-500'
-                       }`}
-                       required
-                     />
-                     <label
-                       htmlFor="businessPermitExpiry"
-                       className={`absolute left-4 -top-2.5 bg-white px-2 text-sm transition-all duration-200 peer-placeholder-shown:text-base peer-placeholder-shown:text-gray-400 peer-placeholder-shown:top-3 peer-focus:-top-2.5 peer-focus:text-sm ${
-                         isFieldValid('businessPermitExpiry') 
-                           ? 'text-[#4DAF7C] peer-focus:text-[#6BBF9A]' 
-                           : 'text-red-500 peer-focus:text-red-500'
-                       }`}
-                     >
-                       Business Permit Expiry *
-                     </label>
-                   </div>
 
                   {/* Pharmacy License Number */}
                   <div className="relative my-2.5 z-10">
@@ -320,24 +284,6 @@ const PharmacyRegistration3 = () => {
                     </label>
                   </div>
 
-                  {/* Pharmacy License Expiry */}
-                  <div className="relative my-2.5 z-10">
-                    <input
-                      type="date"
-                      id="pharmacyLicenseExpiry"
-                      name="pharmacyLicenseExpiry"
-                      value={formData.pharmacyLicenseExpiry}
-                      onChange={handleInputChange}
-                      className="peer w-full px-4 py-3 border-2 border-[#D5E8D4] rounded-lg text-gray-700 placeholder-transparent focus:outline-none focus:border-[#6BBF9A] focus:ring-2 focus:ring-[#6BBF9A] focus:ring-opacity-20 transition-all duration-200"
-                      required
-                    />
-                    <label
-                      htmlFor="pharmacyLicenseExpiry"
-                      className="absolute left-4 -top-2.5 bg-white px-2 text-sm text-[#4DAF7C] transition-all duration-200 peer-placeholder-shown:text-base peer-placeholder-shown:text-gray-400 peer-placeholder-shown:top-3 peer-focus:-top-2.5 peer-focus:text-sm peer-focus:text-[#6BBF9A]"
-                    >
-                      Pharmacy License Expiry *
-                    </label>
-                  </div>
 
                   {/* Business Phone */}
                   <div className="relative my-2.5 z-10">
