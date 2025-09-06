@@ -478,10 +478,18 @@ class PharmacyRegistrationSerializer(serializers.Serializer):
             user.delete()
             raise serializers.ValidationError(f"Failed to create customer profile: {str(e)}")
         
-        # Upload files to S3 and get URLs
+        # Upload files to S3 and create UserDocument records
         uploaded_files = {}
+        document_mapping = {
+            'pharmacy_license_file': ('Pharmacy License', validated_data['pharmacy_license_expiry']),
+            'business_permit_file': ('Business Permit', validated_data['business_permit_expiry']),
+            'owner_primary_id_file': ('Owner Primary ID', None),  # No expiry for ID
+            'storefront_image_file': ('Storefront Image', None),  # No expiry for image
+        }
+        
         for file_type, file_obj in file_data.items():
             if file_obj:
+                file_url = None
                 try:
                     file_url = self.upload_file_to_s3(file_obj, file_type.replace('_file', ''), user.id)
                     uploaded_files[file_type] = file_url
@@ -489,6 +497,24 @@ class PharmacyRegistrationSerializer(serializers.Serializer):
                 except Exception as e:
                     logger.error(f"Failed to upload {file_type} for user {user.id}: {str(e)}")
                     # Continue with registration even if file upload fails
+                
+                # Create UserDocument record regardless of S3 upload success/failure
+                document_name, expiry_date = document_mapping[file_type]
+                try:
+                    valid_id = ValidID.objects.get(name=document_name)
+                    UserDocument.objects.create(
+                        user=user,
+                        id_type=valid_id,
+                        document_file=file_obj.name,  # Store original filename
+                        file_url=file_url,  # Will be None if S3 upload failed
+                        expiry_date=expiry_date,
+                        status=UserDocument.DocumentStatus.PENDING
+                    )
+                    logger.info(f"Created UserDocument for {document_name} for user {user.id} (File: {file_obj.name}, URL: {file_url})")
+                except ValidID.DoesNotExist:
+                    logger.error(f"ValidID '{document_name}' not found for user {user.id}")
+                except Exception as e:
+                    logger.error(f"Failed to create UserDocument for {document_name}: {str(e)}")
         
         # Extract pharmacy data
         logger.info(f"=== PHARMACY DATA CREATION DEBUG ===")
@@ -617,7 +643,7 @@ class UserDocumentSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserDocument
         fields = [
-            'id', 'user', 'document_type', 'file_url', 'expiry_date',
-            'is_verified', 'uploaded_at', 'verified_at'
+            'id', 'user', 'id_type', 'document_file', 'file_url', 'expiry_date',
+            'status', 'admin_notes', 'verified_by', 'verified_at', 'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'is_verified', 'uploaded_at', 'verified_at']
+        read_only_fields = ['id', 'verified_by', 'verified_at', 'created_at', 'updated_at']
