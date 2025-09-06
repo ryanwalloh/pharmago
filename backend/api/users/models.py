@@ -399,6 +399,12 @@ class UserDocument(models.Model):
         help_text=_('Uploaded document file.')
     )
     
+    file_url = models.URLField(
+        blank=True,
+        null=True,
+        help_text=_('S3 URL of uploaded file.')
+    )
+    
     document_number = models.CharField(
         max_length=100,
         blank=True,
