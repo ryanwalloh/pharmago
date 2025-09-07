@@ -18,6 +18,13 @@ const AdminDashboard = () => {
   const [activeTile, setActiveTile] = useState('total'); // 'total', 'pending', 'active', 'suspended'
   const [pendingPharmacies, setPendingPharmacies] = useState([]);
   const [loadingPendingPharmacies, setLoadingPendingPharmacies] = useState(false);
+  
+  // Modal state
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedPharmacy, setSelectedPharmacy] = useState(null);
+  const [modalLoading, setModalLoading] = useState(false);
+  const [detailedPharmacyData, setDetailedPharmacyData] = useState(null);
+  const [modalError, setModalError] = useState(null);
 
   const handleLogout = () => {
     console.log('Logging out - removing token from localStorage');
@@ -133,6 +140,43 @@ const AdminDashboard = () => {
     if (tileType === 'pending') {
       fetchPendingPharmacies();
     }
+  };
+
+  // Modal handlers
+  const handleViewPharmacy = async (pharmacy) => {
+    console.log('Opening modal for pharmacy:', pharmacy);
+    setSelectedPharmacy(pharmacy);
+    setIsModalOpen(true);
+    setModalLoading(true);
+    setModalError(null);
+    setDetailedPharmacyData(null);
+    
+    try {
+      console.log('Fetching detailed pharmacy data for ID:', pharmacy.id);
+      const response = await axios.get(`http://127.0.0.1:8000/api/pharmacy-details/${pharmacy.id}/`);
+      console.log('Detailed pharmacy data received:', response.data);
+      
+      setDetailedPharmacyData(response.data);
+      setModalLoading(false);
+    } catch (err) {
+      console.error('Error fetching detailed pharmacy data:', err);
+      setModalError('Failed to load pharmacy details. Please try again.');
+      setModalLoading(false);
+    }
+  };
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setSelectedPharmacy(null);
+    setModalLoading(false);
+    setDetailedPharmacyData(null);
+    setModalError(null);
+  };
+
+  const handleApprovePharmacy = () => {
+    // TODO: Implement approval functionality in future tasks
+    console.log('Approving pharmacy:', selectedPharmacy);
+    alert('Approval functionality will be implemented in future tasks');
   };
 
   // Check authentication and fetch data when component mounts
@@ -665,7 +709,10 @@ const AdminDashboard = () => {
                     
                     {/* Action Button */}
                     <div className="col-span-1 flex items-center justify-center">
-                      <button className="px-2 lg:px-3 py-1 bg-[#4DAF7C] text-white text-xs rounded-lg hover:bg-[#6BBF9A] transition-colors duration-200">
+                      <button 
+                        onClick={() => handleViewPharmacy(pharmacy)}
+                        className="px-2 lg:px-3 py-1 bg-[#4DAF7C] text-white text-xs rounded-lg hover:bg-[#6BBF9A] transition-colors duration-200"
+                      >
                         View
                       </button>
                     </div>
@@ -744,6 +791,322 @@ const AdminDashboard = () => {
     </div>
   );
 
+  // Modal Component
+  const renderPharmacyDetailsModal = () => {
+    if (!isModalOpen || !selectedPharmacy) return null;
+
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
+          {/* Modal Header */}
+          <div className="flex items-center justify-between p-6 border-b border-[#D5E8D4]">
+            <div className="flex items-center space-x-3">
+              <div className="w-12 h-12 bg-gradient-to-br from-[#4DAF7C] to-[#6BBF9A] rounded-xl flex items-center justify-center text-white font-bold text-lg">
+                {selectedPharmacy.pharmacy_name.split(' ').map(word => word[0]).join('').substring(0, 2)}
+              </div>
+              <div>
+                <h2 className="text-2xl font-bold text-[#2C7A5D]">{selectedPharmacy.pharmacy_name}</h2>
+                <p className="text-sm text-[#666666]">Pending Approval</p>
+              </div>
+            </div>
+            <button
+              onClick={handleCloseModal}
+              className="p-2 hover:bg-[#D5E8D4] rounded-lg transition-colors duration-200"
+            >
+              <svg className="h-6 w-6 text-[#666666]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Modal Content */}
+          <div className="p-6 overflow-y-auto max-h-[calc(90vh-200px)]">
+            {modalLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="text-center">
+                  <div className="animate-spin mx-auto h-12 w-12 border-4 border-[#4DAF7C] border-t-transparent rounded-full"></div>
+                  <p className="mt-4 text-sm text-[#666666]">Loading pharmacy details...</p>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-8">
+                {/* Basic Information Section */}
+                <div className="bg-[#F8F9FA] rounded-xl p-6">
+                  <h3 className="text-lg font-bold text-[#2C7A5D] mb-4 flex items-center">
+                    <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Basic Information
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-sm font-medium text-[#666666] mb-1">Pharmacy Name</label>
+                      <p className="text-[#2C7A5D] font-semibold">{selectedPharmacy.pharmacy_name}</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-[#666666] mb-1">Owner Name</label>
+                      <p className="text-[#2C7A5D] font-semibold">{selectedPharmacy.owner_first_name} {selectedPharmacy.owner_last_name}</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-[#666666] mb-1">Business Phone</label>
+                      <p className="text-[#2C7A5D] font-semibold">{selectedPharmacy.business_phone}</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-[#666666] mb-1">Business Email</label>
+                      <p className="text-[#2C7A5D] font-semibold">{selectedPharmacy.business_email}</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-[#666666] mb-1">Location</label>
+                      <p className="text-[#2C7A5D] font-semibold">{selectedPharmacy.barangay}, {selectedPharmacy.city}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Additional Information Section */}
+                <div className="bg-[#F8F9FA] rounded-xl p-6">
+                  <h3 className="text-lg font-bold text-[#2C7A5D] mb-4 flex items-center">
+                    <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    Additional Information
+                  </h3>
+                  {modalError ? (
+                    <div className="text-center py-4">
+                      <div className="text-red-600 mb-2">
+                        <svg className="mx-auto h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </div>
+                      <p className="text-red-600 font-medium">{modalError}</p>
+                      <button
+                        onClick={() => handleViewPharmacy(selectedPharmacy)}
+                        className="mt-2 px-4 py-2 bg-[#4DAF7C] text-white rounded-lg hover:bg-[#6BBF9A] transition-colors duration-200"
+                      >
+                        Retry
+                      </button>
+                    </div>
+                  ) : detailedPharmacyData ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div>
+                        <label className="block text-sm font-medium text-[#666666] mb-1">Business Permit Number</label>
+                        <p className="text-[#2C7A5D] font-semibold">{detailedPharmacyData.business_permit_number || 'Not provided'}</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-[#666666] mb-1">Business Permit Expiry</label>
+                        <p className="text-[#2C7A5D] font-semibold">
+                          {detailedPharmacyData.business_permit_expiry ? 
+                            new Date(detailedPharmacyData.business_permit_expiry).toLocaleDateString() : 
+                            'Not provided'
+                          }
+                        </p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-[#666666] mb-1">Pharmacy License Number</label>
+                        <p className="text-[#2C7A5D] font-semibold">{detailedPharmacyData.pharmacy_license_number || 'Not provided'}</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-[#666666] mb-1">Pharmacy License Expiry</label>
+                        <p className="text-[#2C7A5D] font-semibold">
+                          {detailedPharmacyData.pharmacy_license_expiry ? 
+                            new Date(detailedPharmacyData.pharmacy_license_expiry).toLocaleDateString() : 
+                            'Not provided'
+                          }
+                        </p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-[#666666] mb-1">Owner Date of Birth</label>
+                        <p className="text-[#2C7A5D] font-semibold">
+                          {detailedPharmacyData.owner_date_of_birth ? 
+                            new Date(detailedPharmacyData.owner_date_of_birth).toLocaleDateString() : 
+                            'Not provided'
+                          }
+                        </p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-[#666666] mb-1">Owner Gender</label>
+                        <p className="text-[#2C7A5D] font-semibold capitalize">{detailedPharmacyData.owner_gender || 'Not provided'}</p>
+                      </div>
+                      <div className="md:col-span-2">
+                        <label className="block text-sm font-medium text-[#666666] mb-1">Services Offered</label>
+                        <div className="flex flex-wrap gap-2">
+                          {detailedPharmacyData.services_offered && detailedPharmacyData.services_offered.length > 0 ? (
+                            detailedPharmacyData.services_offered.map((service, index) => (
+                              <span
+                                key={index}
+                                className="px-3 py-1 bg-[#4DAF7C] text-white text-sm rounded-full"
+                              >
+                                {service.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                              </span>
+                            ))
+                          ) : (
+                            <p className="text-[#2C7A5D] font-semibold">No services specified</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center py-4">
+                      <div className="animate-spin mx-auto h-8 w-8 border-4 border-[#4DAF7C] border-t-transparent rounded-full"></div>
+                      <p className="mt-2 text-sm text-[#666666]">Loading additional information...</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Document Gallery Section */}
+                <div className="bg-[#F8F9FA] rounded-xl p-6">
+                  <h3 className="text-lg font-bold text-[#2C7A5D] mb-4 flex items-center">
+                    <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    Uploaded Documents
+                  </h3>
+                  {modalError ? (
+                    <div className="text-center py-4">
+                      <p className="text-red-600">Unable to load documents</p>
+                    </div>
+                  ) : detailedPharmacyData && detailedPharmacyData.documents ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {detailedPharmacyData.documents.map((document) => {
+                        // Determine file type from URL
+                        const getFileType = (url) => {
+                          if (!url) return 'unknown';
+                          const extension = url.split('.').pop().toLowerCase();
+                          if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(extension)) return 'image';
+                          if (extension === 'pdf') return 'pdf';
+                          return 'unknown';
+                        };
+
+                        const fileType = getFileType(document.file_url);
+                        const isImage = fileType === 'image';
+                        const isPdf = fileType === 'pdf';
+
+                        return (
+                          <div key={document.id} className="bg-white rounded-lg p-4 border border-[#D5E8D4]">
+                            <div className="w-full h-48 bg-gray-100 rounded-lg mb-3 overflow-hidden relative">
+                              {document.file_url ? (
+                                <>
+                                  {isImage ? (
+                                    <img
+                                      src={`http://127.0.0.1:8000/api/document/${document.id}/`}
+                                      alt={document.document_type}
+                                      className="w-full h-full object-cover cursor-pointer hover:opacity-80 transition-opacity duration-200"
+                                      onClick={() => window.open(`http://127.0.0.1:8000/api/document/${document.id}/`, '_blank')}
+                                      onError={(e) => {
+                                        e.target.style.display = 'none';
+                                        e.target.nextSibling.style.display = 'flex';
+                                      }}
+                                    />
+                                  ) : isPdf ? (
+                                    <div className="w-full h-full flex flex-col items-center justify-center bg-red-50 cursor-pointer hover:bg-red-100 transition-colors duration-200"
+                                         onClick={() => window.open(`http://127.0.0.1:8000/api/document/${document.id}/`, '_blank')}>
+                                      <svg className="h-12 w-12 text-red-500 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                                      </svg>
+                                      <span className="text-red-600 font-medium text-sm">PDF Document</span>
+                                    </div>
+                                  ) : (
+                                    <div className="w-full h-full flex flex-col items-center justify-center bg-gray-50 cursor-pointer hover:bg-gray-100 transition-colors duration-200"
+                                         onClick={() => window.open(`http://127.0.0.1:8000/api/document/${document.id}/`, '_blank')}>
+                                      <svg className="h-12 w-12 text-gray-500 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                      </svg>
+                                      <span className="text-gray-600 font-medium text-sm">Document</span>
+                                    </div>
+                                  )}
+                                  
+                                  {/* Fallback for failed image loads */}
+                                  <div 
+                                    className="w-full h-full flex flex-col items-center justify-center bg-[#D5E8D4] absolute inset-0"
+                                    style={{ display: 'none' }}
+                                  >
+                                    <svg className="h-8 w-8 text-[#999999] mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    <span className="text-[#999999] text-sm">Unable to load preview</span>
+                                  </div>
+                                </>
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center bg-[#D5E8D4]">
+                                  <svg className="h-8 w-8 text-[#999999]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                  </svg>
+                                </div>
+                              )}
+                            </div>
+                            <div className="text-center">
+                              <p className="text-sm font-medium text-[#2C7A5D] mb-1">{document.document_type}</p>
+                              <p className="text-xs text-[#666666] mb-1">
+                                Status: <span className={`font-medium ${
+                                  document.status === 'approved' ? 'text-green-600' :
+                                  document.status === 'rejected' ? 'text-red-600' :
+                                  'text-yellow-600'
+                                }`}>
+                                  {document.status.charAt(0).toUpperCase() + document.status.slice(1)}
+                                </span>
+                              </p>
+                              {document.document_number && (
+                                <p className="text-xs text-[#999999]">ID: {document.document_number}</p>
+                              )}
+                              {document.expiry_date && (
+                                <p className="text-xs text-[#999999]">
+                                  Expires: {new Date(document.expiry_date).toLocaleDateString()}
+                                </p>
+                              )}
+                              {document.file_url && (
+                                <div className="mt-2 space-y-1">
+                                  <button
+                                    onClick={() => window.open(`http://127.0.0.1:8000/api/document/${document.id}/`, '_blank')}
+                                    className="w-full px-3 py-1 bg-[#4DAF7C] text-white text-xs rounded hover:bg-[#6BBF9A] transition-colors duration-200"
+                                  >
+                                    {isImage ? 'View Full Size' : isPdf ? 'Open PDF' : 'View Document'}
+                                  </button>
+                                  <p className="text-xs text-[#999999]">
+                                    {isImage ? 'Click image or button to view' : 'Click to open in new tab'}
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8">
+                      <div className="animate-spin mx-auto h-8 w-8 border-4 border-[#4DAF7C] border-t-transparent rounded-full"></div>
+                      <p className="mt-2 text-sm text-[#666666]">Loading documents...</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Modal Footer */}
+          <div className="flex items-center justify-between p-6 border-t border-[#D5E8D4] bg-[#F8F9FA]">
+            <div className="flex space-x-3">
+              <button
+                onClick={handleCloseModal}
+                className="px-6 py-2 border border-[#D5E8D4] text-[#666666] rounded-lg hover:bg-[#D5E8D4] transition-colors duration-200"
+              >
+                Close
+              </button>
+              <button
+                onClick={handleApprovePharmacy}
+                disabled={modalLoading}
+                className="px-6 py-2 bg-[#4DAF7C] text-white rounded-lg hover:bg-[#6BBF9A] transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Approve Pharmacy
+              </button>
+            </div>
+            <div className="text-sm text-[#666666]">
+              Pharmacy ID: {selectedPharmacy.id}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-[#D5E8D4] p-6">
       {/* Top Header */}
@@ -818,6 +1181,9 @@ const AdminDashboard = () => {
           )}
         </div>
       </div>
+      
+      {/* Pharmacy Details Modal */}
+      {renderPharmacyDetailsModal()}
     </div>
   );
 };
