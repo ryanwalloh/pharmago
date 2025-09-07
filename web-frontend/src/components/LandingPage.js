@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Header from './Header';
 import Hero from './Hero';
+import LoginModal from './LoginModal';
 import { useRegistration } from '../contexts/RegistrationContext';
 
 
@@ -9,6 +10,9 @@ import { useRegistration } from '../contexts/RegistrationContext';
 const LandingPage = () => {
   const navigate = useNavigate();
   const { updateUserAccount, logRegistrationData } = useRegistration();
+  
+  // Modal state
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   
   // Local state for form inputs
   const [formData, setFormData] = useState({
@@ -103,10 +107,25 @@ const LandingPage = () => {
     navigate('/pharmacy-registration');
   };
 
+  // Handle login modal
+  const handleLoginClick = () => {
+    setIsLoginModalOpen(true);
+  };
+
+  const handleCloseLoginModal = () => {
+    setIsLoginModalOpen(false);
+  };
+
   return (
     <div className="min-h-screen bg-white">
-      <Header />
+      <Header onLoginClick={handleLoginClick} />
       <Hero />
+      
+      {/* Login Modal */}
+      <LoginModal 
+        isOpen={isLoginModalOpen} 
+        onClose={handleCloseLoginModal} 
+      />
 
       {/* Registration Section */}
       <div className="relative h-screen bg-cover bg-center bg-no-repeat" style={{ backgroundImage: 'url(/images/registerBg2.png)' }}>

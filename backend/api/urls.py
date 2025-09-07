@@ -14,7 +14,7 @@ from api.users.jwt_views import (
     jwt_login, jwt_refresh, jwt_logout, jwt_verify
 )
 from api.locations.views import AddressViewSet
-from api.pharmacies.views import PharmacyViewSet as PharmacyViewSetV2
+from api.pharmacies.views import PharmacyViewSet as PharmacyViewSetV2, pharmacy_statistics, simple_pharmacy_statistics
 from api.inventory.views import (
     MedicineCategoryViewSet, MedicineCatalogViewSet, PharmacyInventoryViewSet
 )
@@ -31,7 +31,7 @@ from api.chat.views import ChatRoomViewSet, ChatParticipantViewSet, ChatMessageV
 from api.global_api.views import (
     SystemHealthViewSet, ApiUsageViewSet, GlobalSearchViewSet, 
     BulkOperationsViewSet, ExportImportViewSet, GlobalStatisticsViewSet, 
-    BulkOperationLogViewSet
+    BulkOperationLogViewSet, admin_login, admin_logout, admin_verify, admin_debug
 )
 
 # Create router and register viewsets
@@ -131,6 +131,9 @@ urlpatterns = [
             path('my-pharmacy/', PharmacyViewSet.as_view({'get': 'my_pharmacy'}), name='pharmacy-my-pharmacy'),
             path('verified/', PharmacyViewSet.as_view({'get': 'verified'}), name='pharmacy-verified'),
             path('pending-verification/', PharmacyViewSet.as_view({'get': 'pending_verification'}), name='pharmacy-pending-verification'),
+            path('statistics/', PharmacyViewSet.as_view({'get': 'statistics'}), name='pharmacy-statistics'),
+            path('statistics-simple/', pharmacy_statistics, name='pharmacy-statistics-simple'),
+            path('statistics-basic/', simple_pharmacy_statistics, name='pharmacy-statistics-basic'),
             path('search/', PharmacyViewSet.as_view({'get': 'search'}), name='pharmacy-search'),
             path('nearby/', PharmacyViewSet.as_view({'get': 'nearby'}), name='pharmacy-nearby'),
         ])),
@@ -407,6 +410,14 @@ urlpatterns = [
         
         path('bulk-operation-logs/', include([
             path('my-operations/', BulkOperationLogViewSet.as_view({'get': 'my_operations'}), name='bulk-operation-log-my-operations'),
+        ])),
+        
+        # Admin login endpoints
+        path('pharmago-admin/', include([
+            path('login/', admin_login, name='admin-login'),
+            path('logout/', admin_logout, name='admin-logout'),
+            path('verify/', admin_verify, name='admin-verify'),
+            path('debug/', admin_debug, name='admin-debug'),
         ])),
     ])),
     

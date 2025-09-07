@@ -10,11 +10,12 @@ from django.core.exceptions import ValidationError, ObjectDoesNotExist
 from django.http import HttpResponse, JsonResponse
 from django.utils import timezone
 from django.db.models import Q, Count, Avg, Sum, Max, Min
+from django.conf import settings
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import viewsets, status, filters
-from rest_framework.decorators import action
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.parsers import MultiPartParser, FileUploadParser
 from rest_framework.throttling import UserRateThrottle, AnonRateThrottle
 from openpyxl import Workbook, load_workbook
@@ -972,3 +973,160 @@ class BulkOperationLogViewSet(viewsets.ReadOnlyModelViewSet):
         if self.request.user.is_staff:
             return BulkOperationLog.objects.all()
         return BulkOperationLog.objects.filter(user=self.request.user)
+
+
+# ============================================================================
+# ADMIN LOGIN VIEWS
+# ============================================================================
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def admin_login(request):
+    """
+    Admin login endpoint for PharmaGo platform management
+    Validates credentials against database admin user
+    """
+    try:
+        from django.contrib.auth import authenticate
+        from api.users.models import User
+        
+        data = request.data
+        username = data.get('username')
+        password = data.get('password')
+        
+        # Debug logging
+        print(f"DEBUG: Received username: {username}")
+        print(f"DEBUG: Received password: {password}")
+        
+        # Try to authenticate with database user first
+        user = authenticate(request, username=username, password=password)
+        
+        if user and user.is_staff and user.role == User.UserRole.ADMIN:
+            # Generate a simple token (in production, use proper JWT)
+            import hashlib
+            import time
+            
+            token_data = f"{username}:{time.time()}"
+            token = hashlib.sha256(token_data.encode()).hexdigest()
+            
+            # Store token in session or cache (simplified for now)
+            request.session['pharmago_admin_token'] = token
+            request.session['pharmago_admin_user'] = username
+            
+            print(f"DEBUG: Admin login successful for user: {username}")
+            
+            return Response({
+                'success': True,
+                'token': token,
+                'user': username,
+                'message': 'Login successful'
+            }, status=status.HTTP_200_OK)
+        else:
+            print(f"DEBUG ADMIN LOGIN: Database authentication failed")
+            print(f"DEBUG ADMIN LOGIN: User found: {user}")
+            if user:
+                print(f"DEBUG ADMIN LOGIN: User is_staff: {user.is_staff}")
+                print(f"DEBUG ADMIN LOGIN: User role: {user.role}")
+            
+            return Response({
+                'success': False,
+                'error': 'Invalid admin credentials. Please ensure you have an admin account in the database.',
+                'debug': {
+                    'received_username': username,
+                    'user_found': bool(user),
+                    'user_is_staff': user.is_staff if user else False,
+                    'user_role': user.role if user else None
+                }
+            }, status=status.HTTP_401_UNAUTHORIZED)
+            
+    except Exception as e:
+        print(f"DEBUG: Exception in admin_login: {str(e)}")
+        return Response({
+            'error': 'Login failed',
+            'detail': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def admin_logout(request):
+    """
+    Admin logout endpoint
+    """
+    try:
+        # Clear admin session
+        request.session.pop('pharmago_admin_token', None)
+        request.session.pop('pharmago_admin_user', None)
+        
+        return Response({
+            'success': True,
+            'message': 'Logout successful'
+        }, status=status.HTTP_200_OK)
+        
+    except Exception as e:
+        return Response({
+            'error': 'Logout failed',
+            'detail': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def admin_verify(request):
+    """
+    Verify admin token
+    """
+    try:
+        token = request.session.get('pharmago_admin_token')
+        user = request.session.get('pharmago_admin_user')
+        
+        if token and user:
+            return Response({
+                'valid': True,
+                'user': user
+            }, status=status.HTTP_200_OK)
+        else:
+            return Response({
+                'valid': False
+            }, status=status.HTTP_401_UNAUTHORIZED)
+            
+    except Exception as e:
+        return Response({
+            'error': 'Verification failed',
+            'detail': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def admin_debug(request):
+    """
+    Debug endpoint to check admin users in database
+    """
+    try:
+        from api.users.models import User
+        
+        # Check for admin users in database
+        admin_users = User.objects.filter(is_staff=True, role=User.UserRole.ADMIN)
+        
+        admin_info = []
+        for admin in admin_users:
+            admin_info.append({
+                'username': admin.username,
+                'email': admin.email,
+                'is_staff': admin.is_staff,
+                'role': admin.role,
+                'is_active': admin.is_active
+            })
+        
+        return Response({
+            'admin_users_found': admin_users.count(),
+            'admin_users': admin_info,
+            'authentication_method': 'database_only'
+        }, status=status.HTTP_200_OK)
+        
+    except Exception as e:
+        return Response({
+            'error': 'Debug failed',
+            'detail': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
