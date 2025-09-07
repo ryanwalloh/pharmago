@@ -15,7 +15,12 @@ import os
 from dotenv import load_dotenv
 
 # Load environment variables
-load_dotenv()
+# Try to load from backend/.env first, then fall back to root .env
+env_path = Path(__file__).parent.parent / '.env'
+if env_path.exists():
+    load_dotenv(env_path)
+else:
+    load_dotenv()  # Fallback to default behavior
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -70,6 +75,7 @@ MIDDLEWARE = [
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
+    'api.middleware.AdminTokenAuthenticationMiddleware',  # Custom admin token auth - BEFORE Django auth
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
@@ -179,11 +185,12 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # Django REST Framework settings
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        # 'api.authentication.AdminTokenAuthentication',  # Temporarily disabled - using middleware instead
+        # 'rest_framework_simplejwt.authentication.JWTAuthentication',  # Temporarily disabled
         'rest_framework.authentication.SessionAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.IsAuthenticated',
+        # 'rest_framework.permissions.IsAuthenticated',  # Temporarily disabled for testing
     ],
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 20,
@@ -343,6 +350,9 @@ CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
+
+# Admin authentication now uses database users only
+# No environment variable fallback needed
 
 # API Documentation with drf-spectacular
 SPECTACULAR_SETTINGS = {

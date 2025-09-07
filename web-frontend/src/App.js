@@ -8,6 +8,9 @@ import PharmacyRegistration3 from './components/PharmacyRegistration3';
 import PharmacyRegistration4 from './components/PharmacyRegistration4';
 import PharmacyRegistration5 from './components/PharmacyRegistration5';
 import PharmacyRegistrationSubmission from './components/PharmacyRegistrationSubmission';
+import AdminLogin from './components/AdminLogin';
+import AdminDashboard from './components/AdminDashboard';
+import ProtectedRoute from './components/ProtectedRoute';
 
 function App() {
   return (
@@ -33,6 +36,14 @@ function App() {
               </button>
             </div>
           </div>} />
+          
+          {/* Admin Routes */}
+          <Route path="/pharmago-admin" element={<AdminLogin />} />
+          <Route path="/pharmago-admin/dashboard" element={
+            <ProtectedRoute>
+              <AdminDashboard />
+            </ProtectedRoute>
+          } />
         </Routes>
       </Router>
     </RegistrationProvider>
