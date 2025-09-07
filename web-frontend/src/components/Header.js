@@ -1,6 +1,6 @@
 import React from 'react';
 
-const Header = () => {
+const Header = ({ onLoginClick }) => {
   return (
     <nav className="bg-white shadow-lg border-b border-[#D5E8D4]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -21,6 +21,12 @@ const Header = () => {
               <a href="#features" className="text-[#4DAF7C] hover:text-[#2C7A5D] px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200">Features</a>
               <a href="#about" className="text-[#4DAF7C] hover:text-[#2C7A5D] px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200">About</a>
               <a href="#contact" className="text-[#4DAF7C] hover:text-[#2C7A5D] px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200">Contact</a>
+              <button 
+                onClick={onLoginClick}
+                className="text-[#4DAF7C] hover:text-[#2C7A5D] px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200 border border-[#D5E8D4] hover:border-[#6BBF9A]"
+              >
+                Login
+              </button>
               <button className="bg-[#6BBF9A] hover:bg-[#4DAF7C] text-white px-6 py-3 rounded-lg text-sm font-semibold transition-all duration-200 shadow-md hover:shadow-lg transform hover:-translate-y-0.5">
                 Get Started
               </button>
