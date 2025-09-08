@@ -11,6 +11,7 @@ import PharmacyRegistrationSubmission from './components/PharmacyRegistrationSub
 import AdminLogin from './components/AdminLogin';
 import AdminDashboard from './components/AdminDashboard';
 import ProtectedRoute from './components/ProtectedRoute';
+import InitialLogin from './components/InitialLogin';
 
 function App() {
   return (
@@ -36,6 +37,9 @@ function App() {
               </button>
             </div>
           </div>} />
+          
+          {/* Initial Login Route */}
+          <Route path="/initial-login" element={<InitialLogin />} />
           
           {/* Admin Routes */}
           <Route path="/pharmago-admin" element={<AdminLogin />} />

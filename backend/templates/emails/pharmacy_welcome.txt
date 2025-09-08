@@ -1,0 +1,37 @@
+Welcome to PharmaGo - Your Pharmacy Account is Approved!
+
+Dear {{ pharmacy_name }},
+
+Congratulations! Your pharmacy registration has been successfully reviewed and approved by our admin team. Your account is now active and ready to use!
+
+COMPLETE YOUR ACCOUNT SETUP
+============================
+
+To get started with PharmaGo, please click the link below to create your password and username:
+
+{{ login_link }}
+
+WHAT TO EXPECT:
+- Create a secure password for your account
+- Set up your username  
+- Access your pharmacy dashboard
+- Start managing your inventory and orders
+
+IMPORTANT SECURITY NOTICE:
+==========================
+This login link will expire in 48 hours for security reasons. Please complete your account setup as soon as possible.
+
+If you have any questions or need assistance, please don't hesitate to contact our support team.
+
+Welcome to the PharmaGo family! We're excited to partner with you in providing quality healthcare services to your community.
+
+Best regards,
+The PharmaGo Admin Team
+
+Contact Information:
+Email: admin@pharmago.com
+Website: www.pharmago.com
+Support: Available 24/7
+
+---
+This email was sent to {{ business_email }}. If you did not register for PharmaGo, please ignore this email.
