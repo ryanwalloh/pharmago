@@ -19,6 +19,7 @@ from django.urls import path, include
 from django.http import JsonResponse
 from django.conf import settings
 from django.conf.urls.static import static
+from django.views.decorators.csrf import csrf_exempt
 from api import views
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 
@@ -245,6 +246,255 @@ def serve_document(request, document_id):
         raise Http404("Error serving document")
 
 
+@csrf_exempt
+def approve_pharmacy(request, pharmacy_id):
+    """Approve pharmacy endpoint that updates status and verification"""
+    if request.method != 'POST':
+        return JsonResponse({
+            'error': 'Method not allowed',
+            'message': 'Only POST requests are allowed'
+        }, status=405)
+    
+    try:
+        from api.users.models import Pharmacy, User, TemporaryLoginToken
+        from django.utils import timezone
+        from api.utils.email_utils import send_pharmacy_welcome_email
+        import secrets
+        
+        # Get the pharmacy by ID
+        pharmacy = Pharmacy.objects.get(id=pharmacy_id)
+        
+        # Check if pharmacy is already approved
+        if pharmacy.status == 'approved' and pharmacy.is_fully_verified:
+            return JsonResponse({
+                'error': 'Pharmacy already approved',
+                'message': f'Pharmacy {pharmacy.pharmacy_name} is already approved and verified'
+            }, status=400)
+        
+        # Get a default admin user for verification (you can modify this logic)
+        try:
+            admin_user = User.objects.filter(role='admin', is_superuser=True).first()
+            if not admin_user:
+                # Create a default admin user if none exists
+                admin_user = User.objects.create_user(
+                    email='admin@pharmago.com',
+                    password='admin123',
+                    role='admin',
+                    is_staff=True,
+                    is_superuser=True,
+                    first_name='System',
+                    last_name='Admin'
+                )
+        except Exception as e:
+            print(f"ERROR creating admin user: {e}")
+            admin_user = None
+        
+        # Update pharmacy status and verification
+        pharmacy.status = 'approved'
+        pharmacy.is_fully_verified = True
+        pharmacy.verified_at = timezone.now()
+        pharmacy.verified_by = admin_user
+        pharmacy.save()
+        
+        # Also update the associated user status
+        pharmacy.user.status = 'active'
+        pharmacy.user.save()
+        
+        # Generate login token for first-time setup
+        token = secrets.token_urlsafe(48)  # 64 characters when base64 encoded
+        expires_at = timezone.now() + timezone.timedelta(hours=48)
+        
+        # Create the login token
+        login_token = TemporaryLoginToken.objects.create(
+            user=pharmacy.user,
+            token=token,
+            expires_at=expires_at
+        )
+        
+        # Send welcome email with login link
+        email_sent = send_pharmacy_welcome_email(pharmacy, login_token)
+        
+        # Log the approval
+        print(f"=== PHARMACY APPROVED ===")
+        print(f"Pharmacy ID: {pharmacy.id}")
+        print(f"Pharmacy Name: {pharmacy.pharmacy_name}")
+        print(f"Owner: {pharmacy.owner_first_name} {pharmacy.owner_last_name}")
+        print(f"Business Email: {pharmacy.business_email}")
+        print(f"Approved by: {admin_user.get_full_name() if admin_user else 'System'}")
+        print(f"Approved at: {pharmacy.verified_at}")
+        print(f"Login Token Generated: {token}")
+        print(f"Token Expires: {expires_at}")
+        print(f"Welcome Email Sent: {'Yes' if email_sent else 'No'}")
+        print("=== END PHARMACY APPROVAL ===")
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'Pharmacy {pharmacy.pharmacy_name} has been successfully approved',
+            'pharmacy_id': pharmacy.id,
+            'pharmacy_name': pharmacy.pharmacy_name,
+            'business_email': pharmacy.business_email,
+            'verified_at': pharmacy.verified_at.isoformat(),
+            'verified_by': admin_user.get_full_name() if admin_user else 'System Admin',
+            'login_token_generated': True,
+            'token_expires_at': expires_at.isoformat(),
+            'welcome_email_sent': email_sent,
+            'email_status': 'sent' if email_sent else 'failed'
+        })
+        
+    except Pharmacy.DoesNotExist:
+        print(f"ERROR: Pharmacy with ID {pharmacy_id} not found")
+        return JsonResponse({
+            'error': 'Pharmacy not found',
+            'message': f'No pharmacy found with ID {pharmacy_id}'
+        }, status=404)
+    except Exception as e:
+        print(f"ERROR in approve_pharmacy: {e}")
+        return JsonResponse({
+            'error': 'Failed to approve pharmacy',
+            'message': 'An error occurred while approving the pharmacy. Please try again.'
+        }, status=500)
+
+
+@csrf_exempt
+def generate_login_token(request, pharmacy_id):
+    """Generate a temporary login token for pharmacy first-time setup"""
+    if request.method != 'POST':
+        return JsonResponse({
+            'error': 'Method not allowed',
+            'message': 'Only POST requests are allowed'
+        }, status=405)
+    
+    try:
+        from api.users.models import Pharmacy, TemporaryLoginToken
+        from django.utils import timezone
+        import secrets
+        
+        # Get the pharmacy by ID
+        pharmacy = Pharmacy.objects.get(id=pharmacy_id)
+        
+        # Check if pharmacy is approved
+        if pharmacy.status != 'approved' or not pharmacy.is_fully_verified:
+            return JsonResponse({
+                'error': 'Pharmacy not approved',
+                'message': 'Pharmacy must be approved before generating login token'
+            }, status=400)
+        
+        # Generate a secure random token
+        token = secrets.token_urlsafe(48)  # 64 characters when base64 encoded
+        
+        # Set expiration time (48 hours from now)
+        expires_at = timezone.now() + timezone.timedelta(hours=48)
+        
+        # Create the token
+        login_token = TemporaryLoginToken.objects.create(
+            user=pharmacy.user,
+            token=token,
+            expires_at=expires_at
+        )
+        
+        # Log the token generation
+        print(f"=== LOGIN TOKEN GENERATED ===")
+        print(f"Pharmacy ID: {pharmacy.id}")
+        print(f"Pharmacy Name: {pharmacy.pharmacy_name}")
+        print(f"User ID: {pharmacy.user.id}")
+        print(f"Token: {token}")
+        print(f"Expires at: {expires_at}")
+        print("=== END TOKEN GENERATION ===")
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Login token generated successfully',
+            'token': token,
+            'expires_at': expires_at.isoformat(),
+            'pharmacy_id': pharmacy.id,
+            'pharmacy_name': pharmacy.pharmacy_name,
+            'business_email': pharmacy.business_email
+        })
+        
+    except Pharmacy.DoesNotExist:
+        print(f"ERROR: Pharmacy with ID {pharmacy_id} not found")
+        return JsonResponse({
+            'error': 'Pharmacy not found',
+            'message': f'No pharmacy found with ID {pharmacy_id}'
+        }, status=404)
+    except Exception as e:
+        print(f"ERROR in generate_login_token: {e}")
+        return JsonResponse({
+            'error': 'Failed to generate login token',
+            'message': 'An error occurred while generating the login token. Please try again.'
+        }, status=500)
+
+
+def validate_login_token(request, token):
+    """Validate a temporary login token"""
+    if request.method != 'GET':
+        return JsonResponse({
+            'error': 'Method not allowed',
+            'message': 'Only GET requests are allowed'
+        }, status=405)
+    
+    try:
+        from api.users.models import TemporaryLoginToken, Pharmacy
+        
+        # Get the token
+        login_token = TemporaryLoginToken.objects.get(token=token)
+        
+        # Check if token is valid
+        if not login_token.is_valid():
+            if login_token.is_expired():
+                return JsonResponse({
+                    'error': 'Token expired',
+                    'message': 'This login link has expired. Please contact support for a new link.'
+                }, status=400)
+            elif login_token.is_used:
+                return JsonResponse({
+                    'error': 'Token already used',
+                    'message': 'This login link has already been used. Please contact support for a new link.'
+                }, status=400)
+        
+        # Get pharmacy information
+        try:
+            pharmacy = Pharmacy.objects.get(user=login_token.user)
+        except Pharmacy.DoesNotExist:
+            return JsonResponse({
+                'error': 'Pharmacy not found',
+                'message': 'No pharmacy found for this user'
+            }, status=404)
+        
+        # Log the token validation
+        print(f"=== LOGIN TOKEN VALIDATED ===")
+        print(f"Token: {token}")
+        print(f"Pharmacy ID: {pharmacy.id}")
+        print(f"Pharmacy Name: {pharmacy.pharmacy_name}")
+        print(f"User ID: {login_token.user.id}")
+        print(f"Expires at: {login_token.expires_at}")
+        print("=== END TOKEN VALIDATION ===")
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Token is valid',
+            'token': token,
+            'pharmacy_id': pharmacy.id,
+            'pharmacy_name': pharmacy.pharmacy_name,
+            'business_email': pharmacy.business_email,
+            'owner_name': f"{pharmacy.owner_first_name} {pharmacy.owner_last_name}",
+            'expires_at': login_token.expires_at.isoformat()
+        })
+        
+    except TemporaryLoginToken.DoesNotExist:
+        print(f"ERROR: Token {token} not found")
+        return JsonResponse({
+            'error': 'Invalid token',
+            'message': 'This login link is invalid. Please check the link or contact support.'
+        }, status=404)
+    except Exception as e:
+        print(f"ERROR in validate_login_token: {e}")
+        return JsonResponse({
+            'error': 'Failed to validate token',
+            'message': 'An error occurred while validating the token. Please try again.'
+        }, status=500)
+
+
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/test/', test_api),
@@ -253,6 +503,9 @@ urlpatterns = [
     path('api/pending-pharmacies/', direct_pending_pharmacies),  # Direct endpoint for pending pharmacies
     path('api/pharmacy-details/<int:pharmacy_id>/', direct_pharmacy_details),  # Direct endpoint for pharmacy details
     path('api/document/<int:document_id>/', serve_document),  # Direct endpoint for serving documents
+    path('api/approve-pharmacy/<int:pharmacy_id>/', approve_pharmacy),  # Direct endpoint for approving pharmacy
+    path('api/generate-login-token/<int:pharmacy_id>/', generate_login_token),  # Direct endpoint for generating login token
+    path('api/validate-login-token/<str:token>/', validate_login_token),  # Direct endpoint for validating login token
     
     # Include API URLs at the correct path
     path('api/', include('api.urls')),
