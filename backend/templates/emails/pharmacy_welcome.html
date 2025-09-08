@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Welcome to PharmaGo</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        .email-container {
+            background-color: #ffffff;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+        .logo {
+            font-size: 28px;
+            font-weight: bold;
+            color: #2c5aa0;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            color: #666;
+            font-size: 16px;
+        }
+        .content {
+            margin-bottom: 30px;
+        }
+        .welcome-message {
+            font-size: 18px;
+            color: #2c5aa0;
+            margin-bottom: 20px;
+        }
+        .pharmacy-name {
+            font-weight: bold;
+            color: #2c5aa0;
+        }
+        .login-section {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+            border-left: 4px solid #2c5aa0;
+        }
+        .login-button {
+            display: inline-block;
+            background-color: #2c5aa0;
+            color: white;
+            padding: 15px 30px;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: bold;
+            margin: 15px 0;
+            transition: background-color 0.3s;
+        }
+
+       
+        .login-button:hover {
+            background-color: #1e3d6f;
+        }
+        .instructions {
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .warning {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+            color: #721c24;
+        }
+        .footer {
+            text-align: center;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #e0e0e0;
+            color: #666;
+            font-size: 14px;
+        }
+        .contact-info {
+            margin-top: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="email-container">
+        <div class="header">
+            <div class="logo">🏥 PharmaGo</div>
+            <div class="subtitle">Your Medicine Delivery Partner</div>
+        </div>
+        
+        <div class="content">
+            <div class="welcome-message">
+                🎉 Congratulations! Your pharmacy account has been approved!
+            </div>
+            
+            <p>Dear <span class="pharmacy-name">{{ pharmacy_name }}</span>,</p>
+            
+            <p>We are thrilled to inform you that your pharmacy registration has been successfully reviewed and approved by our admin team. Your account is now active and ready to use!</p>
+            
+            <div class="login-section">
+                <h3>🚀 Complete Your Account Setup</h3>
+                <p>To get started with PharmaGo, please click the button below to create your password and username:</p>
+                
+                <a href="{{ login_link }}" class="login-button">Set Up Your Account</a>
+                
+                <p><strong>Or copy and paste this link into your browser:</strong></p>
+                <p style="word-break: break-all; background-color: #f0f0f0; padding: 10px; border-radius: 3px; font-family: monospace;">{{ login_link }}</p>
+            </div>
+            
+            <div class="instructions">
+                <h4>📋 What to expect:</h4>
+                <ul>
+                    <li>Create a secure password for your account</li>
+                    <li>Set up your username</li>
+                    <li>Access your pharmacy dashboard</li>
+                    <li>Start managing your inventory and orders</li>
+                </ul>
+            </div>
+            
+            <div class="warning">
+                <h4>⚠️ Important Security Notice:</h4>
+                <p>This login link will expire in <strong>48 hours</strong> for security reasons. Please complete your account setup as soon as possible.</p>
+            </div>
+            
+            <p>If you have any questions or need assistance, please don't hesitate to contact our support team.</p>
+            
+            <p>Welcome to the PharmaGo family! We're excited to partner with you in providing quality healthcare services to your community.</p>
+        </div>
+        
+        <div class="footer">
+            <p><strong>Best regards,</strong><br>
+            The PharmaGo Admin Team</p>
+            
+            <div class="contact-info">
+                <p>📧 Email: admin@pharmago.com<br>
+                🌐 Website: www.pharmago.com<br>
+                📞 Support: Available 24/7</p>
+            </div>
+            
+            <p style="font-size: 12px; color: #999; margin-top: 20px;">
+                This email was sent to {{ business_email }}. If you did not register for PharmaGo, please ignore this email.
+            </p>
+        </div>
+    </div>
+</body>
+</html>
