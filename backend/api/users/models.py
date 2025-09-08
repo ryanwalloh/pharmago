@@ -1275,6 +1275,72 @@ class Rider(models.Model):
         self.save()
 
 
+class TemporaryLoginToken(models.Model):
+    """
+    Temporary login tokens for first-time pharmacy login setup.
+    """
+    
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='temporary_tokens',
+        help_text=_('User associated with this token.')
+    )
+    
+    token = models.CharField(
+        max_length=64,
+        unique=True,
+        help_text=_('Unique token for login.')
+    )
+    
+    expires_at = models.DateTimeField(
+        help_text=_('When this token expires.')
+    )
+    
+    is_used = models.BooleanField(
+        default=False,
+        help_text=_('Whether this token has been used.')
+    )
+    
+    used_at = models.DateTimeField(
+        blank=True,
+        null=True,
+        help_text=_('When this token was used.')
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        verbose_name = _('Temporary Login Token')
+        verbose_name_plural = _('Temporary Login Tokens')
+        db_table = 'temporary_login_tokens'
+        
+        indexes = [
+            models.Index(fields=['token'], name='idx_token_value'),
+            models.Index(fields=['expires_at'], name='idx_token_expires'),
+            models.Index(fields=['is_used'], name='idx_token_used'),
+        ]
+    
+    def __str__(self):
+        return f"Token for {self.user.get_full_name()} (expires: {self.expires_at})"
+    
+    def is_expired(self):
+        """Check if token is expired."""
+        from django.utils import timezone
+        return timezone.now() > self.expires_at
+    
+    def is_valid(self):
+        """Check if token is valid (not used and not expired)."""
+        return not self.is_used and not self.is_expired()
+    
+    def mark_as_used(self):
+        """Mark token as used."""
+        from django.utils import timezone
+        self.is_used = True
+        self.used_at = timezone.now()
+        self.save(update_fields=['is_used', 'used_at'])
+
+
 # Signal handlers for automatic profile creation
 from django.db.models.signals import post_save
 from django.dispatch import receiver

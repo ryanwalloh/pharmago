@@ -25,6 +25,10 @@ const AdminDashboard = () => {
   const [modalLoading, setModalLoading] = useState(false);
   const [detailedPharmacyData, setDetailedPharmacyData] = useState(null);
   const [modalError, setModalError] = useState(null);
+  
+  // Success modal state
+  const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
+  const [successData, setSuccessData] = useState(null);
 
   const handleLogout = () => {
     console.log('Logging out - removing token from localStorage');
@@ -173,10 +177,55 @@ const AdminDashboard = () => {
     setModalError(null);
   };
 
-  const handleApprovePharmacy = () => {
-    // TODO: Implement approval functionality in future tasks
-    console.log('Approving pharmacy:', selectedPharmacy);
-    alert('Approval functionality will be implemented in future tasks');
+  const handleCloseSuccessModal = () => {
+    setIsSuccessModalOpen(false);
+    setSuccessData(null);
+  };
+
+  const handleApprovePharmacy = async () => {
+    if (!selectedPharmacy) return;
+    
+    try {
+      setModalLoading(true);
+      console.log('Approving pharmacy:', selectedPharmacy);
+      
+      const response = await axios.post(`http://127.0.0.1:8000/api/approve-pharmacy/${selectedPharmacy.id}/`);
+      console.log('Approval response:', response.data);
+      
+      if (response.data.success) {
+        // Store success data and show success modal
+        setSuccessData({
+          pharmacyName: selectedPharmacy.pharmacy_name,
+          businessEmail: response.data.business_email,
+          tokenExpiresAt: response.data.token_expires_at,
+          emailStatus: response.data.email_status
+        });
+        setIsSuccessModalOpen(true);
+        
+        // Close modal and refresh data
+        handleCloseModal();
+        fetchPharmacyStats(); // Refresh the pharmacy stats
+        fetchPendingPharmacies(); // Refresh pending pharmacies list
+      } else {
+        throw new Error(response.data.message || 'Approval failed');
+      }
+    } catch (error) {
+      console.error('Error approving pharmacy:', error);
+      
+      let errorMessage = 'Failed to approve pharmacy. Please try again.';
+      if (error.response?.data?.error) {
+        errorMessage = error.response.data.error;
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      // Show error in a more user-friendly way
+      setModalError(`❌ Error: ${errorMessage}`);
+    } finally {
+      setModalLoading(false);
+    }
   };
 
   // Check authentication and fetch data when component mounts
@@ -1093,14 +1142,157 @@ const AdminDashboard = () => {
               <button
                 onClick={handleApprovePharmacy}
                 disabled={modalLoading}
-                className="px-6 py-2 bg-[#4DAF7C] text-white rounded-lg hover:bg-[#6BBF9A] transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-6 py-2 bg-[#4DAF7C] text-white rounded-lg hover:bg-[#6BBF9A] transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
               >
-                Approve Pharmacy
+                {modalLoading ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span>Approving...</span>
+                  </>
+                ) : (
+                  <>
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span>Approve Pharmacy</span>
+                  </>
+                )}
               </button>
             </div>
             <div className="text-sm text-[#666666]">
               Pharmacy ID: {selectedPharmacy.id}
             </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Success Modal Component
+  const renderSuccessModal = () => {
+    if (!isSuccessModalOpen || !successData) return null;
+
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full">
+          {/* Modal Header */}
+          <div className="flex items-center justify-between p-6 border-b border-[#D5E8D4]">
+            <div className="flex items-center space-x-3">
+              <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-green-600 rounded-xl flex items-center justify-center text-white">
+                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-[#2C7A5D]">Pharmacy Approved!</h2>
+                <p className="text-sm text-[#666666]">Welcome email sent successfully</p>
+              </div>
+            </div>
+            <button
+              onClick={handleCloseSuccessModal}
+              className="p-2 hover:bg-[#D5E8D4] rounded-lg transition-colors duration-200"
+            >
+              <svg className="h-6 w-6 text-[#666666]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Modal Content */}
+          <div className="p-6">
+            <div className="space-y-4">
+              <div className="text-center">
+                <h3 className="text-lg font-semibold text-[#2C7A5D] mb-2">
+                  ✅ {successData.pharmacyName} Approved!
+                </h3>
+                <p className="text-sm text-[#666666] mb-4">
+                  The pharmacy has been successfully approved and is now active.
+                </p>
+              </div>
+
+              <div className="bg-[#F8F9FA] rounded-xl p-4 space-y-3">
+                <div className="flex items-center space-x-3">
+                  <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                    <svg className="h-4 w-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-[#2C7A5D]">Welcome Email Sent</p>
+                    <p className="text-xs text-[#666666]">{successData.businessEmail}</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center space-x-3">
+                  <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
+                    <svg className="h-4 w-4 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-[#2C7A5D]">Login Token Generated</p>
+                    <p className="text-xs text-[#666666]">
+                      Expires: {new Date(successData.tokenExpiresAt).toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center space-x-3">
+                  <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
+                    <svg className="h-4 w-4 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-[#2C7A5D]">Email Status</p>
+                    <p className="text-xs text-[#666666] capitalize">{successData.emailStatus}</p>
+                  </div>
+                </div>
+              </div>
+
+              {successData.emailStatus === 'sent' ? (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                  <div className="flex items-start space-x-2">
+                    <svg className="h-5 w-5 text-green-600 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <div>
+                      <p className="text-sm font-medium text-green-800">Email Sent Successfully</p>
+                      <p className="text-xs text-green-700">
+                        The welcome email has been sent to the pharmacy's business email address via Gmail SMTP.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                  <div className="flex items-start space-x-2">
+                    <svg className="h-5 w-5 text-red-600 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <div>
+                      <p className="text-sm font-medium text-red-800">Email Sending Failed</p>
+                      <p className="text-xs text-red-700">
+                        The welcome email could not be sent. Please check the email configuration or try again later.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Modal Footer */}
+          <div className="flex items-center justify-end p-6 border-t border-[#D5E8D4] bg-[#F8F9FA]">
+            <button
+              onClick={handleCloseSuccessModal}
+              className="px-6 py-2 bg-[#4DAF7C] text-white rounded-lg hover:bg-[#6BBF9A] transition-colors duration-200"
+            >
+              Got it!
+            </button>
           </div>
         </div>
       </div>
@@ -1184,6 +1376,9 @@ const AdminDashboard = () => {
       
       {/* Pharmacy Details Modal */}
       {renderPharmacyDetailsModal()}
+      
+      {/* Success Modal */}
+      {renderSuccessModal()}
     </div>
   );
 };
