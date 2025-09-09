@@ -12,6 +12,7 @@ import AdminLogin from './components/AdminLogin';
 import AdminDashboard from './components/AdminDashboard';
 import ProtectedRoute from './components/ProtectedRoute';
 import InitialLogin from './components/InitialLogin';
+import PharmacyDashboard from './components/PharmacyDashboard';
 
 function App() {
   return (
@@ -40,6 +41,9 @@ function App() {
           
           {/* Initial Login Route */}
           <Route path="/initial-login" element={<InitialLogin />} />
+          
+          {/* Pharmacy Dashboard Route */}
+          <Route path="/pharmacy-dashboard" element={<PharmacyDashboard />} />
           
           {/* Admin Routes */}
           <Route path="/pharmago-admin" element={<AdminLogin />} />
