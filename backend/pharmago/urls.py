@@ -477,6 +477,7 @@ def validate_login_token(request, token):
             'pharmacy_id': pharmacy.id,
             'pharmacy_name': pharmacy.pharmacy_name,
             'business_email': pharmacy.business_email,
+            'pharmacy_email': pharmacy.business_email,  # Add this for compatibility
             'owner_name': f"{pharmacy.owner_first_name} {pharmacy.owner_last_name}",
             'expires_at': login_token.expires_at.isoformat()
         })
@@ -495,6 +496,139 @@ def validate_login_token(request, token):
         }, status=500)
 
 
+@csrf_exempt
+def complete_user_setup(request, token):
+    """Complete user setup by storing username and password"""
+    if request.method != 'POST':
+        return JsonResponse({
+            'error': 'Method not allowed',
+            'message': 'Only POST requests are allowed'
+        }, status=405)
+    
+    try:
+        from api.users.models import TemporaryLoginToken, User, Pharmacy
+        from django.utils import timezone
+        from django.contrib.auth.hashers import make_password
+        import json
+        
+        # Get the token
+        login_token = TemporaryLoginToken.objects.get(token=token)
+        
+        # Check if token is valid
+        if not login_token.is_valid():
+            if login_token.is_expired():
+                return JsonResponse({
+                    'error': 'Token expired',
+                    'message': 'This login link has expired. Please contact support for a new link.'
+                }, status=400)
+            elif login_token.is_used:
+                return JsonResponse({
+                    'error': 'Token already used',
+                    'message': 'This login link has already been used. Please contact support for a new link.'
+                }, status=400)
+        
+        # Parse request data
+        try:
+            data = json.loads(request.body)
+            username = data.get('username', '').strip()
+            password = data.get('password', '').strip()
+        except json.JSONDecodeError:
+            return JsonResponse({
+                'error': 'Invalid JSON',
+                'message': 'Invalid request data format'
+            }, status=400)
+        
+        # Validate required fields
+        if not username:
+            return JsonResponse({
+                'error': 'Username required',
+                'message': 'Username is required'
+            }, status=400)
+        
+        if not password:
+            return JsonResponse({
+                'error': 'Password required',
+                'message': 'Password is required'
+            }, status=400)
+        
+        # Check if username already exists
+        if User.objects.filter(username=username).exists():
+            return JsonResponse({
+                'error': 'Username taken',
+                'message': 'This username is already taken. Please choose another one.'
+            }, status=400)
+        
+        # Validate password strength using the model's method
+        user = login_token.user
+        user.password = password  # Temporarily set for validation
+        
+        if not user._is_strong_password():
+            return JsonResponse({
+                'error': 'Weak password',
+                'message': 'Password must contain at least 8 characters, including uppercase, lowercase, numbers, and special characters.'
+            }, status=400)
+        
+        # Update user with username and password
+        user.username = username
+        user.set_password(password)  # This properly hashes the password
+        user.status = User.UserStatus.ACTIVE
+        user.is_email_verified = True  # Since they came through email verification
+        user.save()
+        
+        # Mark token as used
+        login_token.mark_as_used()
+        
+        # Get pharmacy information for response
+        try:
+            pharmacy = Pharmacy.objects.get(user=user)
+        except Pharmacy.DoesNotExist:
+            return JsonResponse({
+                'error': 'Pharmacy not found',
+                'message': 'No pharmacy found for this user'
+            }, status=404)
+        
+        # Log the successful setup
+        print(f"=== USER SETUP COMPLETED ===")
+        print(f"Token: {token}")
+        print(f"User ID: {user.id}")
+        print(f"Username: {username}")
+        print(f"Email: {user.email}")
+        print(f"Pharmacy ID: {pharmacy.id}")
+        print(f"Pharmacy Name: {pharmacy.pharmacy_name}")
+        print(f"Setup completed at: {timezone.now()}")
+        print("=== END USER SETUP ===")
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'User setup completed successfully',
+            'user': {
+                'id': user.id,
+                'username': username,
+                'email': user.email,
+                'role': user.role,
+                'status': user.status
+            },
+            'pharmacy': {
+                'id': pharmacy.id,
+                'name': pharmacy.pharmacy_name,
+                'business_email': pharmacy.business_email
+            }
+        })
+        
+    except TemporaryLoginToken.DoesNotExist:
+        print(f"ERROR: Token {token} not found")
+        return JsonResponse({
+            'error': 'Invalid token',
+            'message': 'This login link is invalid. Please check the link or contact support.'
+        }, status=404)
+    except Exception as e:
+        print(f"ERROR in complete_user_setup: {e}")
+        return JsonResponse({
+            'error': 'Failed to complete setup',
+            'message': 'An error occurred while completing the setup. Please try again.'
+        }, status=500)
+
+
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/test/', test_api),
@@ -506,6 +640,7 @@ urlpatterns = [
     path('api/approve-pharmacy/<int:pharmacy_id>/', approve_pharmacy),  # Direct endpoint for approving pharmacy
     path('api/generate-login-token/<int:pharmacy_id>/', generate_login_token),  # Direct endpoint for generating login token
     path('api/validate-login-token/<str:token>/', validate_login_token),  # Direct endpoint for validating login token
+    path('api/complete-user-setup/<str:token>/', complete_user_setup),  # Direct endpoint for completing user setup
     
     # Include API URLs at the correct path
     path('api/', include('api.urls')),
