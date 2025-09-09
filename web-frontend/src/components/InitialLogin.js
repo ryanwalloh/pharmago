@@ -16,6 +16,8 @@ const InitialLogin = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [validatingToken, setValidatingToken] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   // Extract token from URL parameters and validate it
   useEffect(() => {
@@ -68,7 +70,7 @@ const InitialLogin = () => {
   };
 
   // Handle form submission
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     
     // Basic validation
@@ -87,23 +89,54 @@ const InitialLogin = () => {
       return;
     }
 
+    // Additional password strength validation (client-side)
+    const hasUpperCase = /[A-Z]/.test(formData.password);
+    const hasLowerCase = /[a-z]/.test(formData.password);
+    const hasNumbers = /\d/.test(formData.password);
+    const hasSpecialChar = /[!@#$%^&*(),.?":{}|<>]/.test(formData.password);
+
+    if (!hasUpperCase || !hasLowerCase || !hasNumbers || !hasSpecialChar) {
+      setError('Password must contain at least 8 characters, including uppercase, lowercase, numbers, and special characters.');
+      return;
+    }
+
     setLoading(true);
     setError('');
 
-    // TODO: Implement backend integration
-    console.log('Form submission:', {
-      token,
-      username: formData.username,
-      password: formData.password,
-      email: formData.email
-    });
+    try {
+      console.log('Submitting form data:', {
+        token,
+        username: formData.username,
+        email: formData.email
+      });
 
-    // Simulate API call
-    setTimeout(() => {
+      // Call the backend API to complete user setup
+      const response = await axios.post(`http://127.0.0.1:8000/api/complete-user-setup/${token}/`, {
+        username: formData.username,
+        password: formData.password
+      });
+
+      console.log('Setup completion response:', response.data);
+
+      if (response.data.success) {
+        setSuccess(true);
+        // Store user info in localStorage for future use
+        localStorage.setItem('pharmacy_user', JSON.stringify(response.data.user));
+        localStorage.setItem('pharmacy_info', JSON.stringify(response.data.pharmacy));
+      } else {
+        setError(response.data.message || 'Setup failed. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error completing user setup:', error);
+      
+      if (error.response && error.response.data) {
+        setError(error.response.data.message || 'Setup failed. Please try again.');
+      } else {
+        setError('Network error. Please check your connection and try again.');
+      }
+    } finally {
       setLoading(false);
-      setSuccess(true);
-      // TODO: Redirect to pharmacy dashboard after successful setup
-    }, 2000);
+    }
   };
 
   // Handle back to home
@@ -240,15 +273,33 @@ const InitialLogin = () => {
                 <label className="block text-sm font-medium text-[#666666] mb-2">
                   Password <span className="text-red-500">*</span>
                 </label>
-                <input
-                  type="password"
-                  name="password"
-                  value={formData.password}
-                  onChange={handleInputChange}
-                  placeholder="Create a secure password"
-                  className="w-full px-4 py-3 border border-[#D5E8D4] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6BBF9A] focus:ring-opacity-20 focus:border-[#6BBF9A] transition-all duration-200"
-                  required
-                />
+                <div className="relative">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    name="password"
+                    value={formData.password}
+                    onChange={handleInputChange}
+                    placeholder="Create a secure password"
+                    className="w-full px-4 py-3 pr-12 border border-[#D5E8D4] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6BBF9A] focus:ring-opacity-20 focus:border-[#6BBF9A] transition-all duration-200"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-[#666666] hover:text-[#4DAF7C] transition-colors duration-200"
+                  >
+                    {showPassword ? (
+                      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21" />
+                      </svg>
+                    ) : (
+                      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
                 <p className="text-xs text-[#999999] mt-1">
                   Must be at least 8 characters long
                 </p>
@@ -259,15 +310,33 @@ const InitialLogin = () => {
                 <label className="block text-sm font-medium text-[#666666] mb-2">
                   Confirm Password <span className="text-red-500">*</span>
                 </label>
-                <input
-                  type="password"
-                  name="confirmPassword"
-                  value={formData.confirmPassword}
-                  onChange={handleInputChange}
-                  placeholder="Confirm your password"
-                  className="w-full px-4 py-3 border border-[#D5E8D4] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6BBF9A] focus:ring-opacity-20 focus:border-[#6BBF9A] transition-all duration-200"
-                  required
-                />
+                <div className="relative">
+                  <input
+                    type={showConfirmPassword ? "text" : "password"}
+                    name="confirmPassword"
+                    value={formData.confirmPassword}
+                    onChange={handleInputChange}
+                    placeholder="Confirm your password"
+                    className="w-full px-4 py-3 pr-12 border border-[#D5E8D4] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6BBF9A] focus:ring-opacity-20 focus:border-[#6BBF9A] transition-all duration-200"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-[#666666] hover:text-[#4DAF7C] transition-colors duration-200"
+                  >
+                    {showConfirmPassword ? (
+                      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21" />
+                      </svg>
+                    ) : (
+                      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
               </div>
 
               {/* Error Message */}
