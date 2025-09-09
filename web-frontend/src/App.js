@@ -1,6 +1,7 @@
 import React from "react";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import { RegistrationProvider } from "./contexts/RegistrationContext";
+import { RiderRegistrationProvider } from "./contexts/RiderRegistrationContext";
 import LandingPage from "./components/LandingPage";
 import PharmacyRegistration from "./components/PharmacyRegistration";
 import PharmacyRegistration2 from "./components/PharmacyRegistration2";
@@ -67,7 +68,14 @@ function App() {
           />
 
           {/* Rider Registration Route */}
-          <Route path="/rider-registration" element={<RiderRegistration />} />
+          <Route
+            path="/rider-registration"
+            element={
+              <RiderRegistrationProvider>
+                <RiderRegistration />
+              </RiderRegistrationProvider>
+            }
+          />
 
           {/* Initial Login Route */}
           <Route path="/initial-login" element={<InitialLogin />} />
