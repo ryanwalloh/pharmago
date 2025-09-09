@@ -8,7 +8,7 @@ import PharmacyRegistration3 from "./components/PharmacyRegistration3";
 import PharmacyRegistration4 from "./components/PharmacyRegistration4";
 import PharmacyRegistration5 from "./components/PharmacyRegistration5";
 import PharmacyRegistrationSubmission from "./components/PharmacyRegistrationSubmission";
-import RiderRegistration from "./components/RiderRegistration";
+import RiderRegistration from "./components/RiderRegistration/RiderRegistration";
 import AdminLogin from "./components/AdminLogin";
 import AdminDashboard from "./components/AdminDashboard";
 import ProtectedRoute from "./components/ProtectedRoute";
