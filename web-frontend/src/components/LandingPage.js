@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import Header from "./Header";
 import Hero from "./Hero";
 import LoginModal from "./LoginModal";
@@ -321,12 +321,12 @@ const LandingPage = () => {
                       <span className="text-gray-700">
                         Do you want to be a PharmaGo rider?{" "}
                       </span>
-                      <a
-                        href="/rider-registration"
+                      <Link
+                        to="/rider-registration"
                         className="text-[#6BBF9A] hover:text-[#4DAF7C] transition-colors duration-200"
                       >
                         Click here
-                      </a>
+                      </Link>
                     </div>
                   </div>
 
