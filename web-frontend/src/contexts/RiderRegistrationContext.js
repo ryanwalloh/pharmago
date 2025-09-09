@@ -146,7 +146,7 @@ const registrationReducer = (state, action) => {
 const RegistrationContext = createContext();
 
 // Provider component
-export const RegistrationProvider = ({ children }) => {
+export const RiderRegistrationProvider = ({ children }) => {
   const [state, dispatch] = useReducer(
     registrationReducer,
     initialStateWithSavedData
