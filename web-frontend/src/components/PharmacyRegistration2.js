@@ -1,30 +1,32 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useRegistration } from '../contexts/RegistrationContext';
+import React, { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
+import { useRegistration } from "../contexts/RegistrationContext";
 
 const PharmacyRegistration2 = () => {
   const navigate = useNavigate();
-  const { 
-    userAccount, 
+  const {
+    userAccount,
     businessInfo,
     locationInfo,
-    updateUserAccount, 
+    updateUserAccount,
     updateBusinessInfo,
     updateLocationInfo,
-    logRegistrationData, 
-    getAllRegistrationData 
+    logRegistrationData,
+    getAllRegistrationData,
   } = useRegistration();
 
   // Form state - pre-populate with data from previous steps
   const [formData, setFormData] = useState({
-    pharmacyName: userAccount.pharmacy_name || '',
-    barangay: locationInfo.barangay || '',
-    city: locationInfo.city || 'Iligan',
-    province: locationInfo.province || 'Lanao del Norte',
-    zipCode: locationInfo.zip_code || '9200',
-    coordinates: locationInfo.latitude && locationInfo.longitude ? 
-      `${locationInfo.latitude}, ${locationInfo.longitude}` : '',
-    address: locationInfo.street_address || ''
+    pharmacyName: userAccount.pharmacy_name || "",
+    barangay: locationInfo.barangay || "",
+    city: locationInfo.city || "Iligan",
+    province: locationInfo.province || "Lanao del Norte",
+    zipCode: locationInfo.zip_code || "9200",
+    coordinates:
+      locationInfo.latitude && locationInfo.longitude
+        ? `${locationInfo.latitude}, ${locationInfo.longitude}`
+        : "",
+    address: locationInfo.street_address || "",
   });
 
   // Google Maps state
@@ -34,16 +36,18 @@ const PharmacyRegistration2 = () => {
 
   // Update form data when context data changes
   useEffect(() => {
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
       pharmacyName: userAccount.pharmacy_name || prev.pharmacyName,
       barangay: locationInfo.barangay || prev.barangay,
       city: locationInfo.city || prev.city,
       province: locationInfo.province || prev.province,
       zipCode: locationInfo.zip_code || prev.zipCode,
-      coordinates: locationInfo.latitude && locationInfo.longitude ? 
-        `${locationInfo.latitude}, ${locationInfo.longitude}` : prev.coordinates,
-      address: locationInfo.street_address || prev.address
+      coordinates:
+        locationInfo.latitude && locationInfo.longitude
+          ? `${locationInfo.latitude}, ${locationInfo.longitude}`
+          : prev.coordinates,
+      address: locationInfo.street_address || prev.address,
     }));
   }, [userAccount, locationInfo]);
 
@@ -53,68 +57,68 @@ const PharmacyRegistration2 = () => {
       // Default coordinates for Iligan City
       const defaultLat = 8.2282;
       const defaultLng = 124.2452;
-      
+
       const mapInstance = new window.google.maps.Map(mapRef.current, {
         center: { lat: defaultLat, lng: defaultLng },
         zoom: 15,
         mapTypeId: window.google.maps.MapTypeId.ROADMAP,
         mapTypeControl: false,
         streetViewControl: false,
-        fullscreenControl: false
+        fullscreenControl: false,
       });
 
       const markerInstance = new window.google.maps.Marker({
         position: { lat: defaultLat, lng: defaultLng },
         map: mapInstance,
         draggable: true,
-        title: 'Drag to set pharmacy location'
+        title: "Drag to set pharmacy location",
       });
 
       // Handle marker drag events
-      markerInstance.addListener('dragend', () => {
+      markerInstance.addListener("dragend", () => {
         const position = markerInstance.getPosition();
         const lat = position.lat();
         const lng = position.lng();
-        
+
         // Update coordinates
-        setFormData(prev => ({
+        setFormData((prev) => ({
           ...prev,
-          coordinates: `${lat}, ${lng}`
+          coordinates: `${lat}, ${lng}`,
         }));
 
         // Reverse geocode to get address
         const geocoder = new window.google.maps.Geocoder();
         geocoder.geocode({ location: { lat, lng } }, (results, status) => {
-          if (status === 'OK' && results[0]) {
-            setFormData(prev => ({
+          if (status === "OK" && results[0]) {
+            setFormData((prev) => ({
               ...prev,
-              address: results[0].formatted_address
+              address: results[0].formatted_address,
             }));
           }
         });
       });
 
       // Handle map click events
-      mapInstance.addListener('click', (event) => {
+      mapInstance.addListener("click", (event) => {
         const lat = event.latLng.lat();
         const lng = event.latLng.lng();
-        
+
         // Move marker to clicked location
         markerInstance.setPosition({ lat, lng });
-        
+
         // Update coordinates
-        setFormData(prev => ({
+        setFormData((prev) => ({
           ...prev,
-          coordinates: `${lat}, ${lng}`
+          coordinates: `${lat}, ${lng}`,
         }));
 
         // Reverse geocode to get address
         const geocoder = new window.google.maps.Geocoder();
         geocoder.geocode({ location: { lat, lng } }, (results, status) => {
-          if (status === 'OK' && results[0]) {
-            setFormData(prev => ({
+          if (status === "OK" && results[0]) {
+            setFormData((prev) => ({
               ...prev,
-              address: results[0].formatted_address
+              address: results[0].formatted_address,
             }));
           }
         });
@@ -127,26 +131,33 @@ const PharmacyRegistration2 = () => {
     // Load Google Maps script if not already loaded
     if (!window.google) {
       const apiKey = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
-      
+
       // Debug: Log the API key status
-      console.log('=== GOOGLE MAPS API KEY DEBUG ===');
-      console.log('API Key exists:', !!apiKey);
-      console.log('API Key length:', apiKey ? apiKey.length : 0);
-      console.log('API Key starts with:', apiKey ? apiKey.substring(0, 10) + '...' : 'undefined');
-      console.log('================================');
-      
+      console.log("=== GOOGLE MAPS API KEY DEBUG ===");
+      console.log("API Key exists:", !!apiKey);
+      console.log("API Key length:", apiKey ? apiKey.length : 0);
+      console.log(
+        "API Key starts with:",
+        apiKey ? apiKey.substring(0, 10) + "..." : "undefined"
+      );
+      console.log("================================");
+
       if (!apiKey) {
-        console.error('Google Maps API key is missing! Please add REACT_APP_GOOGLE_MAPS_API_KEY to your .env file');
+        console.error(
+          "Google Maps API key is missing! Please add REACT_APP_GOOGLE_MAPS_API_KEY to your .env file"
+        );
         return;
       }
-      
-      const script = document.createElement('script');
+
+      const script = document.createElement("script");
       script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;
       script.async = true;
       script.defer = true;
       script.onload = initMap;
       script.onerror = () => {
-        console.error('Failed to load Google Maps script. Please check your API key.');
+        console.error(
+          "Failed to load Google Maps script. Please check your API key."
+        );
       };
       document.head.appendChild(script);
     } else {
@@ -157,22 +168,24 @@ const PharmacyRegistration2 = () => {
   // Handle input changes
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      [name]: value
+      [name]: value,
     }));
   };
 
   // Handle form submission
   const handleSubmit = (e) => {
     e.preventDefault();
-    
+
     // Parse coordinates
-    const [lat, lng] = formData.coordinates.split(',').map(coord => parseFloat(coord.trim()));
-    
+    const [lat, lng] = formData.coordinates
+      .split(",")
+      .map((coord) => parseFloat(coord.trim()));
+
     // Update context with form data
     updateUserAccount({
-      pharmacy_name: formData.pharmacyName
+      pharmacy_name: formData.pharmacyName,
     });
 
     updateLocationInfo({
@@ -182,65 +195,65 @@ const PharmacyRegistration2 = () => {
       province: formData.province,
       zip_code: formData.zipCode,
       latitude: lat,
-      longitude: lng
+      longitude: lng,
     });
 
-    console.log('=== PHARMACY REGISTRATION STEP 2 SUBMITTED ===');
-    console.log('Form Data:', formData);
-    console.log('Coordinates:', { lat, lng });
-    console.log('Updated Location Info:', {
+    console.log("=== PHARMACY REGISTRATION STEP 2 SUBMITTED ===");
+    console.log("Form Data:", formData);
+    console.log("Coordinates:", { lat, lng });
+    console.log("Updated Location Info:", {
       street_address: formData.address,
       barangay: formData.barangay,
       city: formData.city,
       province: formData.province,
       zip_code: formData.zipCode,
       latitude: lat,
-      longitude: lng
+      longitude: lng,
     });
-    console.log('All Registration Data:', getAllRegistrationData());
-    console.log('===============================================');
-    
+    console.log("All Registration Data:", getAllRegistrationData());
+    console.log("===============================================");
+
     logRegistrationData();
-    
+
     // Navigate to next step
-    navigate('/pharmacy-registration-3');
+    navigate("/pharmacy-registration-3");
   };
 
   // Log the current registration data when component mounts
   useEffect(() => {
-    console.log('=== PHARMACY REGISTRATION STEP 2 MOUNTED ===');
-    console.log('Initial User Account Data:', userAccount);
-    console.log('Initial Location Info Data:', locationInfo);
-    console.log('Current Form Data:', formData);
-    console.log('All Registration Data:', getAllRegistrationData());
-    console.log('=============================================');
+    console.log("=== PHARMACY REGISTRATION STEP 2 MOUNTED ===");
+    console.log("Initial User Account Data:", userAccount);
+    console.log("Initial Location Info Data:", locationInfo);
+    console.log("Current Form Data:", formData);
+    console.log("All Registration Data:", getAllRegistrationData());
+    console.log("=============================================");
     logRegistrationData();
   }, [logRegistrationData, userAccount, locationInfo, formData]);
 
   // Form validation
   const isFormValid = () => {
     return (
-      formData.barangay.trim() !== '' &&
-      formData.city.trim() !== '' &&
-      formData.province.trim() !== '' &&
-      formData.zipCode.trim() !== '' &&
-      formData.coordinates.trim() !== ''
+      formData.barangay.trim() !== "" &&
+      formData.city.trim() !== "" &&
+      formData.province.trim() !== "" &&
+      formData.zipCode.trim() !== "" &&
+      formData.coordinates.trim() !== ""
     );
   };
 
   // Check if specific field is valid
   const isFieldValid = (fieldName) => {
     switch (fieldName) {
-      case 'barangay':
-        return formData.barangay.trim() !== '';
-      case 'city':
-        return formData.city.trim() !== '';
-      case 'province':
-        return formData.province.trim() !== '';
-      case 'zipCode':
-        return formData.zipCode.trim() !== '';
-      case 'coordinates':
-        return formData.coordinates.trim() !== '';
+      case "barangay":
+        return formData.barangay.trim() !== "";
+      case "city":
+        return formData.city.trim() !== "";
+      case "province":
+        return formData.province.trim() !== "";
+      case "zipCode":
+        return formData.zipCode.trim() !== "";
+      case "coordinates":
+        return formData.coordinates.trim() !== "";
       default:
         return true;
     }
@@ -255,9 +268,9 @@ const PharmacyRegistration2 = () => {
             <div className="flex items-center">
               <div className="flex-shrink-0">
                 <div className="flex items-center space-x-3">
-                  <img 
-                    src="/assets/logosvgdark.svg" 
-                    alt="PharmaGo Logo" 
+                  <img
+                    src="/assets/logosvgdark.svg"
+                    alt="PharmaGo Logo"
                     className="h-10 w-auto"
                   />
                 </div>
@@ -274,9 +287,9 @@ const PharmacyRegistration2 = () => {
         {/* Left Image Container */}
         <div className="relative overflow-hidden">
           <div className="w-full h-full">
-            <img 
-              src="/images/pharmacie.png" 
-              alt="Pharmacy Location" 
+            <img
+              src="/images/pharmacie.png"
+              alt="Pharmacy Location"
               className="w-full h-full object-cover"
             />
           </div>
@@ -291,21 +304,26 @@ const PharmacyRegistration2 = () => {
                 Where is your pharmacy located?
               </h1>
               <p className="text-base mt-[-7px] text-[#8d8c8c] text-left leading-5 font-normal">
-                PharmaGo riders will use this to find your business for pickup and delivery.
+                PharmaGo riders will use this to find your business for pickup
+                and delivery.
               </p>
 
-                                {/* Form */}
-                  <div className="w-[22vw] pb-5 pt-2.5 flex flex-col text-[#2c2c2c]">
-                    <form className="w-[22vw] h-[50vh] pb-5 pt-2.5 flex flex-col text-[#2c2c2c] space-y-4" onSubmit={handleSubmit}>
+              {/* Form */}
+              <div className="w-[22vw] pb-5 pt-2.5 flex flex-col text-[#2c2c2c]">
+                <form
+                  className="w-[22vw] h-[50vh] pb-5 pt-2.5 flex flex-col text-[#2c2c2c] space-y-4"
+                  onSubmit={handleSubmit}
+                >
                   {/* Google Map */}
                   <div className="relative my-2.5 z-10">
-                    <div 
+                    <div
                       ref={mapRef}
                       className="w-full h-50 mb-5 border-2 border-[#D5E8D4] rounded-lg"
-                      style={{ height: '200px' }}
+                      style={{ height: "200px" }}
                     ></div>
                     <p className="text-xs text-[#8d8c8c] text-center mb-2">
-                      Click on the map or drag the marker to set your pharmacy location
+                      Click on the map or drag the marker to set your pharmacy
+                      location
                     </p>
                   </div>
 
@@ -339,9 +357,9 @@ const PharmacyRegistration2 = () => {
                       value={formData.barangay}
                       onChange={handleInputChange}
                       className={`peer w-full px-4 py-3 border-2 rounded-lg text-gray-700 placeholder-transparent focus:outline-none focus:ring-2 focus:ring-opacity-20 transition-all duration-200 ${
-                        isFieldValid('barangay') 
-                          ? 'border-[#D5E8D4] focus:border-[#6BBF9A] focus:ring-[#6BBF9A]' 
-                          : 'border-red-300 focus:border-red-500 focus:ring-red-500'
+                        isFieldValid("barangay")
+                          ? "border-[#D5E8D4] focus:border-[#6BBF9A] focus:ring-[#6BBF9A]"
+                          : "border-red-300 focus:border-red-500 focus:ring-red-500"
                       }`}
                       placeholder="Barangay"
                       required
@@ -349,9 +367,9 @@ const PharmacyRegistration2 = () => {
                     <label
                       htmlFor="barangay"
                       className={`absolute left-4 -top-2.5 bg-white px-2 text-sm transition-all duration-200 peer-placeholder-shown:text-base peer-placeholder-shown:text-gray-400 peer-placeholder-shown:top-3 peer-focus:-top-2.5 peer-focus:text-sm ${
-                        isFieldValid('barangay') 
-                          ? 'text-[#4DAF7C] peer-focus:text-[#6BBF9A]' 
-                          : 'text-red-500 peer-focus:text-red-500'
+                        isFieldValid("barangay")
+                          ? "text-[#4DAF7C] peer-focus:text-[#6BBF9A]"
+                          : "text-red-500 peer-focus:text-red-500"
                       }`}
                     >
                       Barangay *
@@ -453,22 +471,22 @@ const PharmacyRegistration2 = () => {
 
       {/* Footer */}
       <div className="flex flex-row justify-between items-center w-[48vw] fixed right-2.5 bottom-0 p-5 z-10 gap-2.5">
-        <button 
+        <button
           type="button"
-          onClick={() => navigate('/pharmacy-registration')}
+          onClick={() => navigate("/pharmacy-registration")}
           className="text-base bg-white text-[#2c786c] border-none py-1.5 px-5 font-bold rounded hover:bg-gray-100 transition-colors"
         >
           Back
         </button>
         <p className="text-gray-500">4 step(s) to complete</p>
-        <button 
+        <button
           type="submit"
           onClick={handleSubmit}
           disabled={!isFormValid()}
           className={`text-base border-none py-1.5 px-5 font-bold rounded transition-colors ${
-            isFormValid() 
-              ? 'bg-[#2c786c] text-white hover:bg-[#004445]' 
-              : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+            isFormValid()
+              ? "bg-[#2c786c] text-white hover:bg-[#004445]"
+              : "bg-gray-300 text-gray-500 cursor-not-allowed"
           }`}
         >
           Next
