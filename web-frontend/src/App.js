@@ -1,7 +1,11 @@
 import React from "react";
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import {
+  Outlet,
+  BrowserRouter as Router,
+  Routes,
+  Route,
+} from "react-router-dom";
 import { RegistrationProvider } from "./contexts/RegistrationContext";
-import { RiderRegistrationProvider } from "./contexts/RiderRegistrationContext";
 import LandingPage from "./components/LandingPage";
 import PharmacyRegistration from "./components/PharmacyRegistration";
 import PharmacyRegistration2 from "./components/PharmacyRegistration2";
@@ -9,12 +13,17 @@ import PharmacyRegistration3 from "./components/PharmacyRegistration3";
 import PharmacyRegistration4 from "./components/PharmacyRegistration4";
 import PharmacyRegistration5 from "./components/PharmacyRegistration5";
 import PharmacyRegistrationSubmission from "./components/PharmacyRegistrationSubmission";
-import RiderStep1 from "./components/RiderRegistration/RiderStep1";
 import AdminLogin from "./components/AdminLogin";
 import AdminDashboard from "./components/AdminDashboard";
 import ProtectedRoute from "./components/ProtectedRoute";
 import InitialLogin from "./components/InitialLogin";
+import { RiderRegistrationProvider } from "./contexts/RiderRegistrationContext";
+import RiderStep1 from "./components/RiderRegistration/RiderStep1";
 import RiderStep2 from "./components/RiderRegistration/RiderStep2";
+import RiderStep3 from "./components/RiderRegistration/RiderStep3";
+import RiderStep4 from "./components/RiderRegistration/RiderStep4";
+import Submission from "./components/RiderRegistration/Submission";
+import Success from "./components/RiderRegistration/Success";
 
 function App() {
   return (
@@ -70,19 +79,17 @@ function App() {
 
           {/* Rider Registration Route */}
           <Route
-            path="/rider-registration"
+            path="/rider-registration/*"
             element={
               <RiderRegistrationProvider>
-                <RiderStep1 />
-              </RiderRegistrationProvider>
-            }
-          />
-
-          <Route
-            path="/rider-registration-2"
-            element={
-              <RiderRegistrationProvider>
-                <RiderStep2 />
+                <Routes>
+                  <Route index element={<RiderStep1 />} />
+                  <Route path="2" element={<RiderStep2 />} />
+                  <Route path="3" element={<RiderStep3 />} />
+                  <Route path="4" element={<RiderStep4 />} />
+                  <Route path="submission" element={<Submission />} />
+                  <Route path="success" element={<Success />} />
+                </Routes>
               </RiderRegistrationProvider>
             }
           />
