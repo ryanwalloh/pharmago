@@ -28,6 +28,7 @@ const initialState = {
     first_name: "",
     last_name: "",
     middle_name: "",
+    phone: "",
     date_of_brith: "",
     gender: "",
     role: "rider",
@@ -52,7 +53,7 @@ const initialState = {
     drivers_license: {
       file: null,
       file_url: "",
-      expiry_date: "",
+      // expiry_date: "",
       uploaded: false,
     },
     psa_birth_certificate: {
@@ -103,7 +104,7 @@ const registrationReducer = (state, action) => {
     case REGISTRATION_ACTIONS.UPDATE_VEHICLE_INFO:
       return {
         ...state,
-        userAccount: {
+        vehicleInfo: {
           ...state.vehicleInfo,
           ...action.payload,
         },
@@ -111,7 +112,7 @@ const registrationReducer = (state, action) => {
     case REGISTRATION_ACTIONS.UPDATE_DOCUMENTS:
       return {
         ...state,
-        userAccount: {
+        documents: {
           ...state.documents,
           ...action.payload,
         },
@@ -119,7 +120,7 @@ const registrationReducer = (state, action) => {
     case REGISTRATION_ACTIONS.UPDATE_CONTACT_INFO:
       return {
         ...state,
-        userAccount: {
+        contactInfo: {
           ...state.contactInfo,
           ...action.payload,
         },
