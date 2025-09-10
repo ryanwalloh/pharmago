@@ -1,10 +1,15 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
 
 const LoginModal = ({ isOpen, onClose }) => {
+  const navigate = useNavigate();
   const [formData, setFormData] = useState({
-    email: '',
+    username: '',
     password: ''
   });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -14,11 +19,39 @@ const LoginModal = ({ isOpen, onClose }) => {
     }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    // TODO: Implement login logic
-    console.log('Login form submitted:', formData);
-    onClose();
+    setLoading(true);
+    setError('');
+    
+    try {
+      // Create a direct pharmacy login endpoint following the database access pattern
+      const response = await axios.post('http://127.0.0.1:8000/api/pharmacy-login/', {
+        username: formData.username,
+        password: formData.password
+      });
+      
+      if (response.data.success) {
+        // Store pharmacy and user info in localStorage
+        localStorage.setItem('pharmacy_user', JSON.stringify(response.data.user));
+        localStorage.setItem('pharmacy_info', JSON.stringify(response.data.pharmacy));
+        
+        // Close modal and redirect to pharmacy dashboard
+        onClose();
+        navigate('/pharmacy-dashboard');
+      } else {
+        setError(response.data.message || 'Login failed');
+      }
+    } catch (err) {
+      console.error('Login error:', err);
+      if (err.response?.data?.message) {
+        setError(err.response.data.message);
+      } else {
+        setError('Login failed. Please check your credentials and try again.');
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleOverlayClick = (e) => {
@@ -59,23 +92,30 @@ const LoginModal = ({ isOpen, onClose }) => {
           </div>
 
           <form className="space-y-6" onSubmit={handleSubmit}>
-            {/* Email Field */}
+            {/* Error Message */}
+            {error && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+                {error}
+              </div>
+            )}
+
+            {/* Username Field */}
             <div className="relative">
               <input
-                type="email"
-                id="email"
-                name="email"
-                value={formData.email}
+                type="text"
+                id="username"
+                name="username"
+                value={formData.username}
                 onChange={handleInputChange}
                 className="peer w-full px-4 py-3 border-2 border-[#D5E8D4] rounded-lg text-gray-700 placeholder-transparent focus:outline-none focus:border-[#6BBF9A] focus:ring-2 focus:ring-[#6BBF9A] focus:ring-opacity-20 transition-all duration-200"
-                placeholder="Enter your email"
+                placeholder="Enter your username"
                 required
               />
               <label
-                htmlFor="email"
+                htmlFor="username"
                 className="absolute left-4 -top-2.5 bg-white px-2 text-sm text-[#4DAF7C] transition-all duration-200 peer-placeholder-shown:text-base peer-placeholder-shown:text-gray-400 peer-placeholder-shown:top-3 peer-focus:-top-2.5 peer-focus:text-sm peer-focus:text-[#6BBF9A]"
               >
-                Email Address
+                Username
               </label>
             </div>
 
@@ -102,9 +142,21 @@ const LoginModal = ({ isOpen, onClose }) => {
             {/* Login Button */}
             <button
               type="submit"
-              className="w-full font-semibold py-4 px-6 rounded-lg transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 bg-[#4DAF7C] hover:bg-[#2C7A5D] text-white"
+              disabled={loading}
+              className={`w-full font-semibold py-4 px-6 rounded-lg transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 ${
+                loading 
+                  ? 'bg-gray-400 cursor-not-allowed' 
+                  : 'bg-[#4DAF7C] hover:bg-[#2C7A5D]'
+              } text-white`}
             >
-              Login
+              {loading ? (
+                <div className="flex items-center justify-center">
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                  Logging in...
+                </div>
+              ) : (
+                'Login'
+              )}
             </button>
           </form>
 

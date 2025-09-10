@@ -66,7 +66,7 @@ services:
       PGADMIN_CONFIG_SERVER_MODE: 'False'
       PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: 'False'
     ports:
-      - "5050:80"
+      - "8081:80"
     volumes:
       - pgadmin_data:/var/lib/pgadmin
     depends_on:

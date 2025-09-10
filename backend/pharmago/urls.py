@@ -477,6 +477,7 @@ def validate_login_token(request, token):
             'pharmacy_id': pharmacy.id,
             'pharmacy_name': pharmacy.pharmacy_name,
             'business_email': pharmacy.business_email,
+            'pharmacy_email': pharmacy.business_email,  # Add this for compatibility
             'owner_name': f"{pharmacy.owner_first_name} {pharmacy.owner_last_name}",
             'expires_at': login_token.expires_at.isoformat()
         })
@@ -495,6 +496,1039 @@ def validate_login_token(request, token):
         }, status=500)
 
 
+def direct_medicine_catalog(request):
+    """Direct medicine catalog endpoint that bypasses all authentication"""
+    try:
+        from api.inventory.models import MedicineCatalog, MedicineCategory
+        from django.db.models import Q
+        
+        # Get query parameters
+        search_query = request.GET.get('search', '').strip()
+        category_id = request.GET.get('category', '').strip()
+        form_filter = request.GET.get('form', '').strip()
+        prescription_required = request.GET.get('prescription_required', '').strip()
+        limit = request.GET.get('limit', '100')
+        
+        # Start with active, FDA-approved medicines
+        medicines = MedicineCatalog.objects.filter(
+            is_active=True,
+            fda_approval=True
+        ).select_related('category')
+        
+        # Apply filters
+        if search_query:
+            medicines = medicines.filter(
+                Q(name__icontains=search_query) |
+                Q(generic_name__icontains=search_query) |
+                Q(therapeutic_class__icontains=search_query) |
+                Q(description__icontains=search_query)
+            )
+        
+        if category_id:
+            try:
+                medicines = medicines.filter(category_id=int(category_id))
+            except ValueError:
+                pass
+        
+        if form_filter:
+            medicines = medicines.filter(form=form_filter)
+        
+        if prescription_required.lower() in ['true', 'false']:
+            medicines = medicines.filter(prescription_required=prescription_required.lower() == 'true')
+        
+        # Apply limit
+        try:
+            limit_int = int(limit)
+            medicines = medicines[:limit_int]
+        except ValueError:
+            medicines = medicines[:100]
+        
+        # Build response data
+        medicines_data = []
+        for medicine in medicines:
+            medicine_data = {
+                'id': medicine.id,
+                'name': medicine.name,
+                'generic_name': medicine.generic_name,
+                'form': medicine.form,
+                'dosage': medicine.dosage,
+                'description': medicine.description,
+                'prescription_required': medicine.prescription_required,
+                'controlled_substance': medicine.controlled_substance,
+                'therapeutic_class': medicine.therapeutic_class,
+                'fda_number': medicine.fda_number,
+                'category': {
+                    'id': medicine.category.id,
+                    'name': medicine.category.name
+                } if medicine.category else None,
+                'active_ingredients': medicine.active_ingredients,
+                'storage_conditions': medicine.storage_conditions,
+                'shelf_life': medicine.shelf_life
+            }
+            medicines_data.append(medicine_data)
+        
+        # Log the request
+        print(f"=== MEDICINE CATALOG REQUEST ===")
+        print(f"Search: {search_query}")
+        print(f"Category: {category_id}")
+        print(f"Form: {form_filter}")
+        print(f"Prescription Required: {prescription_required}")
+        print(f"Found {len(medicines_data)} medicines")
+        print("=== END MEDICINE CATALOG REQUEST ===")
+        
+        return JsonResponse({
+            'success': True,
+            'count': len(medicines_data),
+            'medicines': medicines_data
+        })
+        
+    except Exception as e:
+        print(f"ERROR in direct_medicine_catalog: {e}")
+        return JsonResponse({
+            'success': False,
+            'error': 'Failed to fetch medicine catalog',
+            'count': 0,
+            'medicines': []
+        }, status=500)
+
+
+@csrf_exempt
+def add_medicines_to_inventory(request):
+    """Add selected medicines to pharmacy inventory"""
+    if request.method != 'POST':
+        return JsonResponse({
+            'error': 'Method not allowed',
+            'message': 'Only POST requests are allowed'
+        }, status=405)
+    
+    try:
+        from api.inventory.models import MedicineCatalog, MedicineCategory, PharmacyInventory
+        from api.users.models import Pharmacy
+        import json
+        
+        # Parse request data
+        try:
+            data = json.loads(request.body)
+            pharmacy_id = data.get('pharmacy_id')
+            medicines = data.get('medicines', [])
+            default_stock = data.get('default_stock', 0)
+        except json.JSONDecodeError:
+            return JsonResponse({
+                'error': 'Invalid JSON',
+                'message': 'Invalid request data format'
+            }, status=400)
+        
+        # Validate required fields
+        if not pharmacy_id:
+            return JsonResponse({
+                'error': 'Pharmacy ID required',
+                'message': 'Pharmacy ID is required'
+            }, status=400)
+        
+        if not medicines or not isinstance(medicines, list):
+            return JsonResponse({
+                'error': 'Medicines required',
+                'message': 'Medicines list is required'
+            }, status=400)
+        
+        # Get pharmacy
+        try:
+            pharmacy = Pharmacy.objects.get(id=pharmacy_id)
+        except Pharmacy.DoesNotExist:
+            return JsonResponse({
+                'error': 'Pharmacy not found',
+                'message': f'No pharmacy found with ID {pharmacy_id}'
+            }, status=404)
+        
+        # Process each medicine
+        added_medicines = []
+        skipped_medicines = []
+        
+        for medicine_data in medicines:
+            try:
+                medicine_id = medicine_data.get('id')
+                if not medicine_id:
+                    continue
+                
+                # Get medicine from catalog
+                try:
+                    medicine = MedicineCatalog.objects.get(id=medicine_id)
+                except MedicineCatalog.DoesNotExist:
+                    skipped_medicines.append({
+                        'id': medicine_id,
+                        'name': medicine_data.get('name', 'Unknown'),
+                        'reason': 'Medicine not found in catalog'
+                    })
+                    continue
+                
+                # Check if already exists in pharmacy inventory
+                existing_inventory = PharmacyInventory.objects.filter(
+                    pharmacy=pharmacy,
+                    medicine=medicine
+                ).first()
+                
+                if existing_inventory:
+                    skipped_medicines.append({
+                        'id': medicine_id,
+                        'name': medicine.name,
+                        'reason': 'Already exists in inventory'
+                    })
+                    continue
+                
+                # Get pricing data
+                pricing = medicine_data.get('pricing', {})
+                price = pricing.get('price', 0.00)
+                original_price = pricing.get('original_price', price)  # Default to price if not set
+                cost_price = pricing.get('cost_price', 0.00)
+                
+                # Create pharmacy inventory entry
+                inventory_item = PharmacyInventory.objects.create(
+                    pharmacy=pharmacy,
+                    medicine=medicine,
+                    category=medicine.category,
+                    name=medicine.name,
+                    form=medicine.form,
+                    dosage=medicine.dosage,
+                    description=medicine.description,
+                    prescription_required=medicine.prescription_required,
+                    price=price,
+                    original_price=original_price,
+                    cost_price=cost_price,
+                    stock_quantity=default_stock,
+                    min_stock_level=10,
+                    max_stock_level=1000,
+                    is_available=True
+                )
+                
+                added_medicines.append({
+                    'id': inventory_item.id,
+                    'medicine_id': medicine.id,
+                    'name': medicine.name,
+                    'generic_name': medicine.generic_name,
+                    'form': medicine.form,
+                    'dosage': medicine.dosage,
+                    'category': medicine.category.name if medicine.category else 'Uncategorized',
+                    'price': float(inventory_item.price),
+                    'original_price': float(inventory_item.original_price),
+                    'cost_price': float(inventory_item.cost_price),
+                    'stock_quantity': inventory_item.stock_quantity
+                })
+                
+            except Exception as e:
+                print(f"Error processing medicine {medicine_data.get('id', 'unknown')}: {e}")
+                skipped_medicines.append({
+                    'id': medicine_data.get('id', 'unknown'),
+                    'name': medicine_data.get('name', 'Unknown'),
+                    'reason': f'Error: {str(e)}'
+                })
+        
+        # Log the operation
+        print(f"=== ADD MEDICINES TO INVENTORY ===")
+        print(f"Pharmacy: {pharmacy.pharmacy_name} (ID: {pharmacy.id})")
+        print(f"Requested: {len(medicines)} medicines")
+        print(f"Added: {len(added_medicines)} medicines")
+        print(f"Skipped: {len(skipped_medicines)} medicines")
+        print("=== END ADD MEDICINES ===")
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'Successfully added {len(added_medicines)} medicines to inventory',
+            'pharmacy_id': pharmacy.id,
+            'pharmacy_name': pharmacy.pharmacy_name,
+            'added_medicines': added_medicines,
+            'skipped_medicines': skipped_medicines,
+            'total_requested': len(medicines),
+            'total_added': len(added_medicines),
+            'total_skipped': len(skipped_medicines)
+        })
+        
+    except Exception as e:
+        print(f"ERROR in add_medicines_to_inventory: {e}")
+        return JsonResponse({
+            'error': 'Failed to add medicines to inventory',
+            'message': 'An error occurred while adding medicines. Please try again.'
+        }, status=500)
+
+
+@csrf_exempt
+def add_custom_products_to_inventory(request):
+    """Add custom products to pharmacy inventory"""
+    if request.method != 'POST':
+        return JsonResponse({
+            'error': 'Method not allowed',
+            'message': 'Only POST requests are allowed'
+        }, status=405)
+    
+    try:
+        from api.inventory.models import PharmacyInventory
+        from api.users.models import Pharmacy
+        import json
+        
+        # Parse request data
+        try:
+            data = json.loads(request.body)
+            pharmacy_id = data.get('pharmacy_id')
+            custom_products = data.get('custom_products', [])
+        except json.JSONDecodeError:
+            return JsonResponse({
+                'error': 'Invalid JSON',
+                'message': 'Invalid request data format'
+            }, status=400)
+        
+        # Validate input
+        if not pharmacy_id:
+            return JsonResponse({
+                'error': 'Pharmacy ID required',
+                'message': 'Pharmacy ID is required'
+            }, status=400)
+        if not custom_products or not isinstance(custom_products, list):
+            return JsonResponse({
+                'error': 'Custom products required',
+                'message': 'Custom products list is required'
+            }, status=400)
+        
+        # Get pharmacy
+        try:
+            pharmacy = Pharmacy.objects.get(id=pharmacy_id)
+        except Pharmacy.DoesNotExist:
+            return JsonResponse({
+                'error': 'Pharmacy not found',
+                'message': f'No pharmacy found with ID {pharmacy_id}'
+            }, status=404)
+        
+        # Process each custom product
+        added_products = []
+        skipped_products = []
+        
+        print(f"=== PROCESSING CUSTOM PRODUCTS ===")
+        print(f"Total products to process: {len(custom_products)}")
+        
+        for i, product_data in enumerate(custom_products):
+            print(f"Processing product {i+1}: {product_data}")
+            try:
+                name = product_data.get('name', '').strip()
+                form = product_data.get('form', '').strip()
+                dosage = product_data.get('dosage', '').strip()
+                description = product_data.get('description', '').strip()
+                prescription_required = product_data.get('prescription_required', False)
+                price = product_data.get('price', 0)
+                original_price = product_data.get('original_price', 0)
+                cost_price = product_data.get('cost_price', 0)
+                
+                print(f"  - Name: '{name}' (length: {len(name)})")
+                print(f"  - Form: '{form}' (length: {len(form)})")
+                print(f"  - Dosage: '{dosage}'")
+                print(f"  - Price: {price}")
+                
+                if not name or not form:
+                    print(f"  - SKIPPED: Missing required fields")
+                    skipped_products.append({
+                        'name': name or 'Unknown',
+                        'reason': 'Missing required fields (name or form)'
+                    })
+                    continue
+                
+                # Check if product with same name already exists in pharmacy inventory
+                existing_product = PharmacyInventory.objects.filter(
+                    pharmacy=pharmacy,
+                    name__iexact=name
+                ).first()
+                
+                if existing_product:
+                    skipped_products.append({
+                        'name': name,
+                        'reason': 'Product with this name already exists in inventory'
+                    })
+                    continue
+                
+                # Get the selected category
+                from api.inventory.models import MedicineCategory
+                try:
+                    selected_category = MedicineCategory.objects.get(id=product_data.get('category'))
+                except MedicineCategory.DoesNotExist:
+                    # Fallback to default category if not found
+                    selected_category, created = MedicineCategory.objects.get_or_create(
+                        name='Custom Products',
+                        defaults={
+                            'description': 'Custom products created by pharmacies',
+                            'is_active': True
+                        }
+                    )
+                
+                # Create custom product in pharmacy inventory
+                print(f"  - Creating inventory item...")
+                inventory_item = PharmacyInventory.objects.create(
+                    pharmacy=pharmacy,
+                    medicine=None,  # Custom products don't have medicine catalog reference
+                    category=selected_category,  # Use selected category for custom products
+                    name=name,
+                    form=form,
+                    dosage=dosage,
+                    description=description,
+                    prescription_required=prescription_required,
+                    price=float(price) if price else 0.00,
+                    original_price=float(original_price) if original_price else 0.00,
+                    cost_price=float(cost_price) if cost_price else 0.00,
+                    stock_quantity=0,  # Default stock
+                    min_stock_level=10,
+                    max_stock_level=1000,
+                    is_available=True
+                )
+                print(f"  - SUCCESS: Created inventory item with ID {inventory_item.id}")
+                
+                added_products.append({
+                    'id': inventory_item.id,
+                    'name': name,
+                    'form': form,
+                    'dosage': dosage,
+                    'description': description,
+                    'prescription_required': prescription_required,
+                    'price': float(inventory_item.price),
+                    'original_price': float(inventory_item.original_price),
+                    'cost_price': float(inventory_item.cost_price),
+                    'stock_quantity': inventory_item.stock_quantity
+                })
+                
+            except Exception as e:
+                print(f"Error processing custom product {product_data.get('name', 'unknown')}: {e}")
+                skipped_products.append({
+                    'name': product_data.get('name', 'Unknown'),
+                    'reason': f'Error: {str(e)}'
+                })
+        
+        print(f"=== ADD CUSTOM PRODUCTS TO INVENTORY ===")
+        print(f"Pharmacy: {pharmacy.pharmacy_name} (ID: {pharmacy.id})")
+        print(f"Requested: {len(custom_products)} custom products")
+        print(f"Added: {len(added_products)} custom products")
+        print(f"Skipped: {len(skipped_products)} custom products")
+        print("=== END ADD CUSTOM PRODUCTS ===")
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'Successfully added {len(added_products)} custom products to inventory',
+            'pharmacy_id': pharmacy.id,
+            'pharmacy_name': pharmacy.pharmacy_name,
+            'added_products': added_products,
+            'skipped_products': skipped_products,
+            'total_requested': len(custom_products),
+            'total_added': len(added_products),
+            'total_skipped': len(skipped_products)
+        })
+        
+    except Exception as e:
+        print(f"ERROR in add_custom_products_to_inventory: {e}")
+        return JsonResponse({
+            'error': 'Failed to add custom products to inventory',
+            'message': 'An error occurred while adding custom products. Please try again.'
+        }, status=500)
+
+
+@csrf_exempt
+def pharmacy_login(request):
+    """Direct pharmacy login endpoint that bypasses all authentication"""
+    if request.method != 'POST':
+        return JsonResponse({
+            'error': 'Method not allowed',
+            'message': 'Only POST requests are allowed'
+        }, status=405)
+    
+    try:
+        from api.users.models import User, Pharmacy
+        from django.contrib.auth import authenticate
+        import json
+        
+        # Parse request data
+        try:
+            data = json.loads(request.body)
+            username = data.get('username', '').strip()
+            password = data.get('password', '').strip()
+        except json.JSONDecodeError:
+            return JsonResponse({
+                'error': 'Invalid JSON',
+                'message': 'Invalid request data format'
+            }, status=400)
+        
+        # Validate required fields
+        if not username:
+            return JsonResponse({
+                'error': 'Username required',
+                'message': 'Username is required'
+            }, status=400)
+        
+        if not password:
+            return JsonResponse({
+                'error': 'Password required',
+                'message': 'Password is required'
+            }, status=400)
+        
+        # Authenticate user
+        user = authenticate(username=username, password=password)
+        
+        if not user:
+            return JsonResponse({
+                'error': 'Invalid credentials',
+                'message': 'Invalid username or password'
+            }, status=401)
+        
+        # Check if user is a pharmacy user
+        if user.role != 'pharmacy':
+            return JsonResponse({
+                'error': 'Access denied',
+                'message': 'This login is only for pharmacy users'
+            }, status=403)
+        
+        # Check if user is active
+        if user.status != 'active':
+            return JsonResponse({
+                'error': 'Account inactive',
+                'message': 'Your account is not active. Please contact support.'
+            }, status=403)
+        
+        # Get pharmacy information
+        try:
+            pharmacy = Pharmacy.objects.get(user=user)
+        except Pharmacy.DoesNotExist:
+            return JsonResponse({
+                'error': 'Pharmacy not found',
+                'message': 'No pharmacy found for this user'
+            }, status=404)
+        
+        # Check if pharmacy is approved and verified
+        if pharmacy.status != 'approved' or not pharmacy.is_fully_verified:
+            return JsonResponse({
+                'error': 'Pharmacy not approved',
+                'message': 'Your pharmacy is not yet approved. Please wait for admin approval.'
+            }, status=403)
+        
+        # Log successful login
+        print(f"=== PHARMACY LOGIN SUCCESSFUL ===")
+        print(f"Username: {username}")
+        print(f"User ID: {user.id}")
+        print(f"Pharmacy ID: {pharmacy.id}")
+        print(f"Pharmacy Name: {pharmacy.pharmacy_name}")
+        print(f"Business Email: {pharmacy.business_email}")
+        print("=== END PHARMACY LOGIN ===")
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Login successful',
+            'user': {
+                'id': user.id,
+                'username': user.username,
+                'email': user.email,
+                'role': user.role,
+                'status': user.status,
+                'first_name': user.first_name,
+                'last_name': user.last_name
+            },
+            'pharmacy': {
+                'id': pharmacy.id,
+                'name': pharmacy.pharmacy_name,
+                'business_email': pharmacy.business_email,
+                'owner_first_name': pharmacy.owner_first_name,
+                'owner_last_name': pharmacy.owner_last_name,
+                'business_phone': pharmacy.business_phone,
+                'barangay': pharmacy.barangay,
+                'city': pharmacy.city,
+                'status': pharmacy.status,
+                'is_fully_verified': pharmacy.is_fully_verified
+            }
+        })
+        
+    except Exception as e:
+        print(f"ERROR in pharmacy_login: {e}")
+        return JsonResponse({
+            'error': 'Login failed',
+            'message': 'An error occurred during login. Please try again.'
+        }, status=500)
+
+
+@csrf_exempt
+def complete_user_setup(request, token):
+    """Complete user setup by storing username and password"""
+    if request.method != 'POST':
+        return JsonResponse({
+            'error': 'Method not allowed',
+            'message': 'Only POST requests are allowed'
+        }, status=405)
+    
+    try:
+        from api.users.models import TemporaryLoginToken, User, Pharmacy
+        from django.utils import timezone
+        from django.contrib.auth.hashers import make_password
+        import json
+        
+        # Get the token
+        login_token = TemporaryLoginToken.objects.get(token=token)
+        
+        # Check if token is valid
+        if not login_token.is_valid():
+            if login_token.is_expired():
+                return JsonResponse({
+                    'error': 'Token expired',
+                    'message': 'This login link has expired. Please contact support for a new link.'
+                }, status=400)
+            elif login_token.is_used:
+                return JsonResponse({
+                    'error': 'Token already used',
+                    'message': 'This login link has already been used. Please contact support for a new link.'
+                }, status=400)
+        
+        # Parse request data
+        try:
+            data = json.loads(request.body)
+            username = data.get('username', '').strip()
+            password = data.get('password', '').strip()
+        except json.JSONDecodeError:
+            return JsonResponse({
+                'error': 'Invalid JSON',
+                'message': 'Invalid request data format'
+            }, status=400)
+        
+        # Validate required fields
+        if not username:
+            return JsonResponse({
+                'error': 'Username required',
+                'message': 'Username is required'
+            }, status=400)
+        
+        if not password:
+            return JsonResponse({
+                'error': 'Password required',
+                'message': 'Password is required'
+            }, status=400)
+        
+        # Check if username already exists
+        if User.objects.filter(username=username).exists():
+            return JsonResponse({
+                'error': 'Username taken',
+                'message': 'This username is already taken. Please choose another one.'
+            }, status=400)
+        
+        # Validate password strength using the model's method
+        user = login_token.user
+        user.password = password  # Temporarily set for validation
+        
+        if not user._is_strong_password():
+            return JsonResponse({
+                'error': 'Weak password',
+                'message': 'Password must contain at least 8 characters, including uppercase, lowercase, numbers, and special characters.'
+            }, status=400)
+        
+        # Update user with username and password
+        user.username = username
+        user.set_password(password)  # This properly hashes the password
+        user.status = User.UserStatus.ACTIVE
+        user.is_email_verified = True  # Since they came through email verification
+        user.save()
+        
+        # Mark token as used
+        login_token.mark_as_used()
+        
+        # Get pharmacy information for response
+        try:
+            pharmacy = Pharmacy.objects.get(user=user)
+        except Pharmacy.DoesNotExist:
+            return JsonResponse({
+                'error': 'Pharmacy not found',
+                'message': 'No pharmacy found for this user'
+            }, status=404)
+        
+        # Log the successful setup
+        print(f"=== USER SETUP COMPLETED ===")
+        print(f"Token: {token}")
+        print(f"User ID: {user.id}")
+        print(f"Username: {username}")
+        print(f"Email: {user.email}")
+        print(f"Pharmacy ID: {pharmacy.id}")
+        print(f"Pharmacy Name: {pharmacy.pharmacy_name}")
+        print(f"Setup completed at: {timezone.now()}")
+        print("=== END USER SETUP ===")
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'User setup completed successfully',
+            'user': {
+                'id': user.id,
+                'username': username,
+                'email': user.email,
+                'role': user.role,
+                'status': user.status
+            },
+            'pharmacy': {
+                'id': pharmacy.id,
+                'name': pharmacy.pharmacy_name,
+                'business_email': pharmacy.business_email
+            }
+        })
+        
+    except TemporaryLoginToken.DoesNotExist:
+        print(f"ERROR: Token {token} not found")
+        return JsonResponse({
+            'error': 'Invalid token',
+            'message': 'This login link is invalid. Please check the link or contact support.'
+        }, status=404)
+    except Exception as e:
+        print(f"ERROR in complete_user_setup: {e}")
+        return JsonResponse({
+            'error': 'Failed to complete setup',
+            'message': 'An error occurred while completing the setup. Please try again.'
+        }, status=500)
+
+
+def direct_medicine_categories(request):
+    """Direct medicine categories endpoint that bypasses all authentication"""
+    try:
+        from api.inventory.models import MedicineCategory
+        
+        # Get all active categories
+        categories = MedicineCategory.objects.filter(is_active=True).order_by('name')
+        
+        categories_data = []
+        for category in categories:
+            category_data = {
+                'id': category.id,
+                'name': category.name,
+                'description': category.description,
+                'parent_category': category.parent_category.name if category.parent_category else None,
+                'icon': category.icon,
+                'color': category.color,
+                'sort_order': category.sort_order
+            }
+            categories_data.append(category_data)
+        
+        print(f"=== MEDICINE CATEGORIES REQUEST ===")
+        print(f"Found {len(categories_data)} categories")
+        print("=== END MEDICINE CATEGORIES REQUEST ===")
+        
+        return JsonResponse({
+            'success': True,
+            'count': len(categories_data),
+            'categories': categories_data
+        })
+        
+    except Exception as e:
+        print(f"ERROR in direct_medicine_categories: {e}")
+        return JsonResponse({
+            'success': False,
+            'error': 'Failed to fetch medicine categories',
+            'count': 0,
+            'categories': []
+        }, status=500)
+
+
+def direct_pharmacy_inventory(request, pharmacy_id):
+    """Direct pharmacy inventory endpoint that bypasses all authentication"""
+    try:
+        from api.inventory.models import PharmacyInventory, MedicineCategory
+        from api.users.models import Pharmacy
+        
+        # Get pharmacy
+        try:
+            pharmacy = Pharmacy.objects.get(id=pharmacy_id)
+        except Pharmacy.DoesNotExist:
+            return JsonResponse({
+                'error': 'Pharmacy not found',
+                'pharmacy_id': pharmacy_id
+            }, status=404)
+        
+        # Get all inventory items for this pharmacy
+        inventory_items = PharmacyInventory.objects.filter(
+            pharmacy=pharmacy
+        ).select_related('category', 'medicine').order_by('category__name', 'name')
+        
+        # Group by category
+        categories_data = {}
+        for item in inventory_items:
+            category_name = item.category.name if item.category else 'Uncategorized'
+            
+            if category_name not in categories_data:
+                categories_data[category_name] = {
+                    'category_name': category_name,
+                    'items': []
+                }
+            
+            # Build item data
+            item_data = {
+                'id': item.id,
+                'name': item.display_name,
+                'form': item.form,
+                'dosage': item.dosage,
+                'description': item.display_description,
+                'prescription_required': item.prescription_required,
+                'price': float(item.price),
+                'original_price': float(item.original_price) if item.original_price else None,
+                'cost_price': float(item.cost_price) if item.cost_price else None,
+                'stock_quantity': item.stock_quantity,
+                'min_stock_level': item.min_stock_level,
+                'max_stock_level': item.max_stock_level,
+                'is_available': item.is_available,
+                'is_featured': item.is_featured,
+                'is_on_sale': item.is_on_sale,
+                'discount_percentage': item.discount_percentage,
+                'manufacturer': item.manufacturer,
+                'batch_number': item.batch_number,
+                'expiry_date': item.expiry_date.isoformat() if item.expiry_date else None,
+                'is_custom_product': item.is_custom_product,
+                'is_from_catalog': item.is_from_catalog,
+                'created_at': item.created_at.isoformat(),
+                'updated_at': item.updated_at.isoformat()
+            }
+            
+            categories_data[category_name]['items'].append(item_data)
+        
+        # Convert to list format
+        categories_list = list(categories_data.values())
+        
+        # Calculate statistics
+        total_items = inventory_items.count()
+        available_items = inventory_items.filter(is_available=True).count()
+        out_of_stock_items = inventory_items.filter(stock_quantity=0).count()
+        from django.db import models
+        low_stock_items = inventory_items.filter(
+            stock_quantity__lte=models.F('min_stock_level'),
+            stock_quantity__gt=0
+        ).count()
+        
+        # Log the request
+        print(f"=== PHARMACY INVENTORY REQUEST ===")
+        print(f"Pharmacy: {pharmacy.pharmacy_name} (ID: {pharmacy_id})")
+        print(f"Total items: {total_items}")
+        print(f"Available items: {available_items}")
+        print(f"Out of stock: {out_of_stock_items}")
+        print(f"Low stock: {low_stock_items}")
+        print(f"Categories: {len(categories_list)}")
+        print("=== END PHARMACY INVENTORY REQUEST ===")
+        
+        return JsonResponse({
+            'success': True,
+            'pharmacy_id': pharmacy_id,
+            'pharmacy_name': pharmacy.pharmacy_name,
+            'total_items': total_items,
+            'available_items': available_items,
+            'out_of_stock_items': out_of_stock_items,
+            'low_stock_items': low_stock_items,
+            'categories': categories_list
+        })
+        
+    except Exception as e:
+        print(f"ERROR in direct_pharmacy_inventory: {e}")
+        return JsonResponse({
+            'success': False,
+            'error': 'Failed to fetch pharmacy inventory',
+            'pharmacy_id': pharmacy_id,
+            'categories': []
+        }, status=500)
+
+
+@csrf_exempt
+def toggle_inventory_availability(request, pharmacy_id, item_id):
+    """Toggle availability of a specific inventory item"""
+    try:
+        from api.inventory.models import PharmacyInventory
+        from api.users.models import Pharmacy
+        import json
+        
+        # Handle both GET and POST requests
+        if request.method not in ['GET', 'POST']:
+            return JsonResponse({
+                'success': False,
+                'error': 'Method not allowed'
+            }, status=405)
+        
+        # Get pharmacy
+        try:
+            pharmacy = Pharmacy.objects.get(id=pharmacy_id)
+        except Pharmacy.DoesNotExist:
+            return JsonResponse({
+                'success': False,
+                'error': 'Pharmacy not found',
+                'pharmacy_id': pharmacy_id
+            }, status=404)
+        
+        # Get inventory item
+        try:
+            inventory_item = PharmacyInventory.objects.get(
+                id=item_id,
+                pharmacy=pharmacy
+            )
+        except PharmacyInventory.DoesNotExist:
+            return JsonResponse({
+                'success': False,
+                'error': 'Inventory item not found',
+                'item_id': item_id
+            }, status=404)
+        
+        # Toggle availability
+        inventory_item.is_available = not inventory_item.is_available
+        inventory_item.save()
+        
+        # Log the toggle
+        print(f"=== TOGGLE AVAILABILITY ===")
+        print(f"Pharmacy: {pharmacy.pharmacy_name} (ID: {pharmacy_id})")
+        print(f"Item: {inventory_item.display_name} (ID: {item_id})")
+        print(f"New availability: {inventory_item.is_available}")
+        print("=== END TOGGLE AVAILABILITY ===")
+        
+        return JsonResponse({
+            'success': True,
+            'item_id': item_id,
+            'is_available': inventory_item.is_available,
+            'message': f'Item is now {"available" if inventory_item.is_available else "unavailable"}'
+        })
+        
+    except Exception as e:
+        print(f"ERROR in toggle_inventory_availability: {e}")
+        return JsonResponse({
+            'success': False,
+            'error': 'Failed to toggle item availability',
+            'item_id': item_id
+        }, status=500)
+
+
+@csrf_exempt
+def update_inventory_item(request, pharmacy_id, item_id):
+    """Update a specific inventory item"""
+    try:
+        from api.inventory.models import PharmacyInventory, MedicineCategory
+        from api.users.models import Pharmacy
+        import json
+        
+        # Handle both GET and POST requests
+        if request.method not in ['GET', 'POST', 'PUT']:
+            return JsonResponse({
+                'success': False,
+                'error': 'Method not allowed'
+            }, status=405)
+        
+        # Get pharmacy
+        try:
+            pharmacy = Pharmacy.objects.get(id=pharmacy_id)
+        except Pharmacy.DoesNotExist:
+            return JsonResponse({
+                'success': False,
+                'error': 'Pharmacy not found',
+                'pharmacy_id': pharmacy_id
+            }, status=404)
+        
+        # Get inventory item
+        try:
+            inventory_item = PharmacyInventory.objects.get(
+                id=item_id,
+                pharmacy=pharmacy
+            )
+        except PharmacyInventory.DoesNotExist:
+            return JsonResponse({
+                'success': False,
+                'error': 'Inventory item not found',
+                'item_id': item_id
+            }, status=404)
+        
+        if request.method == 'GET':
+            # Return current item data for editing
+            return JsonResponse({
+                'success': True,
+                'item': {
+                    'id': inventory_item.id,
+                    'name': inventory_item.display_name,
+                    'form': inventory_item.form,
+                    'dosage': inventory_item.dosage,
+                    'description': inventory_item.display_description,
+                    'prescription_required': inventory_item.prescription_required,
+                    'price': float(inventory_item.price),
+                    'original_price': float(inventory_item.original_price) if inventory_item.original_price else None,
+                    'cost_price': float(inventory_item.cost_price) if inventory_item.cost_price else None,
+                    'is_available': inventory_item.is_available,
+                    'is_featured': inventory_item.is_featured,
+                    'is_on_sale': inventory_item.is_on_sale,
+                    'discount_percentage': inventory_item.discount_percentage,
+                    'expiry_date': inventory_item.expiry_date.isoformat() if inventory_item.expiry_date else None
+                }
+            })
+        
+        # Handle POST/PUT for updates
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({
+                'success': False,
+                'error': 'Invalid JSON data'
+            }, status=400)
+        
+        # Update fields (handle empty strings gracefully)
+        if 'name' in data:
+            inventory_item.custom_name = data['name'] or ''
+        if 'form' in data:
+            inventory_item.form = data['form'] or ''
+        if 'dosage' in data:
+            inventory_item.dosage = data['dosage'] or ''
+        if 'description' in data:
+            inventory_item.custom_description = data['description'] or ''
+        if 'prescription_required' in data:
+            inventory_item.prescription_required = data['prescription_required']
+        if 'price' in data:
+            inventory_item.price = data['price'] or 0
+        if 'original_price' in data:
+            inventory_item.original_price = data['original_price'] or None
+        if 'cost_price' in data:
+            inventory_item.cost_price = data['cost_price'] or None
+        if 'is_available' in data:
+            inventory_item.is_available = data['is_available']
+        if 'is_featured' in data:
+            inventory_item.is_featured = data['is_featured']
+        if 'is_on_sale' in data:
+            inventory_item.is_on_sale = data['is_on_sale']
+        if 'discount_percentage' in data:
+            inventory_item.discount_percentage = data['discount_percentage'] or 0
+        if 'expiry_date' in data and data['expiry_date']:
+            from datetime import datetime
+            try:
+                inventory_item.expiry_date = datetime.fromisoformat(data['expiry_date'].replace('Z', '+00:00'))
+            except ValueError:
+                # Handle date format issues gracefully
+                inventory_item.expiry_date = None
+        
+        # Save the updated item
+        inventory_item.save()
+        
+        # Log the update
+        print(f"=== UPDATE INVENTORY ITEM ===")
+        print(f"Pharmacy: {pharmacy.pharmacy_name} (ID: {pharmacy_id})")
+        print(f"Item: {inventory_item.display_name} (ID: {item_id})")
+        print(f"Updated fields: {list(data.keys())}")
+        print("=== END UPDATE INVENTORY ITEM ===")
+        
+        return JsonResponse({
+            'success': True,
+            'item_id': item_id,
+            'message': 'Item updated successfully',
+            'item': {
+                'id': inventory_item.id,
+                'name': inventory_item.display_name,
+                'form': inventory_item.form,
+                'dosage': inventory_item.dosage,
+                'description': inventory_item.display_description,
+                'prescription_required': inventory_item.prescription_required,
+                'price': float(inventory_item.price),
+                'original_price': float(inventory_item.original_price) if inventory_item.original_price else None,
+                'cost_price': float(inventory_item.cost_price) if inventory_item.cost_price else None,
+                'is_available': inventory_item.is_available,
+                'is_featured': inventory_item.is_featured,
+                'is_on_sale': inventory_item.is_on_sale,
+                'discount_percentage': inventory_item.discount_percentage,
+                'expiry_date': inventory_item.expiry_date.isoformat() if inventory_item.expiry_date else None
+            }
+        })
+        
+    except Exception as e:
+        print(f"ERROR in update_inventory_item: {e}")
+        return JsonResponse({
+            'success': False,
+            'error': 'Failed to update inventory item',
+            'item_id': item_id
+        }, status=500)
+
+
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/test/', test_api),
@@ -506,6 +1540,15 @@ urlpatterns = [
     path('api/approve-pharmacy/<int:pharmacy_id>/', approve_pharmacy),  # Direct endpoint for approving pharmacy
     path('api/generate-login-token/<int:pharmacy_id>/', generate_login_token),  # Direct endpoint for generating login token
     path('api/validate-login-token/<str:token>/', validate_login_token),  # Direct endpoint for validating login token
+    path('api/complete-user-setup/<str:token>/', complete_user_setup),  # Direct endpoint for completing user setup
+    path('api/pharmacy-login/', pharmacy_login),  # Direct endpoint for pharmacy login
+    path('api/medicine-catalog/', direct_medicine_catalog),  # Direct endpoint for medicine catalog
+    path('api/add-medicines-to-inventory/', add_medicines_to_inventory),
+    path('api/add-custom-products-to-inventory/', add_custom_products_to_inventory),  # Direct endpoint for adding custom products to inventory
+    path('api/medicine-categories/', direct_medicine_categories),  # Direct endpoint for medicine categories
+    path('api/pharmacy-inventory/<int:pharmacy_id>/', direct_pharmacy_inventory),
+    path('api/toggle-availability/<int:pharmacy_id>/<int:item_id>/', toggle_inventory_availability),  # Direct endpoint for pharmacy inventory
+    path('api/update-inventory-item/<int:pharmacy_id>/<int:item_id>/', update_inventory_item),  # Direct endpoint for updating inventory items
     
     # Include API URLs at the correct path
     path('api/', include('api.urls')),
