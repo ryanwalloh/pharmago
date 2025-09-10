@@ -55,7 +55,7 @@ Once all services are running, you can access:
 - **Frontend**: http://localhost:3000
 - **Backend API**: http://localhost:8000
 - **Django Admin**: http://localhost:8000/admin (use your superuser credentials)
-- **pgAdmin**: http://localhost:5050 (admin@local.dev / admin123)
+- **pgAdmin**: http://localhost:8081 (admin@local.dev / admin123)
 - **Database**: localhost:5432
 
 ## 🔄 Git Workflow & Branching Strategy
