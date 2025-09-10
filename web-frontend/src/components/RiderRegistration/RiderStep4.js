@@ -4,53 +4,44 @@ import MinimalHeader from "../common/MinimalHeader";
 import LeftImage from "../common/LeftImage";
 import { useNavigate } from "react-router-dom";
 
-const RiderStep2 = ({}) => {
+const RiderStep1 = ({}) => {
   const navigate = useNavigate();
 
   const {
-    vehicleInfo,
-    updateVehicleInfo,
+    userAccount,
+    updateUserAccount,
     logRegistrationData,
     getAllRegistrationData,
   } = useRegistration();
 
   const [formData, setFormData] = useState({
-    vehicleType: vehicleInfo.vehicle_type || "Motorcycle",
-    vehicleBrand: vehicleInfo.vehicle_brand || "",
-    vehicleModel: vehicleInfo.vehicle_model || "",
-    vehicleColor: vehicleInfo.vehicle_color || "",
-    plateNumber: vehicleInfo.plate_number || "",
+    firstName: userAccount.first_name || "",
+    middleName: userAccount.middle_name || "",
+    lastName: userAccount.last_name || "",
+    dateOfBirth: userAccount.date_of_birth || "",
+    gender: userAccount.gender || "",
   });
 
   // Update form data when context data changes
   useEffect(() => {
     setFormData((prev) => ({
       ...prev,
-      vehicleType: vehicleInfo.vehicle_type || prev.vehicleType,
-      vehicleBrand: vehicleInfo.vehicle_brand || prev.vehicleBrand,
-      vehicleModel: vehicleInfo.vehicle_model || prev.vehicleModel,
-      vehicleColor: vehicleInfo.vehicle_color || prev.vehicleColor,
-      plateNumber: vehicleInfo.plate_number || prev.plateNumber,
+      firstName: userAccount.first_name || prev.firstName,
+      middleName: userAccount.middle_name || prev.middleName,
+      lastName: userAccount.last_name || prev.lastName,
+      dateOfBirth: userAccount.date_of_birth || prev.dateOfBirth,
+      gender: userAccount.gender || prev.gender,
     }));
-  }, [vehicleInfo]);
+  }, [userAccount]);
 
   // Handle input changes
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData((prev) => {
-      if (name === "vehicleType" && value === "Bicycle") {
-        return {
-          ...prev,
-          vehicleType: value,
-          plateNumber: "",
-        };
-      }
 
-      return {
-        ...prev,
-        [name]: value,
-      };
-    });
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
   };
 
   // Handle form submission
@@ -58,22 +49,22 @@ const RiderStep2 = ({}) => {
     e.preventDefault();
 
     // Update context with form data
-    updateVehicleInfo({
-      vehicle_type: formData.vehicleType,
-      vehicle_brand: formData.vehicleBrand,
-      vehicle_model: formData.vehicleModel,
-      vehicle_color: formData.vehicleColor,
-      plate_number: formData.plateNumber,
+    updateUserAccount({
+      first_name: formData.firstName,
+      middle_name: formData.middleName,
+      last_name: formData.lastName,
+      date_of_birth: formData.dateOfBirth,
+      gender: formData.gender,
     });
 
-    console.log("=== RIDER REGISTRATION STEP 2 SUBMITTED ===");
+    console.log("=== RIDER REGISTRATION STEP 4 SUBMITTED ===");
     console.log("Form Data:", formData);
-    console.log("Updated Vehicle Info:", {
-      vehicle_type: formData.vehicleType,
-      vehicle_brand: formData.vehicleBrand,
-      vehicle_model: formData.vehicleModel,
-      vehicle_color: formData.vehicleColor,
-      plate_number: formData.plateNumber,
+    console.log("Updated User Account:", {
+      first_name: formData.firstName,
+      middle_name: formData.middleName,
+      last_name: formData.lastName,
+      date_of_birth: formData.dateOfBirth,
+      gender: formData.gender,
     });
     console.log("All Registration Data:", getAllRegistrationData());
     console.log("===============================================");
@@ -81,47 +72,43 @@ const RiderStep2 = ({}) => {
     logRegistrationData();
 
     // Navigate to next step
-    navigate("/rider-registration/3");
+    navigate("/rider-registration/submission");
   };
 
   // Log the current registration data when component mounts
   useEffect(() => {
-    console.log("=== RIDER REGISTRATION STEP 2 MOUNTED ===");
-    console.log("Initial Vehicle Data:", vehicleInfo);
+    console.log("=== RIDER REGISTRATION STEP 4 MOUNTED ===");
+    console.log("Initial User Account Data:", userAccount);
     console.log("Current Form Data:", formData);
     console.log("All Registration Data:", getAllRegistrationData());
     console.log("=============================================");
     logRegistrationData();
-  }, [logRegistrationData, vehicleInfo, formData]);
+  }, [logRegistrationData, userAccount, formData]);
 
   // Form validation
   const isFormValid = () => {
     return (
-      formData.vehicleType.trim() !== "" &&
-      formData.vehicleBrand.trim() !== "" &&
-      formData.vehicleModel.trim() !== "" &&
-      formData.vehicleColor.trim() !== "" &&
-      (formData.vehicleType === "Motorcycle"
-        ? formData.plateNumber.trim() !== ""
-        : true)
+      formData.firstName.trim() !== "" &&
+      formData.middleName.trim() !== "" &&
+      formData.lastName.trim() !== "" &&
+      formData.dateOfBirth !== "" &&
+      formData.gender !== ""
     );
   };
 
   // Check if specific field is valid
   const isFieldValid = (fieldName) => {
     switch (fieldName) {
-      case "vehicleType":
-        return formData.vehicleType.trim() !== "";
-      case "vehicleBrand":
-        return formData.vehicleBrand.trim() !== "";
-      case "vehicleModel":
-        return formData.vehicleModel.trim() !== "";
-      case "vehicleColor":
-        return formData.vehicleColor.trim() !== "";
-      case "plateNumber":
-        return formData.vehicleType === "Motorcycle"
-          ? formData.plateNumber.trim() !== ""
-          : true;
+      case "firstName":
+        return formData.firstName.trim() !== "";
+      case "middleName":
+        return formData.middleName.trim() !== "";
+      case "lastName":
+        return formData.lastName.trim() !== "";
+      case "dateOfBirth":
+        return formData.dateOfBirth !== "";
+      case "gender":
+        return formData.gender !== "";
       default:
         return true;
     }
@@ -143,12 +130,11 @@ const RiderStep2 = ({}) => {
             <div className="flex flex-col absolute w-[22vw] justify-start items-start text-[#2c2c2c]">
               {/* Header */}
               <h1 className="text-3xl font-bold mb-6 leading-10 flex text-left justify-left text-[#2c2c2c]">
-                Tell us about your vehicle
+                Tell us more about yourself
               </h1>
               <p className="text-base mt-[-7px] text-[#8d8c8c] text-left leading-5 font-normal">
-                We need your vehicle details to verify your eligibility and
-                ensure accurate delivery assignments. Make sure the information
-                matches your official documents.
+                We need some additional information about the rider for
+                verification purposes.
               </p>
 
               {/* Form */}
@@ -157,169 +143,183 @@ const RiderStep2 = ({}) => {
                   className="w-[22vw] pb-5 pt-2.5 flex flex-col text-[#2c2c2c]"
                   onSubmit={handleSubmit}
                 >
-                  {/* Rider Vehicle Type */}
-                  <div className="relative my-2.5 z-10">
-                    {/* <input
-                      type="text"
-                      id="vehicleType"
-                      name="vehicleType"
-                      value={formData.vehicleType}
-                      onChange={handleInputChange}
-                      className={`peer w-full px-4 py-3 border-2 rounded-lg text-gray-700 placeholder-transparent focus:outline-none focus:ring-2 focus:ring-opacity-20 transition-all duration-200 ${
-                        isFieldValid("vehicleType")
-                          ? "border-[#D5E8D4] focus:border-[#6BBF9A] focus:ring-[#6BBF9A]"
-                          : "border-red-300 focus:border-red-500 focus:ring-red-500"
-                      }`}
-                      placeholder="Vehicle Type"
-                      required
-                    /> */}
-                    <label
-                      htmlFor="vehicleType"
-                      className={`absolute left-4 -top-2.5 bg-white px-2 text-sm transition-all duration-200 peer-placeholder-shown:text-base peer-placeholder-shown:text-gray-400 peer-placeholder-shown:top-3 peer-focus:-top-2.5 peer-focus:text-sm ${
-                        isFieldValid("vehicleType")
-                          ? "text-[#4DAF7C] peer-focus:text-[#6BBF9A]"
-                          : "text-red-500 peer-focus:text-red-500"
-                      }`}
-                    >
-                      Vehicle Type *
-                    </label>
-                    <select
-                      id="vehicleType"
-                      name="vehicleType"
-                      value={formData.vehicleType}
-                      onChange={handleInputChange}
-                      className="w-full px-4 py-3 border-2 rounded-lg text-gray-700 focus:outline-none focus:ring-2 focus:ring-opacity-20 focus:ring-[#6BBF9A] border-[#D5E8D4] transition-all duration-200"
-                      required
-                    >
-                      <option value="Motorcycle">Motorcycle</option>
-                      <option value="Bicycle">Bicycle</option>
-                    </select>
-                  </div>
-
-                  {/* Rider Vehicle Brand */}
+                  {/* Rider First Name */}
                   <div className="relative my-2.5 z-10">
                     <input
                       type="text"
-                      id="vehicleBrand"
-                      name="vehicleBrand"
-                      value={formData.vehicleBrand}
+                      id="firstName"
+                      name="firstName"
+                      value={formData.firstName}
                       onChange={handleInputChange}
                       className={`peer w-full px-4 py-3 border-2 rounded-lg text-gray-700 placeholder-transparent focus:outline-none focus:ring-2 focus:ring-opacity-20 transition-all duration-200 ${
-                        isFieldValid("vehicleBrand")
+                        isFieldValid("firstName")
                           ? "border-[#D5E8D4] focus:border-[#6BBF9A] focus:ring-[#6BBF9A]"
                           : "border-red-300 focus:border-red-500 focus:ring-red-500"
                       }`}
-                      placeholder="Vehicle Brand"
+                      placeholder="First Name"
                       required
                     />
                     <label
-                      htmlFor="vehicleBrand"
+                      htmlFor="firstName"
                       className={`absolute left-4 -top-2.5 bg-white px-2 text-sm transition-all duration-200 peer-placeholder-shown:text-base peer-placeholder-shown:text-gray-400 peer-placeholder-shown:top-3 peer-focus:-top-2.5 peer-focus:text-sm ${
-                        isFieldValid("vehicleBrand")
+                        isFieldValid("firstName")
                           ? "text-[#4DAF7C] peer-focus:text-[#6BBF9A]"
                           : "text-red-500 peer-focus:text-red-500"
                       }`}
                     >
-                      Vehicle Brand *
+                      First Name *
                     </label>
                   </div>
 
-                  {/* Rider Vehicle Model */}
+                  {/* Rider Middle Name */}
                   <div className="relative my-2.5 z-10">
                     <input
                       type="text"
-                      id="vehicleModel"
-                      name="vehicleModel"
-                      value={formData.vehicleModel}
+                      id="middleName"
+                      name="middleName"
+                      value={formData.middleName}
                       onChange={handleInputChange}
                       className={`peer w-full px-4 py-3 border-2 rounded-lg text-gray-700 placeholder-transparent focus:outline-none focus:ring-2 focus:ring-opacity-20 transition-all duration-200 ${
-                        isFieldValid("vehicleModel")
+                        isFieldValid("middleName")
                           ? "border-[#D5E8D4] focus:border-[#6BBF9A] focus:ring-[#6BBF9A]"
                           : "border-red-300 focus:border-red-500 focus:ring-red-500"
                       }`}
-                      placeholder="Vehicle Model"
+                      placeholder="Middle Name"
                       required
                     />
                     <label
-                      htmlFor="vehicleModel"
+                      htmlFor="middleName"
                       className={`absolute left-4 -top-2.5 bg-white px-2 text-sm transition-all duration-200 peer-placeholder-shown:text-base peer-placeholder-shown:text-gray-400 peer-placeholder-shown:top-3 peer-focus:-top-2.5 peer-focus:text-sm ${
-                        isFieldValid("vehicleModel")
+                        isFieldValid("middleName")
                           ? "text-[#4DAF7C] peer-focus:text-[#6BBF9A]"
                           : "text-red-500 peer-focus:text-red-500"
                       }`}
                     >
-                      Vehicle Model *
+                      Middle Name *
                     </label>
                   </div>
 
-                  {/* Rider Vehicle Color */}
+                  {/* Rider Last Name */}
                   <div className="relative my-2.5 z-10">
                     <input
                       type="text"
-                      id="vehicleColor"
-                      name="vehicleColor"
-                      value={formData.vehicleColor}
+                      id="lastName"
+                      name="lastName"
+                      value={formData.lastName}
                       onChange={handleInputChange}
                       className={`peer w-full px-4 py-3 border-2 rounded-lg text-gray-700 placeholder-transparent focus:outline-none focus:ring-2 focus:ring-opacity-20 transition-all duration-200 ${
-                        isFieldValid("vehicleColor")
+                        isFieldValid("lastName")
                           ? "border-[#D5E8D4] focus:border-[#6BBF9A] focus:ring-[#6BBF9A]"
                           : "border-red-300 focus:border-red-500 focus:ring-red-500"
                       }`}
-                      placeholder="Vehicle Color"
+                      placeholder="Last Name"
                       required
                     />
                     <label
-                      htmlFor="vehicleColor"
+                      htmlFor="lastName"
                       className={`absolute left-4 -top-2.5 bg-white px-2 text-sm transition-all duration-200 peer-placeholder-shown:text-base peer-placeholder-shown:text-gray-400 peer-placeholder-shown:top-3 peer-focus:-top-2.5 peer-focus:text-sm ${
-                        isFieldValid("vehicleColor")
+                        isFieldValid("lastName")
                           ? "text-[#4DAF7C] peer-focus:text-[#6BBF9A]"
                           : "text-red-500 peer-focus:text-red-500"
                       }`}
                     >
-                      Vehicle Color *
+                      Last Name *
                     </label>
                   </div>
 
-                  {/* Rider Plate Number */}
-                  {formData.vehicleType === "Motorcycle" && (
-                    <div className="relative my-2.5 z-10">
-                      <input
-                        type="text"
-                        id="plateNumber"
-                        name="plateNumber"
-                        value={formData.plateNumber}
-                        onChange={handleInputChange}
-                        className={`peer w-full px-4 py-3 border-2 rounded-lg text-gray-700 placeholder-transparent focus:outline-none focus:ring-2 focus:ring-opacity-20 transition-all duration-200 ${
-                          isFieldValid("plateNumber")
-                            ? "border-[#D5E8D4] focus:border-[#6BBF9A] focus:ring-[#6BBF9A]"
-                            : "border-red-300 focus:border-red-500 focus:ring-red-500"
-                        }`}
-                        placeholder="Plate Number"
-                        required
-                      />
+                  {/* Date of Birth */}
+                  <div className="relative my-2.5 z-10">
+                    <input
+                      type="date"
+                      id="dateOfBirth"
+                      name="dateOfBirth"
+                      value={formData.dateOfBirth}
+                      onChange={handleInputChange}
+                      className={`peer w-full px-4 py-3 border-2 rounded-lg text-gray-700 placeholder-transparent focus:outline-none focus:ring-2 focus:ring-opacity-20 transition-all duration-200 ${
+                        isFieldValid("dateOfBirth")
+                          ? "border-[#D5E8D4] focus:border-[#6BBF9A] focus:ring-[#6BBF9A]"
+                          : "border-red-300 focus:border-red-500 focus:ring-red-500"
+                      }`}
+                      required
+                    />
+                    <label
+                      htmlFor="dateOfBirth"
+                      className={`absolute left-4 -top-2.5 bg-white px-2 text-sm transition-all duration-200 peer-placeholder-shown:text-base peer-placeholder-shown:text-gray-400 peer-placeholder-shown:top-3 peer-focus:-top-2.5 peer-focus:text-sm ${
+                        isFieldValid("dateOfBirth")
+                          ? "text-[#4DAF7C] peer-focus:text-[#6BBF9A]"
+                          : "text-red-500 peer-focus:text-red-500"
+                      }`}
+                    >
+                      Date of Birth *
+                    </label>
+                  </div>
+
+                  {/* Gender */}
+                  <div className="relative my-2.5 z-10">
+                    <div
+                      className={`border-2 rounded-lg p-4 transition-all duration-200 ${
+                        isFieldValid("gender")
+                          ? "border-[#D5E8D4]"
+                          : "border-red-300"
+                      }`}
+                    >
                       <label
-                        htmlFor="plateNumber"
-                        className={`absolute left-4 -top-2.5 bg-white px-2 text-sm transition-all duration-200 peer-placeholder-shown:text-base peer-placeholder-shown:text-gray-400 peer-placeholder-shown:top-3 peer-focus:-top-2.5 peer-focus:text-sm ${
-                          isFieldValid("plateNumber")
-                            ? "text-[#4DAF7C] peer-focus:text-[#6BBF9A]"
-                            : "text-red-500 peer-focus:text-red-500"
+                        className={`block text-sm mb-3 font-medium ${
+                          isFieldValid("gender")
+                            ? "text-[#4DAF7C]"
+                            : "text-red-500"
                         }`}
                       >
-                        Plate Number *
+                        Gender *
                       </label>
+                      <div className="space-y-2">
+                        <label className="flex items-center">
+                          <input
+                            type="radio"
+                            name="gender"
+                            value="male"
+                            checked={formData.gender === "male"}
+                            onChange={handleInputChange}
+                            className="h-4 w-4 text-[#6BBF9A] border-[#D5E8D4] focus:ring-[#6BBF9A] focus:ring-2"
+                          />
+                          <span className="ml-2 text-gray-700">Male</span>
+                        </label>
+                        <label className="flex items-center">
+                          <input
+                            type="radio"
+                            name="gender"
+                            value="female"
+                            checked={formData.gender === "female"}
+                            onChange={handleInputChange}
+                            className="h-4 w-4 text-[#6BBF9A] border-[#D5E8D4] focus:ring-[#6BBF9A] focus:ring-2"
+                          />
+                          <span className="ml-2 text-gray-700">Female</span>
+                        </label>
+                        <label className="flex items-center">
+                          <input
+                            type="radio"
+                            name="gender"
+                            value="other"
+                            checked={formData.gender === "other"}
+                            onChange={handleInputChange}
+                            className="h-4 w-4 text-[#6BBF9A] border-[#D5E8D4] focus:ring-[#6BBF9A] focus:ring-2"
+                          />
+                          <span className="ml-2 text-gray-700">Other</span>
+                        </label>
+                      </div>
                     </div>
-                  )}
+                  </div>
 
                   {/* Progress Bar */}
                   <div className="flex flex-row justify-between items-center fixed right-0 bottom-20 w-[50vw] h-1.5 bg-[#c2bdbd] z-30">
-                    <div className="w-[40%] h-1.5 bg-[#004445]"></div>
+                    <div className="w-[83%] h-1.5 bg-[#004445]"></div>
                   </div>
 
                   {/* Footer */}
                   <div className="flex flex-row justify-between items-center w-[48vw] fixed right-2.5 bottom-0 p-5 z-10 gap-2.5">
                     <button
                       type="button"
-                      onClick={() => navigate("/rider-registration")}
+                      onClick={() => navigate("/rider-registration/3")}
                       className="text-base bg-white text-[#2c786c] border-none py-1.5 px-5 font-bold rounded hover:bg-gray-100 transition-colors"
                     >
                       Back
@@ -348,4 +348,4 @@ const RiderStep2 = ({}) => {
   );
 };
 
-export default RiderStep2;
+export default RiderStep1;
