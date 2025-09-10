@@ -5,6 +5,8 @@ import LeftImage from "../common/LeftImage";
 import { useNavigate } from "react-router-dom";
 
 const RiderStep1 = ({}) => {
+  const navigate = useNavigate();
+
   const {
     userAccount,
     updateUserAccount,
@@ -68,8 +70,8 @@ const RiderStep1 = ({}) => {
 
     logRegistrationData();
 
-    // Move to next step
-    // nextStep();
+    // Navigate to next step
+    navigate("/rider-registration-2");
   };
 
   // Log the current registration data when component mounts
@@ -289,6 +291,7 @@ const RiderStep1 = ({}) => {
                   <div className="flex flex-row justify-between items-center w-[48vw] fixed right-2.5 bottom-0 p-5 z-10 gap-2.5">
                     <button
                       type="button"
+                      onClick={() => navigate("/")}
                       className="text-base bg-white text-[#2c786c] border-none py-1.5 px-5 font-bold rounded hover:bg-gray-100 transition-colors"
                     >
                       Back
