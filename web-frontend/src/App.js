@@ -12,6 +12,13 @@ import AdminLogin from "./components/AdminLogin";
 import AdminDashboard from "./components/AdminDashboard";
 import ProtectedRoute from "./components/ProtectedRoute";
 import InitialLogin from "./components/InitialLogin";
+import { RiderRegistrationProvider } from "./contexts/RiderRegistrationContext";
+import RiderStep1 from "./components/RiderRegistration/RiderStep1";
+import RiderStep2 from "./components/RiderRegistration/RiderStep2";
+import RiderStep3 from "./components/RiderRegistration/RiderStep3";
+import RiderStep4 from "./components/RiderRegistration/RiderStep4";
+import Submission from "./components/RiderRegistration/Submission";
+import Success from "./components/RiderRegistration/Success";
 
 function App() {
   return (
