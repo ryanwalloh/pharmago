@@ -25,4 +25,4 @@ const MinimalHeader = () => {
   );
 };
 
-export default RegistrationHeader;
+export default MinimalHeader;

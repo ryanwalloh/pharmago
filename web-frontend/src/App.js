@@ -9,11 +9,12 @@ import PharmacyRegistration3 from "./components/PharmacyRegistration3";
 import PharmacyRegistration4 from "./components/PharmacyRegistration4";
 import PharmacyRegistration5 from "./components/PharmacyRegistration5";
 import PharmacyRegistrationSubmission from "./components/PharmacyRegistrationSubmission";
-import RiderRegistration from "./components/RiderRegistration/RiderRegistration";
+import RiderStep1 from "./components/RiderRegistration/RiderStep1";
 import AdminLogin from "./components/AdminLogin";
 import AdminDashboard from "./components/AdminDashboard";
 import ProtectedRoute from "./components/ProtectedRoute";
 import InitialLogin from "./components/InitialLogin";
+import RiderStep2 from "./components/RiderRegistration/RiderStep2";
 
 function App() {
   return (
@@ -72,7 +73,16 @@ function App() {
             path="/rider-registration"
             element={
               <RiderRegistrationProvider>
-                <RiderRegistration />
+                <RiderStep1 />
+              </RiderRegistrationProvider>
+            }
+          />
+
+          <Route
+            path="/rider-registration-2"
+            element={
+              <RiderRegistrationProvider>
+                <RiderStep2 />
               </RiderRegistrationProvider>
             }
           />
