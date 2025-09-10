@@ -14,15 +14,6 @@ const RiderStep1 = ({}) => {
     getAllRegistrationData,
   } = useRegistration();
 
-  // Handle input changes
-  const handleInputChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: type === "checkbox" ? checked : value,
-    }));
-  };
-
   const [formData, setFormData] = useState({
     firstName: userAccount.first_name || "",
     middleName: userAccount.middle_name || "",
@@ -42,6 +33,16 @@ const RiderStep1 = ({}) => {
       mobileNumber: userAccount.phone || prev.mobileNumber,
     }));
   }, [userAccount]);
+
+  // Handle input changes
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
 
   // Handle form submission
   const handleSubmit = (e) => {
@@ -71,12 +72,12 @@ const RiderStep1 = ({}) => {
     logRegistrationData();
 
     // Navigate to next step
-    navigate("/rider-registration-2");
+    navigate("/rider-registration/2");
   };
 
   // Log the current registration data when component mounts
   useEffect(() => {
-    console.log("=== PHARMACY REGISTRATION STEP 1 MOUNTED ===");
+    console.log("=== RIDER REGISTRATION STEP 1 MOUNTED ===");
     console.log("Initial User Account Data:", userAccount);
     console.log("Current Form Data:", formData);
     console.log("All Registration Data:", getAllRegistrationData());
@@ -91,7 +92,7 @@ const RiderStep1 = ({}) => {
       formData.middleName.trim() !== "" &&
       formData.lastName.trim() !== "" &&
       formData.email.trim() !== "" &&
-      formData.mobileNumber.trim()
+      formData.mobileNumber.trim() !== ""
     );
   };
 
@@ -299,7 +300,7 @@ const RiderStep1 = ({}) => {
                     <p className="text-gray-500">4 step(s) to complete</p>
                     <button
                       type="submit"
-                      onClick={handleSubmit}
+                      // onClick={handleSubmit}
                       disabled={!isFormValid()}
                       className={`text-base border-none py-1.5 px-5 font-bold rounded transition-colors ${
                         isFormValid()
