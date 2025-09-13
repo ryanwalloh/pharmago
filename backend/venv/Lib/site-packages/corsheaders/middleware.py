@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Awaitable
+from typing import Awaitable
 from typing import Callable
 from urllib.parse import SplitResult
 from urllib.parse import urlsplit
