@@ -2,6 +2,97 @@
 
 A full-stack medicine delivery platform built with Django backend, React frontend, and PostgreSQL database, all containerized with Docker. Think of it as "Foodpanda for Medicine" - connecting customers with pharmacies through rider delivery services.
 
+---
+
+## 🆕 **Updated Development Environment (Hybrid Setup)**
+
+### **Quick Start - New Hybrid Development**
+
+We've implemented a **hybrid development approach** that solves Windows Docker volume mounting issues while providing fast development cycles:
+
+**🚀 One-Click Full Stack Startup:**
+```bash
+# Double-click or run:
+start-full-stack.bat
+```
+
+This will automatically start:
+- ✅ **Docker Services**: PostgreSQL (port 5433), Redis (port 6379), pgAdmin (port 8082)
+- ✅ **Django Backend**: Runs locally on port 8000 with instant code reloading
+- ✅ **React Frontend**: Runs locally on port 3000 with hot reloading
+- ✅ **Expo Mobile App**: Runs locally on port 8081 with live reloading
+
+### **Available Startup Scripts**
+
+| Script | Purpose | What It Starts |
+|--------|---------|----------------|
+| `start-full-stack.bat` | **Complete development environment** | Docker + Django + React + Expo |
+| `start-services.bat` | **Docker services only** | PostgreSQL + Redis + pgAdmin |
+| `stop-services.bat` | **Clean shutdown** | Stops all Docker containers |
+| `dev-helper.bat` | **Development helper menu** | Interactive menu for common tasks |
+
+### **Service URLs (After Starting)**
+
+| Service | URL | Credentials |
+|---------|-----|-------------|
+| 📊 **pgAdmin** | http://localhost:8082 | admin@local.dev / admin123 |
+| 🐘 **PostgreSQL** | localhost:5433 | superpharmago / pharmagoldenkey |
+| 🔴 **Redis** | localhost:6379 | No auth required |
+| 🐍 **Django API** | http://localhost:8000 | Create superuser with `python manage.py createsuperuser` |
+| ⚛️ **React App** | http://localhost:3000 | No auth required |
+| 📱 **Expo Mobile** | http://localhost:8081 | Scan QR code with Expo Go app |
+
+### **Hybrid Development Benefits**
+
+- ✅ **No Docker volume mounting issues** on Windows
+- ✅ **Instant code reloading** for Django and React
+- ✅ **Direct IDE debugging** without container complexity
+- ✅ **Fast development cycle** with local applications
+- ✅ **Production compatibility** maintained with Docker
+
+### **Development Helper Menu**
+
+Run `dev-helper.bat` for an interactive menu with:
+- Django management commands (migrate, superuser, tests, etc.)
+- Database operations (backup, restore, reset)
+- Service monitoring and logs
+- Quick access to all services
+
+### **Environment Configuration**
+
+The hybrid setup uses these configurations:
+
+**Backend `.env` (Fixed IPv4 connections):**
+```env
+DB_HOST=127.0.0.1
+DB_PORT=5433
+REDIS_URL=redis://127.0.0.1:6379/1
+```
+
+**Frontend `.env`:**
+```env
+REACT_APP_API_URL=http://localhost:8000/api/v1
+REACT_APP_BACKEND_URL=http://localhost:8000
+```
+
+### **Troubleshooting**
+
+**Database Connection Issues:**
+- ✅ Fixed: Changed from `localhost` to `127.0.0.1` to avoid IPv6 connection problems
+- ✅ Fixed: PostgreSQL runs on port 5433 to avoid conflicts with local PostgreSQL
+
+**Redis Connection Issues:**
+- ✅ Fixed: Updated Redis configuration to use IPv4 addresses
+- ✅ Fixed: Proper session and cache configuration
+
+**Windows Docker Issues:**
+- ✅ Solved: Hybrid approach eliminates volume mounting problems
+- ✅ Solved: Services run in Docker, applications run locally
+
+---
+
+## 📖 **Original Documentation (Below)**
+
 ## 🏥 Platform Overview
 
 **Pharmago** is a comprehensive medicine delivery system that includes:

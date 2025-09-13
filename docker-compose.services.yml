@@ -1,0 +1,78 @@
+# Docker Compose for Services Only (Hybrid Development)
+# This file runs only PostgreSQL, Redis, and pgAdmin containers
+# Backend and Frontend run locally to avoid Windows Docker volume mounting issues
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: pharmago_postgres
+    environment:
+      POSTGRES_DB: pharmago
+      POSTGRES_USER: superpharmago
+      POSTGRES_PASSWORD: pharmagoldenkey
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U superpharmago -d pharmago"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: pharmago_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Optional: pgAdmin UI for database management
+  pgadmin:
+    image: dpage/pgadmin4:8
+    container_name: pharmago_pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@local.dev
+      PGADMIN_DEFAULT_PASSWORD: admin123
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: 'False'
+      PGADMIN_CONFIG_ENHANCED_COOKIE_PROTECTION: 'False'
+      PGADMIN_CONFIG_LOGIN_BANNER: 'False'
+      PGADMIN_CONFIG_CONSOLE_LOG_LEVEL: '10'
+      PGADMIN_CONFIG_WTF_CSRF_ENABLED: 'False'
+      PGADMIN_CONFIG_SESSION_COOKIE_SECURE: 'False'
+    ports:
+      - "8082:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+
+volumes:
+  pgdata:
+    driver: local
+  pgadmin_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  default:
+    name: pharmago_dev_network

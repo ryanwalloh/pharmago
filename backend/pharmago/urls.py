@@ -924,6 +924,155 @@ def add_custom_products_to_inventory(request):
 
 
 @csrf_exempt
+def direct_user_registration(request):
+    """Direct user registration endpoint that bypasses all authentication"""
+    if request.method != 'POST':
+        return JsonResponse({
+            'error': 'Method not allowed',
+            'message': 'Only POST requests are allowed'
+        }, status=405)
+    
+    try:
+        from api.users.models import User
+        import json
+        
+        # Parse request data
+        try:
+            data = json.loads(request.body)
+            username = data.get('username', '').strip()
+            first_name = data.get('first_name', '').strip()
+            last_name = data.get('last_name', '').strip()
+            phone = data.get('phone', '').strip()
+            email = data.get('email', '').strip()
+            password = data.get('password', '').strip()
+            password_confirm = data.get('password_confirm', '').strip()
+            role = data.get('role', 'customer').strip()
+        except json.JSONDecodeError:
+            return JsonResponse({
+                'error': 'Invalid JSON',
+                'message': 'Invalid request data format'
+            }, status=400)
+        
+        # Validate required fields
+        if not username:
+            return JsonResponse({
+                'error': 'Username required',
+                'message': 'Username is required'
+            }, status=400)
+        
+        if not first_name:
+            return JsonResponse({
+                'error': 'First name required',
+                'message': 'First name is required'
+            }, status=400)
+        
+        if not last_name:
+            return JsonResponse({
+                'error': 'Last name required',
+                'message': 'Last name is required'
+            }, status=400)
+        
+        if not phone:
+            return JsonResponse({
+                'error': 'Phone number required',
+                'message': 'Phone number is required'
+            }, status=400)
+        
+        if not email:
+            return JsonResponse({
+                'error': 'Email required',
+                'message': 'Email is required'
+            }, status=400)
+        
+        if not password:
+            return JsonResponse({
+                'error': 'Password required',
+                'message': 'Password is required'
+            }, status=400)
+        
+        if not password_confirm:
+            return JsonResponse({
+                'error': 'Password confirmation required',
+                'message': 'Password confirmation is required'
+            }, status=400)
+        
+        # Validate password match
+        if password != password_confirm:
+            return JsonResponse({
+                'error': 'Password mismatch',
+                'message': 'Passwords do not match'
+            }, status=400)
+        
+        # Check if username already exists
+        if User.objects.filter(username=username).exists():
+            return JsonResponse({
+                'error': 'Username taken',
+                'message': 'This username is already taken. Please choose another one.'
+            }, status=400)
+        
+        # Check if email already exists
+        if User.objects.filter(email=email).exists():
+            return JsonResponse({
+                'error': 'Email taken',
+                'message': 'This email is already registered. Please use a different email.'
+            }, status=400)
+        
+        # Create user using the model's create_user method
+        try:
+            user = User.objects.create_user(
+                username=username,
+                email=email,
+                password=password,
+                first_name=first_name,
+                last_name=last_name,
+                phone_number=phone,  # Note: model expects phone_number, not phone
+                role=role,
+                is_staff=False,  # Set to False as requested
+                status='active'  # Set to active by default
+            )
+            
+            # Log successful registration
+            print(f"=== USER REGISTRATION SUCCESSFUL ===")
+            print(f"Username: {username}")
+            print(f"Email: {email}")
+            print(f"Name: {first_name} {last_name}")
+            print(f"Phone: {phone}")
+            print(f"Role: {role}")
+            print(f"User ID: {user.id}")
+            print("=== END USER REGISTRATION ===")
+            
+            return JsonResponse({
+                'success': True,
+                'message': 'User registered successfully',
+                'user': {
+                    'id': user.id,
+                    'username': user.username,
+                    'email': user.email,
+                    'first_name': user.first_name,
+                    'last_name': user.last_name,
+                    'phone_number': user.phone_number,
+                    'role': user.role,
+                    'is_staff': user.is_staff,
+                    'status': user.status
+                }
+            })
+            
+        except Exception as e:
+            print(f"ERROR creating user: {e}")
+            return JsonResponse({
+                'error': 'Registration failed',
+                'message': 'Failed to create user account. Please try again.'
+            }, status=500)
+        
+    except Exception as e:
+        print(f"ERROR in direct_user_registration: {e}")
+        return JsonResponse({
+            'error': 'Registration failed',
+            'message': 'An error occurred during registration. Please try again.'
+        }, status=500)
+
+
+@csrf_exempt
 def pharmacy_login(request):
     """Direct pharmacy login endpoint that bypasses all authentication"""
     if request.method != 'POST':
@@ -1541,6 +1690,7 @@ urlpatterns = [
     path('api/generate-login-token/<int:pharmacy_id>/', generate_login_token),  # Direct endpoint for generating login token
     path('api/validate-login-token/<str:token>/', validate_login_token),  # Direct endpoint for validating login token
     path('api/complete-user-setup/<str:token>/', complete_user_setup),  # Direct endpoint for completing user setup
+    path('api/user-register/', direct_user_registration),  # Direct endpoint for user registration
     path('api/pharmacy-login/', pharmacy_login),  # Direct endpoint for pharmacy login
     path('api/medicine-catalog/', direct_medicine_catalog),  # Direct endpoint for medicine catalog
     path('api/add-medicines-to-inventory/', add_medicines_to_inventory),
