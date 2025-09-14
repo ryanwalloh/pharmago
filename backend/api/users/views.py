@@ -82,13 +82,8 @@ class UserViewSet(viewsets.ModelViewSet):
                 with transaction.atomic():
                     user = serializer.save()
                     
-                    # Create role-specific profile if needed
-                    if user.role == User.UserRole.CUSTOMER:
-                        Customer.objects.create(user=user)
-                    elif user.role == User.UserRole.PHARMACY:
-                        Customer.objects.create(user=user)  # All users get customer profile
-                    elif user.role == User.UserRole.RIDER:
-                        Customer.objects.create(user=user)  # All users get customer profile
+                    # Customer profile is automatically created by signal handler
+                    # No need to manually create profiles here
                     
                     # Generate tokens
                     # refresh = RefreshToken.for_user(user)
