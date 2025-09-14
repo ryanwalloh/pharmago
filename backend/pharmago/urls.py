@@ -926,7 +926,13 @@ def add_custom_products_to_inventory(request):
 @csrf_exempt
 def direct_user_registration(request):
     """Direct user registration endpoint that bypasses all authentication"""
+    print(f"=== DIRECT USER REGISTRATION REQUEST ===")
+    print(f"Method: {request.method}")
+    print(f"Content-Type: {request.content_type}")
+    print(f"Body: {request.body}")
+    
     if request.method != 'POST':
+        print("❌ Method not allowed")
         return JsonResponse({
             'error': 'Method not allowed',
             'message': 'Only POST requests are allowed'
@@ -939,6 +945,7 @@ def direct_user_registration(request):
         # Parse request data
         try:
             data = json.loads(request.body)
+            print(f"Parsed data: {data}")
             username = data.get('username', '').strip()
             first_name = data.get('first_name', '').strip()
             last_name = data.get('last_name', '').strip()
@@ -947,7 +954,9 @@ def direct_user_registration(request):
             password = data.get('password', '').strip()
             password_confirm = data.get('password_confirm', '').strip()
             role = data.get('role', 'customer').strip()
-        except json.JSONDecodeError:
+            print(f"Extracted fields - username: {username}, email: {email}, phone: {phone}")
+        except json.JSONDecodeError as e:
+            print(f"❌ JSON decode error: {e}")
             return JsonResponse({
                 'error': 'Invalid JSON',
                 'message': 'Invalid request data format'
@@ -1019,6 +1028,14 @@ def direct_user_registration(request):
         
         # Create user using the model's create_user method
         try:
+            print(f"Creating user with data:")
+            print(f"  username: {username}")
+            print(f"  email: {email}")
+            print(f"  first_name: {first_name}")
+            print(f"  last_name: {last_name}")
+            print(f"  phone_number: {phone}")
+            print(f"  role: {role}")
+            
             user = User.objects.create_user(
                 username=username,
                 email=email,
@@ -1030,6 +1047,7 @@ def direct_user_registration(request):
                 is_staff=False,  # Set to False as requested
                 status='active'  # Set to active by default
             )
+            print(f"✅ User created successfully with ID: {user.id}")
             
             # Log successful registration
             print(f"=== USER REGISTRATION SUCCESSFUL ===")
@@ -1058,10 +1076,13 @@ def direct_user_registration(request):
             })
             
         except Exception as e:
-            print(f"ERROR creating user: {e}")
+            print(f"❌ ERROR creating user: {e}")
+            print(f"Error type: {type(e)}")
+            import traceback
+            print(f"Traceback: {traceback.format_exc()}")
             return JsonResponse({
                 'error': 'Registration failed',
-                'message': 'Failed to create user account. Please try again.'
+                'message': f'Failed to create user account: {str(e)}'
             }, status=500)
         
     except Exception as e:

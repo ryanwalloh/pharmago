@@ -54,12 +54,13 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
     """Serializer for user registration"""
     password = serializers.CharField(write_only=True, validators=[validate_password])
     password_confirm = serializers.CharField(write_only=True)
+    phone = serializers.CharField(source='phone_number')  # Map 'phone' to 'phone_number'
     
     class Meta:
         model = User
         fields = [
             'username', 'email', 'password', 'password_confirm', 'first_name',
-            'last_name', 'middle_name', 'phone', 'date_of_birth', 'gender', 'role'
+            'last_name', 'phone', 'role'
         ]
         extra_kwargs = {
             'username': {'required': True},
@@ -75,7 +76,19 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
     
     def create(self, validated_data):
         validated_data.pop('password_confirm')
-        user = User.objects.create_user(**validated_data)
+        
+        # Extract the specific parameters that create_user expects
+        email = validated_data.pop('email', None)
+        phone_number = validated_data.pop('phone_number', None)
+        password = validated_data.pop('password', None)
+        
+        # Pass the remaining fields as extra_fields
+        user = User.objects.create_user(
+            email=email,
+            phone_number=phone_number,
+            password=password,
+            **validated_data
+        )
         return user
 
 
