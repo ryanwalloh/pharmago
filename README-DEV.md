@@ -450,6 +450,13 @@ If you're currently using the full Docker setup and want to switch to hybrid:
 ✅ **Production Ready:** Original Docker setup preserved for deployment  
 ✅ **Team Friendly:** Standard development workflow  
 
+## 📚 Additional Documentation
+
+- [Mobile App Database Access Patterns](docs/mobile_app_database_access_patterns.md) - Complete guide for mobile app development and database access patterns
+- [Database Access Pattern Guide](docs/database_access_pattern_guide.md) - General database access patterns
+- [Django Apps Architecture](docs/django_apps_architecture.md) - Django application architecture overview
+- [Terminal Commands Guide](docs/terminal_commands_guide.md) - Useful terminal commands for development
+
 ## 🆘 Support
 
 If you encounter issues:
