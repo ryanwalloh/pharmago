@@ -1350,11 +1350,23 @@ from django.dispatch import receiver
 def create_user_profile(sender, instance, created, **kwargs):
     """
     Automatically create profile when user is created.
+    All users get a Customer profile for basic functionality.
     """
     if created:
+        # Set customer status to active upon registration
         if instance.role == User.UserRole.CUSTOMER:
-            Customer.objects.create(user=instance)
-        elif instance.role == User.UserRole.PHARMACY:
+            instance.status = User.UserStatus.ACTIVE
+            instance.save(update_fields=['status'])
+        
+        # All users get a Customer profile for basic functionality
+        Customer.objects.create(
+            user=instance,
+            first_name=instance.first_name or '',
+            last_name=instance.last_name or ''
+        )
+        
+        # Create role-specific profiles
+        if instance.role == User.UserRole.PHARMACY:
             Pharmacy.objects.create(user=instance)
         elif instance.role == User.UserRole.RIDER:
             Rider.objects.create(user=instance)
