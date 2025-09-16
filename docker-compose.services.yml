@@ -11,7 +11,7 @@ services:
       POSTGRES_USER: superpharmago
       POSTGRES_PASSWORD: pharmagoldenkey
     ports:
-      - "5433:5432"
+      - "5434:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
