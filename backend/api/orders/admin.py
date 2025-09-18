@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.utils.html import format_html
 from django.urls import reverse
 from django.utils.safestring import mark_safe
-from .models import Order, OrderLine
+from .models import Order, OrderLine, OrderChatMessage
 
 
 class OrderLineInline(admin.TabularInline):
@@ -55,6 +55,9 @@ class OrderAdmin(admin.ModelAdmin):
         }),
         ('Order Details', {
             'fields': ('source', 'notes')
+        }),
+        ('Prescription Information', {
+            'fields': ('prescription_image_url', 'prescription_status', 'prescription_notes')
         }),
         ('Timestamps', {
             'fields': ('created_at', 'updated_at'),
@@ -209,4 +212,70 @@ class OrderLineAdmin(admin.ModelAdmin):
         """Optimize queries."""
         return super().get_queryset(request).select_related(
             'order', 'inventory_item', 'inventory_item__pharmacy'
+        )
+
+
+@admin.register(OrderChatMessage)
+class OrderChatMessageAdmin(admin.ModelAdmin):
+    """Admin interface for Order Chat Messages."""
+    
+    list_display = [
+        'order_number', 'sender_name', 'sender_role', 'message_type', 
+        'message_preview', 'is_read', 'created_at'
+    ]
+    list_filter = [
+        'message_type', 'is_read', 'created_at'
+    ]
+    search_fields = [
+        'order__order_number', 'sender__email', 'sender__phone_number', 
+        'message', 'sender__customer_profile__first_name',
+        'sender__pharmacy_profile__pharmacy_name',
+        'sender__rider_profile__first_name'
+    ]
+    readonly_fields = ['created_at', 'updated_at', 'read_at']
+    ordering = ['-created_at']
+    
+    fieldsets = (
+        ('Message Information', {
+            'fields': ('order', 'sender', 'message_type')
+        }),
+        ('Message Content', {
+            'fields': ('message', 'image_url')
+        }),
+        ('Read Status', {
+            'fields': ('is_read', 'read_at')
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def order_number(self, obj):
+        """Display order number."""
+        return obj.order.order_number
+    order_number.short_description = 'Order Number'
+    
+    def sender_name(self, obj):
+        """Display sender's name."""
+        return obj.sender_name
+    sender_name.short_description = 'Sender'
+    
+    def sender_role(self, obj):
+        """Display sender's role."""
+        return obj.sender_role
+    sender_role.short_description = 'Role'
+    
+    def message_preview(self, obj):
+        """Display message preview."""
+        if len(obj.message) > 50:
+            return f"{obj.message[:50]}..."
+        return obj.message
+    message_preview.short_description = 'Message Preview'
+    
+    def get_queryset(self, request):
+        """Optimize queries."""
+        return super().get_queryset(request).select_related(
+            'order', 'sender', 'sender__customer_profile',
+            'sender__pharmacy_profile', 'sender__rider_profile'
         )

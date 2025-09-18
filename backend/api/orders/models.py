@@ -172,6 +172,30 @@ class Order(models.Model):
         help_text=_('Additional order notes')
     )
     
+    # Prescription information
+    prescription_image_url = models.URLField(
+        blank=True,
+        null=True,
+        help_text=_('URL of uploaded prescription image')
+    )
+    
+    prescription_status = models.CharField(
+        max_length=50,
+        choices=[
+            ('pending', _('Pending Review')),
+            ('approved', _('Approved')),
+            ('rejected', _('Rejected')),
+        ],
+        default='pending',
+        help_text=_('Prescription verification status')
+    )
+    
+    prescription_notes = models.TextField(
+        blank=True,
+        null=True,
+        help_text=_('Pharmacist notes about prescription')
+    )
+    
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -729,6 +753,122 @@ class OrderLine(models.Model):
         if self.quantity > self.inventory_item.stock_quantity:
             raise ValidationError(
                 _('Insufficient stock available.')
+            )
+        
+        super().clean()
+
+
+class OrderChatMessage(models.Model):
+    """
+    Real-time chat messages between customers and pharmacists for order communication.
+    Supports text, image, and system messages.
+    """
+    
+    class MessageType(models.TextChoices):
+        TEXT = 'text', _('Text Message')
+        IMAGE = 'image', _('Image Message')
+        SYSTEM = 'system', _('System Message')
+    
+    order = models.ForeignKey(
+        Order,
+        on_delete=models.CASCADE,
+        related_name='chat_messages',
+        help_text=_('Order this message belongs to')
+    )
+    
+    sender = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        help_text=_('User who sent the message')
+    )
+    
+    message = models.TextField(
+        help_text=_('Chat message content')
+    )
+    
+    message_type = models.CharField(
+        max_length=50,
+        choices=MessageType.choices,
+        default=MessageType.TEXT,
+        help_text=_('Type of message')
+    )
+    
+    # Optional image attachment for image messages
+    image_url = models.URLField(
+        blank=True,
+        null=True,
+        help_text=_('URL of attached image (for image messages)')
+    )
+    
+    # Message metadata
+    is_read = models.BooleanField(
+        default=False,
+        help_text=_('Whether message has been read by recipient')
+    )
+    
+    read_at = models.DateTimeField(
+        blank=True,
+        null=True,
+        help_text=_('When message was read')
+    )
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = _('Order Chat Message')
+        verbose_name_plural = _('Order Chat Messages')
+        ordering = ['created_at']
+        db_table = 'order_chat_message'
+        
+        # Indexes for performance
+        indexes = [
+            models.Index(fields=['order'], name='idx_chat_order'),
+            models.Index(fields=['sender'], name='idx_chat_sender'),
+            models.Index(fields=['created_at'], name='idx_chat_created'),
+            models.Index(fields=['is_read'], name='idx_chat_read'),
+        ]
+    
+    def __str__(self):
+        return f"Message from {self.sender} in Order #{self.order.order_number}"
+    
+    @property
+    def sender_name(self):
+        """Get sender's display name."""
+        if hasattr(self.sender, 'customer_profile'):
+            return self.sender.customer_profile.full_name
+        elif hasattr(self.sender, 'pharmacy_profile'):
+            return self.sender.pharmacy_profile.pharmacy_name
+        elif hasattr(self.sender, 'rider_profile'):
+            return self.sender.rider_profile.full_name
+        return self.sender.email or self.sender.phone_number or str(self.sender.id)
+    
+    @property
+    def sender_role(self):
+        """Get sender's role."""
+        return self.sender.get_role_display()
+    
+    def mark_as_read(self):
+        """Mark message as read."""
+        if not self.is_read:
+            from django.utils import timezone
+            self.is_read = True
+            self.read_at = timezone.now()
+            self.save()
+    
+    def clean(self):
+        """Validate message data."""
+        # Ensure image URL is provided for image messages
+        if self.message_type == self.MessageType.IMAGE and not self.image_url:
+            raise ValidationError(
+                _('Image URL is required for image messages.')
+            )
+        
+        # Ensure image URL is not provided for non-image messages
+        if self.message_type != self.MessageType.IMAGE and self.image_url:
+            raise ValidationError(
+                _('Image URL should only be provided for image messages.')
             )
         
         super().clean()
