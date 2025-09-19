@@ -23,9 +23,14 @@
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO",
-        "android.permission.CAMERA",
-        "android.permission.RECORD_AUDIO"
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION"
       ],
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyANWzmzRztUKvOfJcg1SA5mA6GDl5ijjo4"
+        }
+      },
       "package": "com.anonymous.mobileapp"
     },
     "web": {
@@ -57,6 +62,12 @@
         {
           "photosPermission": "Allow $(PRODUCT_NAME) to access your photos to select prescription images."
         }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow $(PRODUCT_NAME) to use your location to set your delivery address."
+        }
       ]
     ],
     "experiments": {
@@ -66,6 +77,9 @@
     "fonts": [
       "./assets/fonts/Nexa-ExtraLight.ttf",
       "./assets/fonts/Nexa-Heavy.ttf"
-    ]
+    ],
+    "extra": {
+      "googleMapsApiKey": "AIzaSyANWzmzRztUKvOfJcg1SA5mA6GDl5ijjo4"
+    }
   }
 }
