@@ -26,11 +26,6 @@
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION"
       ],
-      "config": {
-        "googleMaps": {
-          "apiKey": "AIzaSyANWzmzRztUKvOfJcg1SA5mA6GDl5ijjo4"
-        }
-      },
       "package": "com.anonymous.mobileapp"
     },
     "web": {
@@ -77,9 +72,6 @@
     "fonts": [
       "./assets/fonts/Nexa-ExtraLight.ttf",
       "./assets/fonts/Nexa-Heavy.ttf"
-    ],
-    "extra": {
-      "googleMapsApiKey": "AIzaSyANWzmzRztUKvOfJcg1SA5mA6GDl5ijjo4"
-    }
+    ]
   }
 }
