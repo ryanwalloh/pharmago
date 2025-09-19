@@ -487,7 +487,7 @@ class Customer(models.Model):
     user = models.OneToOneField(
         User,
         on_delete=models.CASCADE,
-        related_name='customer_profile',
+        related_name='customer',
         help_text=_('Associated user account.')
     )
     
@@ -709,7 +709,7 @@ class Pharmacy(models.Model):
     user = models.OneToOneField(
         User,
         on_delete=models.CASCADE,
-        related_name='pharmacy_profile',
+        related_name='pharmacy',
         help_text=_('Associated user account.')
     )
     
@@ -994,7 +994,7 @@ class Rider(models.Model):
     user = models.OneToOneField(
         User,
         on_delete=models.CASCADE,
-        related_name='rider_profile',
+        related_name='rider',
         help_text=_('Associated user account.')
     )
     
@@ -1377,12 +1377,12 @@ def save_user_profile(sender, instance, **kwargs):
     """
     Automatically save profile when user is saved.
     """
-    if instance.role == User.UserRole.CUSTOMER and hasattr(instance, 'customer_profile'):
-        instance.customer_profile.save()
-    elif instance.role == User.UserRole.PHARMACY and hasattr(instance, 'pharmacy_profile'):
-        instance.pharmacy_profile.save()
-    elif instance.role == User.UserRole.RIDER and hasattr(instance, 'rider_profile'):
-        instance.rider_profile.save()
+    if instance.role == User.UserRole.CUSTOMER and hasattr(instance, 'customer'):
+        instance.customer.save()
+    elif instance.role == User.UserRole.PHARMACY and hasattr(instance, 'pharmacy'):
+        instance.pharmacy.save()
+    elif instance.role == User.UserRole.RIDER and hasattr(instance, 'rider'):
+        instance.rider.save()
 
 
 # Data migration for existing valid ID types

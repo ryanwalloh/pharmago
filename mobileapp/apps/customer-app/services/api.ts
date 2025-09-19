@@ -248,6 +248,51 @@ class ApiService {
       };
     }
   }
+
+  // Pharmacy methods
+  async getPharmacies(): Promise<ApiResponse<any[]>> {
+    console.log('🏥 Fetching pharmacies...');
+    return this.makeRequest('/pharmacies/');
+  }
+
+  async getPharmacyById(id: string): Promise<ApiResponse<any>> {
+    console.log('🏥 Fetching pharmacy by ID:', id);
+    return this.makeRequest(`/pharmacies/${id}/`);
+  }
+
+  // Order methods
+  async createOrder(orderData: any): Promise<ApiResponse<any>> {
+    console.log('📦 Creating order...');
+    return this.makeRequest('/orders/', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(orderData),
+    });
+  }
+
+  async getOrders(): Promise<ApiResponse<any[]>> {
+    console.log('📦 Fetching orders...');
+    return this.makeRequest('/orders/');
+  }
+
+  async getOrderById(id: string): Promise<ApiResponse<any>> {
+    console.log('📦 Fetching order by ID:', id);
+    return this.makeRequest(`/orders/${id}/`);
+  }
+
+  // Prescription methods
+  async uploadPrescriptionImage(imageData: string): Promise<ApiResponse<any>> {
+    console.log('📸 Uploading prescription image...');
+    return this.makeRequest('/prescriptions/upload/', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ image_data: imageData }),
+    });
+  }
 }
 
 export const apiService = new ApiService();
