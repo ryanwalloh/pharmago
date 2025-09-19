@@ -13,6 +13,8 @@ import {
 } from 'react-native';
 import { prescriptionService, PrescriptionData } from '../services/prescriptionService';
 import { fontFamily } from '../utils/fonts';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { router } from 'expo-router';
 
 interface PrescriptionUploadModalProps {
   visible: boolean;
@@ -42,31 +44,33 @@ export default function PrescriptionUploadModal({
     setIsUploading(true);
     
     try {
-      console.log('📤 Starting prescription upload...');
-      const result = await prescriptionService.uploadPrescription(selectedImageUri, prescriptionData);
+      console.log('📤 Storing prescription data temporarily...');
       
-      if (result.success && result.prescriptionId) {
-        console.log('✅ Prescription uploaded successfully!');
-        Alert.alert(
-          'Success!', 
-          'Your prescription has been uploaded successfully.',
-          [
-            {
-              text: 'OK',
-              onPress: () => {
-                onSuccess(result.prescriptionId!);
-                handleClose();
-              }
-            }
-          ]
-        );
-      } else {
-        console.log('❌ Upload failed:', result.error);
-        Alert.alert('Upload Failed', result.error || 'Failed to upload prescription. Please try again.');
-      }
+      // Generate unique session ID
+      const sessionId = `prescription_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      
+      // Store prescription data temporarily in AsyncStorage
+      const tempPrescriptionData = {
+        imageUri: selectedImageUri,
+        doctorName: prescriptionData.doctorName || '',
+        prescriptionDate: prescriptionData.prescriptionDate || '',
+        notes: prescriptionData.notes || '',
+        sessionId: sessionId,
+        uploadTimestamp: Date.now(),
+        isUploaded: false,
+      };
+      
+      await AsyncStorage.setItem('tempPrescription', JSON.stringify(tempPrescriptionData));
+      
+      console.log('✅ Prescription data stored temporarily!');
+      
+      // Navigate directly to pharmacy selection without alert
+      onSuccess(sessionId);
+      handleClose();
+      router.push('/pharmacy-selection');
     } catch (error) {
-      console.error('💥 Upload error:', error);
-      Alert.alert('Error', 'An error occurred while uploading. Please try again.');
+      console.error('❌ Storage error:', error);
+      Alert.alert('Storage Error', 'An error occurred while saving your prescription. Please try again.');
     } finally {
       setIsUploading(false);
     }
