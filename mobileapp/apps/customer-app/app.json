@@ -23,8 +23,8 @@
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO",
-        "android.permission.CAMERA",
-        "android.permission.RECORD_AUDIO"
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION"
       ],
       "package": "com.anonymous.mobileapp"
     },
@@ -56,6 +56,12 @@
         "expo-image-picker",
         {
           "photosPermission": "Allow $(PRODUCT_NAME) to access your photos to select prescription images."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow $(PRODUCT_NAME) to use your location to set your delivery address."
         }
       ]
     ],
