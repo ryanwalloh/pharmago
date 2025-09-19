@@ -106,6 +106,69 @@ def direct_pending_pharmacies(request):
         }, status=500)
 
 
+def direct_active_pharmacies(request):
+    """Direct approved pharmacies endpoint that bypasses all authentication"""
+    try:
+        from api.users.models import Pharmacy, UserDocument, ValidID
+        
+        active_pharmacies = Pharmacy.objects.filter(
+            is_fully_verified=True,
+            status='approved',
+        ).order_by('pharmacy_name')
+        
+        data = []
+        for p in active_pharmacies:
+            # Get storefront image URL from UserDocument
+            storefront_image_url = None
+            storefront_document_id = None
+            try:
+                # Look for storefront image document
+                storefront_doc = UserDocument.objects.filter(
+                    user=p.user,
+                    id_type__name__icontains='storefront'
+                ).first()
+                
+                if not storefront_doc:
+                    # Try alternative search patterns
+                    storefront_doc = UserDocument.objects.filter(
+                        user=p.user,
+                        document_file__icontains='storefront'
+                    ).first()
+                
+                if storefront_doc:
+                    storefront_document_id = storefront_doc.id
+                    # Prefer serving via backend proxy to avoid S3 public access/CORS issues
+                    storefront_image_url = request.build_absolute_uri(f"/api/document/{storefront_doc.id}/")
+            except Exception as e:
+                print(f"Error fetching storefront image for pharmacy {p.id}: {e}")
+            
+            data.append({
+                'id': p.id,
+                'pharmacy_name': p.pharmacy_name,
+                'business_phone': p.business_phone,
+                'business_email': p.business_email,
+                'street_address': p.street_address,
+                'barangay': p.barangay,
+                'city': p.city,
+                'province': p.province,
+                'postal_code': p.postal_code,
+                'latitude': p.latitude,
+                'longitude': p.longitude,
+                'operating_hours': getattr(p, 'operating_hours', None),
+                'status': p.status,
+                'is_fully_verified': p.is_fully_verified,
+                'storefront_image_url': storefront_image_url,
+                'storefront_document_id': storefront_document_id,
+            })
+        
+        return JsonResponse(data, safe=False)
+    except Exception as e:
+        print(f"ERROR in direct_active_pharmacies: {e}")
+        return JsonResponse({
+            'error': 'Failed to fetch active pharmacies',
+            'data': []
+        }, status=500)
+
 def direct_pharmacy_details(request, pharmacy_id):
     """Direct pharmacy details endpoint that bypasses all authentication"""
     try:
@@ -1706,6 +1769,7 @@ urlpatterns = [
     path('api/ping/', views.ping),
     path('api/pharmacy-stats/', direct_pharmacy_stats),  # Direct endpoint bypassing all auth
     path('api/pending-pharmacies/', direct_pending_pharmacies),  # Direct endpoint for pending pharmacies
+    path('api/active-pharmacies/', direct_active_pharmacies),  # Direct endpoint for approved & active pharmacies
     path('api/pharmacy-details/<int:pharmacy_id>/', direct_pharmacy_details),  # Direct endpoint for pharmacy details
     path('api/document/<int:document_id>/', serve_document),  # Direct endpoint for serving documents
     path('api/approve-pharmacy/<int:pharmacy_id>/', approve_pharmacy),  # Direct endpoint for approving pharmacy
