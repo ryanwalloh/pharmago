@@ -228,9 +228,9 @@ class OrderChatMessageAdmin(admin.ModelAdmin):
     ]
     search_fields = [
         'order__order_number', 'sender__email', 'sender__phone_number', 
-        'message', 'sender__customer_profile__first_name',
-        'sender__pharmacy_profile__pharmacy_name',
-        'sender__rider_profile__first_name'
+        'message', 'sender__customer__first_name',
+        'sender__pharmacy__pharmacy_name',
+        'sender__rider__first_name'
     ]
     readonly_fields = ['created_at', 'updated_at', 'read_at']
     ordering = ['-created_at']
@@ -276,6 +276,6 @@ class OrderChatMessageAdmin(admin.ModelAdmin):
     def get_queryset(self, request):
         """Optimize queries."""
         return super().get_queryset(request).select_related(
-            'order', 'sender', 'sender__customer_profile',
-            'sender__pharmacy_profile', 'sender__rider_profile'
+            'order', 'sender', 'sender__customer',
+            'sender__pharmacy', 'sender__rider'
         )
