@@ -298,6 +298,26 @@ class PrescriptionService {
   }
 
   /**
+   * Convert image to base64 string for temporary storage
+   */
+  async convertImageToBase64(imageUri: string): Promise<string> {
+    try {
+      console.log('🔄 Converting image to base64:', imageUri);
+      
+      // Use the correct encoding type for expo-file-system
+      const base64 = await FileSystem.readAsStringAsync(imageUri, {
+        encoding: 'base64' as any,
+      });
+      
+      console.log('✅ Image converted to base64, length:', base64.length);
+      return base64;
+    } catch (error) {
+      console.error('💥 Error converting image to base64:', error);
+      throw new Error('Failed to convert image to base64');
+    }
+  }
+
+  /**
    * Get MIME type from file extension
    */
   private getMimeType(extension: string): string {
