@@ -836,12 +836,12 @@ class OrderChatMessage(models.Model):
     @property
     def sender_name(self):
         """Get sender's display name."""
-        if hasattr(self.sender, 'customer_profile'):
-            return self.sender.customer_profile.full_name
-        elif hasattr(self.sender, 'pharmacy_profile'):
-            return self.sender.pharmacy_profile.pharmacy_name
-        elif hasattr(self.sender, 'rider_profile'):
-            return self.sender.rider_profile.full_name
+        if hasattr(self.sender, 'customer'):
+            return self.sender.customer.full_name
+        elif hasattr(self.sender, 'pharmacy'):
+            return self.sender.pharmacy.pharmacy_name
+        elif hasattr(self.sender, 'rider'):
+            return self.sender.rider.full_name
         return self.sender.email or self.sender.phone_number or str(self.sender.id)
     
     @property
