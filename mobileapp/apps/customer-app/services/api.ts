@@ -119,6 +119,72 @@ class ApiService {
     }
   }
 
+  // Build base URL for direct endpoints under /api (not /api/v1)
+  private getDirectBaseUrl(): string {
+    const normalized = this.baseURL.replace(/\/$/, '');
+    return normalized.replace('/api/v1', '/api');
+  }
+
+  // Make request against direct, auth-bypassing endpoints (per docs)
+  private async makeDirectRequest<T>(
+    endpoint: string,
+    options: RequestInit = {}
+  ): Promise<ApiResponse<T>> {
+    try {
+      const url = `${this.getDirectBaseUrl()}${endpoint}`;
+
+      console.log('🚀 API Direct Request:', {
+        url,
+        method: options.method || 'GET',
+        headers: options.headers,
+        body: options.body ? JSON.parse(options.body as string) : null,
+        timestamp: new Date().toISOString()
+      });
+
+      const response = await fetch(url, {
+        headers: {
+          'Content-Type': 'application/json',
+          ...options.headers,
+        },
+        ...options,
+      });
+
+      console.log('📡 API Direct Response Status:', {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok,
+        url: response.url,
+        timestamp: new Date().toISOString()
+      });
+
+      const data = await response.json();
+
+      console.log('📄 API Direct Response Data:', {
+        data,
+        timestamp: new Date().toISOString()
+      });
+
+      if (!response.ok) {
+        return {
+          success: false,
+          error: (data && (data.error || data.details)) || 'Request failed',
+          message: data && data.message,
+        };
+      }
+
+      return {
+        success: true,
+        data: data,
+        message: data && data.message,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Connection failed'
+      };
+    }
+  }
+
   async registerUser(userData: UserRegistrationData): Promise<ApiResponse<any>> {
     // Use the direct registration endpoint that bypasses CSRF
     const directUrl = this.baseURL.replace('/api/v1', '') + '/api/user-register/';
@@ -252,7 +318,14 @@ class ApiService {
   // Pharmacy methods
   async getPharmacies(): Promise<ApiResponse<any[]>> {
     console.log('🏥 Fetching pharmacies...');
-    return this.makeRequest('/pharmacies/');
+    // Use the direct approved & active endpoint (bypasses auth per guide)
+    // backend/pharmago/urls.py → path('api/active-pharmacies/', direct_active_pharmacies)
+    return this.makeDirectRequest('/active-pharmacies/');
+  }
+
+  async getPendingPharmacies(): Promise<ApiResponse<any[]>> {
+    console.log('🏥 Fetching pending pharmacies (fallback)...');
+    return this.makeDirectRequest('/pending-pharmacies/');
   }
 
   async getPharmacyById(id: string): Promise<ApiResponse<any>> {
