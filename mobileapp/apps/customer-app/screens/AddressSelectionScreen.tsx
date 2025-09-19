@@ -39,7 +39,6 @@ const AddressSelectionScreen: React.FC = () => {
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [locationPermission, setLocationPermission] = useState<boolean | null>(null);
-  const [currentLocation, setCurrentLocation] = useState<Region | null>(null); // kept for future use
   const [selectedLocation, setSelectedLocation] = useState<Region | null>(null);
   const [addressData, setAddressData] = useState<AddressData>({
     label: 'home',
@@ -87,7 +86,7 @@ const AddressSelectionScreen: React.FC = () => {
     }
   };
 
-  const requestLocationPermission = async () => {
+  const requestLocationPermission = async (): Promise<boolean> => {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       const granted = status === 'granted';
@@ -95,20 +94,26 @@ const AddressSelectionScreen: React.FC = () => {
       if (!granted) {
         Alert.alert('Permission Needed', 'Please allow location permission to use your current location.');
       }
+      return granted;
     } catch (error) {
       console.error('💥 Error requesting location permission:', error);
       setLocationPermission(false);
+      return false;
     }
   };
 
   const getCurrentLocation = async () => {
-    if (!locationPermission) {
-      await requestLocationPermission();
-      if (!locationPermission) return;
-    }
-
     try {
       setLoading(true);
+
+      let granted = locationPermission === true;
+      if (!granted) {
+        granted = await requestLocationPermission();
+      }
+      if (!granted) {
+        return;
+      }
+
       const { coords } = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
       const region: Region = {
         latitude: coords.latitude,
@@ -117,7 +122,6 @@ const AddressSelectionScreen: React.FC = () => {
         longitudeDelta: 0.01,
       };
 
-      setCurrentLocation(region);
       setSelectedLocation(region);
       setAddressData(prev => ({ ...prev, latitude: coords.latitude, longitude: coords.longitude }));
 
