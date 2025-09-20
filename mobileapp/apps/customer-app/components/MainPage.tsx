@@ -476,7 +476,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 5,
-    marginTop: 50,
+    marginTop: 0,
     backgroundColor: 'transparent',
   },
   navButton: {
