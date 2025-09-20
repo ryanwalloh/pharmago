@@ -366,6 +366,23 @@ class ApiService {
       body: JSON.stringify({ image_data: imageData }),
     });
   }
+
+  // Prescription order methods
+  async createPrescriptionOrder(orderData: any): Promise<ApiResponse<any>> {
+    console.log('📦 Creating prescription order...');
+    return this.makeDirectRequest('/create-prescription-order/', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(orderData),
+    });
+  }
+
+  async getOrderStatus(orderId: string): Promise<ApiResponse<any>> {
+    console.log('📦 Getting order status for ID:', orderId);
+    return this.makeDirectRequest(`/order-status/${orderId}/`);
+  }
 }
 
 export const apiService = new ApiService();

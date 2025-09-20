@@ -17,6 +17,7 @@ import * as Location from 'expo-location';
 import Constants from 'expo-constants';
 import MapView, { Marker, Region } from 'react-native-maps';
 import { fontFamily } from '../utils/fonts';
+import { apiService } from '../services/api';
 
 interface AddressData {
   label: 'home' | 'work' | 'parent_house' | 'other';
@@ -282,34 +283,105 @@ const AddressSelectionScreen: React.FC = () => {
     try {
       setLoading(true);
 
-      // Store address data
-      await AsyncStorage.setItem('deliveryAddress', JSON.stringify(addressData));
-      
-      // Store order summary
-      const orderSummary = {
-        pharmacy: selectedPharmacy,
-        paymentMethod: selectedPaymentMethod,
-        address: addressData,
-        timestamp: new Date().toISOString(),
-      };
-      
-      await AsyncStorage.setItem('orderSummary', JSON.stringify(orderSummary));
+      // Get prescription data from AsyncStorage
+      const tempPrescription = await AsyncStorage.getItem('tempPrescription');
+      if (!tempPrescription) {
+        Alert.alert('No Prescription Found', 'Please upload a prescription first.');
+        return;
+      }
 
-      console.log('📦 Order summary stored:', orderSummary);
+      const prescriptionData = JSON.parse(tempPrescription);
       
-      Alert.alert(
-        'Order Placed Successfully! 🎉',
-        'Your prescription order has been submitted. The pharmacy will review your prescription and contact you with pricing details through our chat system.',
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              // TODO: Navigate to order confirmation or main screen
-              router.push('/');
+      // Get current user data
+      const userData = await AsyncStorage.getItem('user');
+      if (!userData) {
+        Alert.alert('Not Logged In', 'Please log in to place an order.');
+        return;
+      }
+
+      const user = JSON.parse(userData);
+
+      // Prepare order data for API
+      const orderData = {
+        customer_username: user.username,
+        pharmacy_id: selectedPharmacy.id,
+        prescription_image_url: prescriptionData.imageUri, // This will be uploaded to S3 later
+        prescription_notes: prescriptionData.notes || '',
+        address: {
+          street_address: addressData.street_address,
+          barangay: addressData.barangay,
+          city: addressData.city,
+          province: addressData.province,
+          postal_code: addressData.postal_code,
+          latitude: addressData.latitude,
+          longitude: addressData.longitude,
+          building_name: addressData.building_name,
+          floor_number: addressData.floor_number,
+          unit_number: addressData.unit_number,
+          landmark: addressData.landmark,
+          label: addressData.label,
+          is_default: addressData.is_default,
+        },
+        payment_method: {
+          name: selectedPaymentMethod.name,
+        },
+        prescription_details: {
+          doctorName: prescriptionData.doctorName || '',
+          prescriptionDate: prescriptionData.prescriptionDate || '',
+          notes: prescriptionData.notes || '',
+        }
+      };
+
+      console.log('📦 Creating prescription order with data:', orderData);
+
+      // Create order via API
+      const response = await apiService.createPrescriptionOrder(orderData);
+
+      // Unwrap server payload shape: { success, message, data: { order_id, ... } }
+      const serverPayload = response?.data as any;
+      const createdOrder = serverPayload?.data;
+
+      if (response.success && createdOrder?.order_id) {
+        // Store order data for tracking
+        await AsyncStorage.setItem('currentOrder', JSON.stringify(createdOrder));
+        
+        // Clear temporary prescription data
+        await AsyncStorage.removeItem('tempPrescription');
+        await AsyncStorage.removeItem('selectedPharmacy');
+        await AsyncStorage.removeItem('selectedPaymentMethod');
+        
+        console.log('✅ Order created successfully:', createdOrder.order_number || createdOrder.order_id);
+        
+        Alert.alert(
+          'Order Placed Successfully! 🎉',
+          createdOrder.order_number
+            ? `Your prescription order #${createdOrder.order_number} has been submitted. The pharmacy will review your prescription and contact you with pricing details through our chat system.`
+            : 'Your prescription order has been submitted. The pharmacy will review your prescription and contact you with pricing details through our chat system.',
+          [
+            {
+              text: 'Track Order',
+              onPress: () => {
+                // Navigate to order tracking screen only with a valid ID
+                router.push(`/order-tracking/${createdOrder.order_id}` as any);
+              },
             },
-          },
-        ]
-      );
+            {
+              text: 'Go Home',
+              onPress: () => {
+                router.push('/');
+              },
+            },
+          ]
+        );
+      } else {
+        const err = (response as any)?.error || (serverPayload && serverPayload.error) || 'Unknown error';
+        console.error('❌ Order creation failed:', err);
+        Alert.alert(
+          'Order Not Saved',
+          'We could not confirm your order was saved. Please try again, or check your connection and try later.',
+          [{ text: 'OK' }]
+        );
+      }
     } catch (error) {
       console.error('💥 Error placing order:', error);
       Alert.alert('Error', 'Failed to place your order. Please try again.');
@@ -589,10 +661,10 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   headerSubtitle: {
-    fontSize: 16,
+    fontSize: 14,
     fontFamily: fontFamily.light,
     color: '#666666',
-    lineHeight: 22,
+    lineHeight: 16,
     textAlign: 'center',
   },
   // Location Section
@@ -639,7 +711,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   mapContainer: {
-    height: 250,
+    height: 200,
     borderRadius: 12,
     overflow: 'hidden',
     borderWidth: 2,
@@ -649,12 +721,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   mapInstruction: {
-    fontSize: 14,
+    fontSize: 12,
     fontFamily: fontFamily.light,
-    color: '#666666',
-    textAlign: 'center',
+    color: '#888888',
+    textAlign: 'left',
     marginTop: 8,
     fontStyle: 'italic',
+    marginBottom: 26,
   },
   // Form Section
   formSection: {
