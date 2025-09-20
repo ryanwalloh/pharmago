@@ -22,6 +22,7 @@ from django.conf.urls.static import static
 from django.contrib.staticfiles.urls import staticfiles_urlpatterns
 from django.views.decorators.csrf import csrf_exempt
 from api import views
+from api.orders.direct_endpoints import direct_prescription_order_creation, get_order_status
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 
 
@@ -1785,6 +1786,10 @@ urlpatterns = [
     path('api/pharmacy-inventory/<int:pharmacy_id>/', direct_pharmacy_inventory),
     path('api/toggle-availability/<int:pharmacy_id>/<int:item_id>/', toggle_inventory_availability),  # Direct endpoint for pharmacy inventory
     path('api/update-inventory-item/<int:pharmacy_id>/<int:item_id>/', update_inventory_item),  # Direct endpoint for updating inventory items
+    
+    # Order endpoints
+    path('api/create-prescription-order/', direct_prescription_order_creation),  # Direct endpoint for prescription order creation
+    path('api/order-status/<int:order_id>/', get_order_status),  # Direct endpoint for order status
     
     # Include API URLs at the correct path
     path('api/', include('api.urls')),
