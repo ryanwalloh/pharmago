@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from "react";
+import { useRegistration } from "../../contexts/RiderRegistrationContext";
+import MinimalHeader from "../common/MinimalHeader";
+import LeftImage from "../common/LeftImage";
 import { useNavigate } from "react-router-dom";
-import { useRegistration } from "../contexts/RegistrationContext";
 
-const PharmacyRegistration5 = () => {
+const RiderStep1 = ({}) => {
   const navigate = useNavigate();
+
   const {
     userAccount,
     updateUserAccount,
@@ -11,7 +14,6 @@ const PharmacyRegistration5 = () => {
     getAllRegistrationData,
   } = useRegistration();
 
-  // Form state - pre-populate with data from previous steps
   const [formData, setFormData] = useState({
     firstName: userAccount.first_name || "",
     middleName: userAccount.middle_name || "",
@@ -35,6 +37,7 @@ const PharmacyRegistration5 = () => {
   // Handle input changes
   const handleInputChange = (e) => {
     const { name, value } = e.target;
+
     setFormData((prev) => ({
       ...prev,
       [name]: value,
@@ -45,7 +48,7 @@ const PharmacyRegistration5 = () => {
   const handleSubmit = (e) => {
     e.preventDefault();
 
-    // Update context with owner information
+    // Update context with form data
     updateUserAccount({
       first_name: formData.firstName,
       middle_name: formData.middleName,
@@ -54,7 +57,7 @@ const PharmacyRegistration5 = () => {
       gender: formData.gender,
     });
 
-    console.log("=== PHARMACY REGISTRATION STEP 5 SUBMITTED ===");
+    console.log("=== RIDER REGISTRATION STEP 4 SUBMITTED ===");
     console.log("Form Data:", formData);
     console.log("Updated User Account:", {
       first_name: formData.firstName,
@@ -68,24 +71,25 @@ const PharmacyRegistration5 = () => {
 
     logRegistrationData();
 
-    // Navigate to submission step
-    navigate("/pharmacy-registration-submission");
+    // Navigate to next step
+    navigate("/rider-registration/submission");
   };
 
   // Log the current registration data when component mounts
   useEffect(() => {
-    console.log("=== PHARMACY REGISTRATION STEP 5 MOUNTED ===");
+    console.log("=== RIDER REGISTRATION STEP 4 MOUNTED ===");
     console.log("Initial User Account Data:", userAccount);
     console.log("Current Form Data:", formData);
     console.log("All Registration Data:", getAllRegistrationData());
     console.log("=============================================");
     logRegistrationData();
-  }, [logRegistrationData, userAccount, formData, getAllRegistrationData]);
+  }, [logRegistrationData, userAccount, formData]);
 
   // Form validation
   const isFormValid = () => {
     return (
       formData.firstName.trim() !== "" &&
+      formData.middleName.trim() !== "" &&
       formData.lastName.trim() !== "" &&
       formData.dateOfBirth !== "" &&
       formData.gender !== ""
@@ -97,6 +101,8 @@ const PharmacyRegistration5 = () => {
     switch (fieldName) {
       case "firstName":
         return formData.firstName.trim() !== "";
+      case "middleName":
+        return formData.middleName.trim() !== "";
       case "lastName":
         return formData.lastName.trim() !== "";
       case "dateOfBirth":
@@ -111,59 +117,33 @@ const PharmacyRegistration5 = () => {
   return (
     <div className="h-screen overflow-hidden font-roboto">
       {/* Header - Simplified version with only logo */}
-      <nav className="bg-white shadow-lg border-b border-[#D5E8D4]">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-6">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <div className="flex items-center space-x-3">
-                  <img
-                    src="/assets/logosvgdark.svg"
-                    alt="PharmaGo Logo"
-                    className="h-10 w-auto"
-                  />
-                </div>
-              </div>
-            </div>
-            {/* Empty div to maintain spacing - no buttons on right */}
-            <div></div>
-          </div>
-        </div>
-      </nav>
+      <MinimalHeader />
 
       {/* Main Container - Grid Layout */}
       <div className="grid grid-cols-2 h-[calc(100vh-88px)]">
         {/* Left Image Container */}
-        <div className="relative overflow-hidden">
-          <div className="w-full h-full">
-            <img
-              src="/images/pharmareg5.png"
-              alt="Owner Information"
-              className="w-full h-full object-cover"
-            />
-          </div>
-        </div>
+        <LeftImage src="/images/regbg1.png" alt="Pharmacy Staff" />
 
-        {/* Right Form Container */}
+        {/* Right Form Container & Steps */}
         <div className="flex flex-col justify-start items-center h-full text-center relative overflow-y-auto pb-16">
           <div className="flex justify-center relative top-6 pt-6">
-            <div className="flex flex-col absolute w-[25vw] justify-start items-start text-[#2c2c2c] max-h-[calc(100vh-200px)] overflow-y-auto">
+            <div className="flex flex-col absolute w-[22vw] justify-start items-start text-[#2c2c2c]">
               {/* Header */}
               <h1 className="text-3xl font-bold mb-6 leading-10 flex text-left justify-left text-[#2c2c2c]">
-                Tell us about the pharmacy owner
+                Tell us more about yourself
               </h1>
               <p className="text-base mt-[-7px] text-[#8d8c8c] text-left leading-5 font-normal">
-                We need some additional information about the pharmacy owner for
+                We need some additional information about the rider for
                 verification purposes.
               </p>
 
               {/* Form */}
               <div className="w-[22vw] pb-5 pt-2.5 flex flex-col text-[#2c2c2c]">
                 <form
-                  className="w-[22vw] pb-5 pt-2.5 flex flex-col text-[#2c2c2c] space-y-4"
+                  className="w-[22vw] pb-5 pt-2.5 flex flex-col text-[#2c2c2c]"
                   onSubmit={handleSubmit}
                 >
-                  {/* First Name */}
+                  {/* Rider First Name */}
                   <div className="relative my-2.5 z-10">
                     <input
                       type="text"
@@ -191,7 +171,7 @@ const PharmacyRegistration5 = () => {
                     </label>
                   </div>
 
-                  {/* Middle Name */}
+                  {/* Rider Middle Name */}
                   <div className="relative my-2.5 z-10">
                     <input
                       type="text"
@@ -199,18 +179,27 @@ const PharmacyRegistration5 = () => {
                       name="middleName"
                       value={formData.middleName}
                       onChange={handleInputChange}
-                      className="peer w-full px-4 py-3 border-2 border-[#D5E8D4] rounded-lg text-gray-700 placeholder-transparent focus:outline-none focus:border-[#6BBF9A] focus:ring-2 focus:ring-[#6BBF9A] focus:ring-opacity-20 transition-all duration-200"
+                      className={`peer w-full px-4 py-3 border-2 rounded-lg text-gray-700 placeholder-transparent focus:outline-none focus:ring-2 focus:ring-opacity-20 transition-all duration-200 ${
+                        isFieldValid("middleName")
+                          ? "border-[#D5E8D4] focus:border-[#6BBF9A] focus:ring-[#6BBF9A]"
+                          : "border-red-300 focus:border-red-500 focus:ring-red-500"
+                      }`}
                       placeholder="Middle Name"
+                      required
                     />
                     <label
                       htmlFor="middleName"
-                      className="absolute left-4 -top-2.5 bg-white px-2 text-sm text-[#4DAF7C] transition-all duration-200 peer-placeholder-shown:text-base peer-placeholder-shown:text-gray-400 peer-placeholder-shown:top-3 peer-focus:-top-2.5 peer-focus:text-sm peer-focus:text-[#6BBF9A]"
+                      className={`absolute left-4 -top-2.5 bg-white px-2 text-sm transition-all duration-200 peer-placeholder-shown:text-base peer-placeholder-shown:text-gray-400 peer-placeholder-shown:top-3 peer-focus:-top-2.5 peer-focus:text-sm ${
+                        isFieldValid("middleName")
+                          ? "text-[#4DAF7C] peer-focus:text-[#6BBF9A]"
+                          : "text-red-500 peer-focus:text-red-500"
+                      }`}
                     >
-                      Middle Name
+                      Middle Name *
                     </label>
                   </div>
 
-                  {/* Last Name */}
+                  {/* Rider Last Name */}
                   <div className="relative my-2.5 z-10">
                     <input
                       type="text"
@@ -320,43 +309,43 @@ const PharmacyRegistration5 = () => {
                       </div>
                     </div>
                   </div>
+
+                  {/* Progress Bar */}
+                  <div className="flex flex-row justify-between items-center fixed right-0 bottom-20 w-[50vw] h-1.5 bg-[#c2bdbd] z-30">
+                    <div className="w-[83%] h-1.5 bg-[#004445]"></div>
+                  </div>
+
+                  {/* Footer */}
+                  <div className="flex flex-row justify-between items-center w-[48vw] fixed right-2.5 bottom-0 p-5 z-10 gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => navigate("/rider-registration/3")}
+                      className="text-base bg-white text-[#2c786c] border-none py-1.5 px-5 font-bold rounded hover:bg-gray-100 transition-colors"
+                    >
+                      Back
+                    </button>
+                    <p className="text-gray-500">4 step(s) to complete</p>
+                    <button
+                      type="submit"
+                      // onClick={handleSubmit}
+                      disabled={!isFormValid()}
+                      className={`text-base border-none py-1.5 px-5 font-bold rounded transition-colors ${
+                        isFormValid()
+                          ? "bg-[#2c786c] text-white hover:bg-[#004445]"
+                          : "bg-gray-300 text-gray-500 cursor-not-allowed"
+                      }`}
+                    >
+                      Next
+                    </button>
+                  </div>
                 </form>
               </div>
             </div>
           </div>
         </div>
       </div>
-
-      {/* Progress Bar */}
-      <div className="flex flex-row justify-between items-center fixed right-0 bottom-20 w-[50vw] h-1.5 bg-[#c2bdbd] z-30">
-        <div className="w-[83%] h-1.5 bg-[#004445]"></div>
-      </div>
-
-      {/* Footer */}
-      <div className="flex flex-row justify-between items-center w-[48vw] fixed right-2.5 bottom-0 p-5 z-10 gap-2.5">
-        <button
-          type="button"
-          onClick={() => navigate("/pharmacy-registration-4")}
-          className="text-base bg-white text-[#2c786c] border-none py-1.5 px-5 font-bold rounded hover:bg-gray-100 transition-colors"
-        >
-          Back
-        </button>
-        <p className="text-gray-500">2 step(s) to complete</p>
-        <button
-          type="submit"
-          onClick={handleSubmit}
-          disabled={!isFormValid()}
-          className={`text-base border-none py-1.5 px-5 font-bold rounded transition-colors ${
-            isFormValid()
-              ? "bg-[#2c786c] text-white hover:bg-[#004445]"
-              : "bg-gray-300 text-gray-500 cursor-not-allowed"
-          }`}
-        >
-          Next
-        </button>
-      </div>
     </div>
   );
 };
 
-export default PharmacyRegistration5;
+export default RiderStep1;
