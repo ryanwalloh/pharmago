@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-import MapView, { Marker, Region } from 'react-native-maps';
+import MapView, { Marker, Region, Polyline } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import { apiService } from '../services/api';
 import { fontFamily } from '../utils/fonts';
@@ -33,6 +33,8 @@ interface OrderData {
   pharmacy_email?: string;
   pharmacy_storefront_image_url?: string;
   delivery_address: string;
+  delivery_latitude?: number | null;
+  delivery_longitude?: number | null;
   prescription_image_url: string;
   prescription_notes: string;
   created_at: string;
@@ -144,6 +146,7 @@ const OrderTrackingScreen: React.FC = () => {
           email: order.pharmacy_email,
           storefront_image_url: order.pharmacy_storefront_image_url
         });
+        console.log('📦 Delivery coords:', order.delivery_latitude, order.delivery_longitude);
         console.log('📞 Phone number available:', !!order.pharmacy_phone, order.pharmacy_phone);
         
         // Save order data to local storage for persistence
@@ -179,17 +182,33 @@ const OrderTrackingScreen: React.FC = () => {
     const initializeMap = async () => {
       if (orderData && !mapInitialized.current) {
         mapInitialized.current = true;
-        
-        // Get customer location
-        await getCustomerLocation();
-        
-        // Update map region if pharmacy coordinates are available
-        if (orderData.pharmacy_latitude && orderData.pharmacy_longitude && customerLocation) {
+
+        let customerLatLng = customerLocation;
+
+        // Prefer delivery coordinates if provided in order
+        if (orderData.delivery_latitude && orderData.delivery_longitude) {
+          customerLatLng = {
+            latitude: Number(orderData.delivery_latitude),
+            longitude: Number(orderData.delivery_longitude),
+          };
+          setCustomerLocation(customerLatLng);
+        } else {
+          // Fallback to device location
+          await getCustomerLocation();
+          customerLatLng = customerLocation;
+        }
+
+        // Update map region if pharmacy and customer coordinates are available
+        if (
+          orderData.pharmacy_latitude &&
+          orderData.pharmacy_longitude &&
+          customerLatLng
+        ) {
           updateMapRegion(
             orderData.pharmacy_latitude,
             orderData.pharmacy_longitude,
-            customerLocation.latitude,
-            customerLocation.longitude
+            customerLatLng.latitude,
+            customerLatLng.longitude
           );
         }
       }
@@ -297,8 +316,8 @@ const OrderTrackingScreen: React.FC = () => {
           <MapView
             style={styles.map}
             region={mapRegion}
-            showsUserLocation={true}
-            showsMyLocationButton={true}
+            showsUserLocation={Boolean(!orderData?.delivery_latitude && !orderData?.delivery_longitude)}
+            showsMyLocationButton={Boolean(!orderData?.delivery_latitude && !orderData?.delivery_longitude)}
           >
             {/* Pharmacy Marker */}
             {orderData.pharmacy_latitude && orderData.pharmacy_longitude && (
@@ -317,9 +336,23 @@ const OrderTrackingScreen: React.FC = () => {
             {customerLocation && (
               <Marker
                 coordinate={customerLocation}
-                title="Your Location"
-                description="Delivery Address"
+                title="Delivery Location"
+                description={orderData.delivery_address}
                 pinColor="blue"
+              />
+            )}
+
+            {/* Connecting line between pharmacy and customer */}
+            {orderData.pharmacy_latitude && orderData.pharmacy_longitude && customerLocation && (
+              <Polyline
+                coordinates={[
+                  { latitude: orderData.pharmacy_latitude, longitude: orderData.pharmacy_longitude },
+                  { latitude: customerLocation.latitude, longitude: customerLocation.longitude }
+                ]}
+                strokeColor="#00bf63"
+                strokeWidth={4}
+                geodesic
+                lineDashPattern={[6, 4]}
               />
             )}
           </MapView>

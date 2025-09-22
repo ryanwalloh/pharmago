@@ -330,6 +330,8 @@ def get_order_status(request, order_id):
                 'pharmacy_email': pharmacy.business_email if pharmacy else None,
                 'pharmacy_storefront_image_url': pharmacy_storefront_image_url,
                 'delivery_address': order.delivery_address.full_address,
+                'delivery_latitude': float(order.delivery_address.latitude) if getattr(order.delivery_address, 'latitude', None) is not None else None,
+                'delivery_longitude': float(order.delivery_address.longitude) if getattr(order.delivery_address, 'longitude', None) is not None else None,
                 'prescription_image_url': order.prescription_image_url,
                 'prescription_notes': order.prescription_notes,
                 'created_at': order.created_at.isoformat(),
