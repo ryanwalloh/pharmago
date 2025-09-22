@@ -266,6 +266,52 @@ def get_order_status(request, order_id):
     try:
         order = Order.objects.get(id=order_id)
         
+        # Get pharmacy information from the first order line
+        pharmacy = None
+        pharmacy_name = 'Unknown'
+        pharmacy_id = None
+        pharmacy_barangay = None
+        pharmacy_latitude = None
+        pharmacy_longitude = None
+        pharmacy_phone = None
+        pharmacy_storefront_image_url = None
+        
+        if order.order_lines.exists():
+            pharmacy = order.order_lines.first().inventory_item.pharmacy
+            pharmacy_name = pharmacy.pharmacy_name
+            pharmacy_id = pharmacy.id
+            pharmacy_barangay = pharmacy.barangay
+            pharmacy_latitude = pharmacy.latitude
+            pharmacy_longitude = pharmacy.longitude
+            pharmacy_phone = pharmacy.business_phone
+            
+            # Get storefront image from user documents using the same pattern as active-pharmacies endpoint
+            try:
+                from api.users.models import UserDocument
+                
+                # Look for storefront image document using the same pattern as active-pharmacies
+                storefront_doc = UserDocument.objects.filter(
+                    user=pharmacy.user,
+                    id_type__name__icontains='storefront'
+                ).first()
+                
+                if not storefront_doc:
+                    # Try alternative search patterns
+                    storefront_doc = UserDocument.objects.filter(
+                        user=pharmacy.user,
+                        document_file__icontains='storefront'
+                    ).first()
+                
+                if storefront_doc and storefront_doc.file_url:
+                    # Use the same proxy pattern as active-pharmacies endpoint
+                    pharmacy_storefront_image_url = request.build_absolute_uri(f"/api/document/{storefront_doc.id}/")
+                    logger.info(f"Found storefront image for pharmacy {pharmacy.id}: {pharmacy_storefront_image_url}")
+                else:
+                    logger.info(f"No storefront image found for pharmacy {pharmacy.id}")
+                        
+            except Exception as e:
+                logger.warning(f"Could not fetch pharmacy storefront image: {str(e)}")
+        
         return JsonResponse({
             'success': True,
             'data': {
@@ -275,7 +321,14 @@ def get_order_status(request, order_id):
                 'prescription_status': order.prescription_status,
                 'payment_status': order.payment_status,
                 'total_amount': float(order.total_amount),
-                'pharmacy_name': order.order_lines.first().inventory_item.pharmacy.pharmacy_name if order.order_lines.exists() else 'Unknown',
+                'pharmacy_name': pharmacy_name,
+                'pharmacy_id': pharmacy_id,
+                'pharmacy_barangay': pharmacy_barangay,
+                'pharmacy_latitude': pharmacy_latitude,
+                'pharmacy_longitude': pharmacy_longitude,
+                'pharmacy_phone': pharmacy_phone,
+                'pharmacy_email': pharmacy.business_email if pharmacy else None,
+                'pharmacy_storefront_image_url': pharmacy_storefront_image_url,
                 'delivery_address': order.delivery_address.full_address,
                 'prescription_image_url': order.prescription_image_url,
                 'prescription_notes': order.prescription_notes,
