@@ -35,9 +35,13 @@ SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-your-secret-key-here')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DEBUG', 'True').lower() == 'true'
 
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1,0.0.0.0,testserver,192.168.254.103').split(',')
-# Override ALLOWED_HOSTS to include mobile device IP
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0', 'testserver', '192.168.254.103']
+ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '').split(',') if os.getenv('ALLOWED_HOSTS') else [
+    'localhost', '127.0.0.1', '0.0.0.0', 'testserver'
+]
+
+# In development, allow all hosts so mobile devices on LAN can reach the backend
+if DEBUG:
+    ALLOWED_HOSTS = ['*']
 
 
 # Application definition

@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   RefreshControl,
   Image,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -16,6 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { apiService } from '../services/api';
 import { fontFamily } from '../utils/fonts';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Modal } from 'react-native';
 
 interface OrderData {
   order_id: number;
@@ -58,6 +60,30 @@ const OrderTrackingScreen: React.FC = () => {
   });
   const [customerLocation, setCustomerLocation] = useState<{latitude: number, longitude: number} | null>(null);
   const mapInitialized = useRef(false);
+  const [storefrontImageError, setStorefrontImageError] = useState(false);
+  const [showChatModal, setShowChatModal] = useState(false);
+  const [chatRoom, setChatRoom] = useState<any | null>(null);
+  const [chatMessages, setChatMessages] = useState<any[]>([]);
+  const [chatLoading, setChatLoading] = useState(false);
+  const [chatError, setChatError] = useState<string | null>(null);
+  const chatPollRef = useRef<any>(null);
+  const chatScrollRef = useRef<ScrollView | null>(null);
+  const [chatInput, setChatInput] = useState('');
+  const [chatSending, setChatSending] = useState(false);
+
+  const fetchChatMessages = useCallback(async () => {
+    try {
+      if (!chatRoom?.id) return;
+      const msgs = await apiService.getOrderChatMessages(chatRoom.id, 100);
+      if (msgs.success && (msgs.data as any)?.messages) {
+        setChatMessages((msgs.data as any).messages);
+      } else if (!msgs.success) {
+        setChatError(msgs.error || 'Failed to load messages');
+      }
+    } catch (e) {
+      setChatError('Unexpected error loading messages');
+    }
+  }, [chatRoom?.id]);
 
   const getCustomerLocation = async () => {
     try {
@@ -364,13 +390,14 @@ const OrderTrackingScreen: React.FC = () => {
           <View style={styles.pharmacyCard}>
             <View style={styles.pharmacyInfo}>
               <View style={styles.pharmacyImageContainer}>
-                {orderData.pharmacy_storefront_image_url ? (
+                {orderData.pharmacy_storefront_image_url && !storefrontImageError ? (
                   <Image 
                     source={{ uri: orderData.pharmacy_storefront_image_url }} 
                     style={styles.pharmacyImage}
                     resizeMode="cover"
                     onError={() => {
                       console.log('Failed to load pharmacy storefront image');
+                      setStorefrontImageError(true);
                     }}
                   />
                 ) : (
@@ -389,7 +416,35 @@ const OrderTrackingScreen: React.FC = () => {
               </View>
             </View>
             <View style={styles.pharmacyActions}>
-              <TouchableOpacity style={styles.actionIcon}>
+              <TouchableOpacity
+                style={styles.actionIcon}
+                onPress={async () => {
+                  try {
+                    setChatError(null);
+                    setChatLoading(true);
+                    const roomRes = await apiService.getOrCreateOrderChatRoom(orderData.order_id, orderData.pharmacy_id);
+                    if (!roomRes.success || !roomRes.data?.room) {
+                      setChatError(roomRes.error || 'Failed to open chat');
+                      setShowChatModal(true);
+                      setChatLoading(false);
+                      return;
+                    }
+                    setChatRoom(roomRes.data.room);
+                    await fetchChatMessages();
+                    // start polling
+                    if (chatPollRef.current) clearInterval(chatPollRef.current);
+                    chatPollRef.current = setInterval(() => {
+                      fetchChatMessages();
+                    }, 12000);
+                    setShowChatModal(true);
+                  } catch (e) {
+                    setChatError('Unexpected error opening chat');
+                    setShowChatModal(true);
+                  } finally {
+                    setChatLoading(false);
+                  }
+                }}
+              >
                 <Ionicons name="chatbubble-outline" size={24} color="#00bf63" />
               </TouchableOpacity>
               <TouchableOpacity style={styles.actionIcon}>
@@ -491,6 +546,114 @@ const OrderTrackingScreen: React.FC = () => {
           </View>
         </View>
       </ScrollView>
+      {/* Cleanup polling when modal closes */}
+      {showChatModal ? null : (chatPollRef.current ? (clearInterval(chatPollRef.current), chatPollRef.current = null, null) : null)}
+      {/* Chat Modal - full width, bottom-aligned (touching left/right/bottom) */}
+      <Modal visible={showChatModal} animationType="slide" transparent>
+        <View style={styles.chatModalOverlay}>
+          <View style={styles.chatModalContainer}>
+            {/* Header */}
+            <View style={styles.chatHeader}>
+              <Text style={styles.chatHeaderTitle} numberOfLines={1}>
+                Chat with {orderData?.pharmacy_name || 'Pharmacy'}
+              </Text>
+              <TouchableOpacity onPress={() => setShowChatModal(false)}>
+                <Ionicons name="close" size={24} color="#333" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Messages */}
+            <ScrollView
+              ref={chatScrollRef}
+              style={styles.chatMessages}
+              contentContainerStyle={{ padding: 16 }}
+              onContentSizeChange={() => {
+                if (chatScrollRef.current) {
+                  chatScrollRef.current.scrollToEnd({ animated: true });
+                }
+              }}
+            >
+              {chatError && (
+                <Text style={styles.chatError}>{chatError}</Text>
+              )}
+              {!chatError && chatMessages.length === 0 && !chatLoading && (
+                <Text style={styles.chatEmpty}>No messages yet.</Text>
+              )}
+              {chatMessages.map((m) => (
+                <View key={m.id} style={{ marginBottom: 12 }}>
+                  <Text style={styles.chatMeta}>{m.sender_name} • {new Date(m.timestamp).toLocaleString()}</Text>
+                  <View style={[styles.chatBubble, m.is_system_message ? styles.chatSystem : styles.chatUser]}>
+                    <Text style={styles.chatText}>{m.content}</Text>
+                  </View>
+                </View>
+              ))}
+              {chatLoading && (
+                <Text style={styles.chatEmpty}>Loading…</Text>
+              )}
+            </ScrollView>
+
+            {/* Composer */}
+            <View style={{ padding: 12, borderTopWidth: 1, borderTopColor: '#E0E0E0', backgroundColor: '#FFFFFF' }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <TextInput
+                  style={{ flex: 1, borderWidth: 1, borderColor: '#E0E0E0', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: '#333333', fontFamily: fontFamily.light }}
+                  placeholder="Type a message..."
+                  value={chatInput}
+                  onChangeText={setChatInput}
+                  editable={!chatSending}
+                  returnKeyType="send"
+                  onSubmitEditing={async () => {
+                    if (!chatRoom?.id || !chatInput.trim() || chatSending) return;
+                    try {
+                      setChatSending(true);
+                      const res = await apiService.sendOrderChatMessage(chatRoom.id, chatInput.trim());
+                      if (!res.success) {
+                        setChatError(res.error || 'Failed to send message');
+                      } else {
+                        setChatInput('');
+                        await fetchChatMessages();
+                        requestAnimationFrame(() => {
+                          if (chatScrollRef.current) chatScrollRef.current.scrollToEnd({ animated: true });
+                        });
+                      }
+                    } catch (e) {
+                      setChatError('Unexpected error sending message');
+                    } finally {
+                      setChatSending(false);
+                    }
+                  }}
+                />
+                <TouchableOpacity
+                  style={{ marginLeft: 8, paddingHorizontal: 16, paddingVertical: 10, backgroundColor: '#00bf63', borderRadius: 8, opacity: chatSending || !chatInput.trim() ? 0.6 : 1 }}
+                  disabled={chatSending || !chatInput.trim() || !chatRoom?.id}
+                  onPress={async () => {
+                    if (!chatRoom?.id || !chatInput.trim() || chatSending) return;
+                    try {
+                      setChatSending(true);
+                      const res = await apiService.sendOrderChatMessage(chatRoom.id, chatInput.trim());
+                      if (!res.success) {
+                        setChatError(res.error || 'Failed to send message');
+                      } else {
+                        setChatInput('');
+                        await fetchChatMessages();
+                        requestAnimationFrame(() => {
+                          if (chatScrollRef.current) chatScrollRef.current.scrollToEnd({ animated: true });
+                        });
+                      }
+                    } catch (e) {
+                      setChatError('Unexpected error sending message');
+                    } finally {
+                      setChatSending(false);
+                    }
+                  }}
+                >
+                  <Text style={{ color: '#FFFFFF', fontWeight: '600' }}>{chatSending ? 'Sending…' : 'Send'}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -732,6 +895,76 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     fontFamily: fontFamily.light,
+  },
+  // Chat modal styles
+  chatModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.3)'
+  },
+  chatModalContainer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    top: 60, // leaves some space at top; touches left/right/bottom edges
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    overflow: 'hidden',
+  },
+  chatHeader: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between'
+  },
+  chatHeaderTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#333333',
+    fontFamily: fontFamily.heavy,
+    flex: 1,
+    marginRight: 12,
+  },
+  chatMessages: {
+    flex: 1,
+    backgroundColor: '#F8F9FA',
+  },
+  chatEmpty: {
+    textAlign: 'center',
+    color: '#666666',
+    fontSize: 12,
+    fontFamily: fontFamily.light
+  },
+  chatError: {
+    textAlign: 'center',
+    color: '#D32F2F',
+    fontSize: 12,
+    marginBottom: 8,
+    fontFamily: fontFamily.light
+  },
+  chatMeta: {
+    fontSize: 11,
+    color: '#888888',
+    marginBottom: 4,
+    fontFamily: fontFamily.light
+  },
+  chatBubble: {
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    maxWidth: '90%'
+  },
+  chatSystem: {
+    backgroundColor: '#EDEDED',
+  },
+  chatUser: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E0E0E0'
   },
   retryButton: {
     backgroundColor: '#00bf63',
