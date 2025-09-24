@@ -80,7 +80,7 @@ const OrderTrackingScreen: React.FC = () => {
       } else if (!msgs.success) {
         setChatError(msgs.error || 'Failed to load messages');
       }
-    } catch (e) {
+    } catch (_e) {
       setChatError('Unexpected error loading messages');
     }
   }, [chatRoom?.id]);
@@ -437,7 +437,7 @@ const OrderTrackingScreen: React.FC = () => {
                       fetchChatMessages();
                     }, 12000);
                     setShowChatModal(true);
-                  } catch (e) {
+                  } catch (_e) {
                     setChatError('Unexpected error opening chat');
                     setShowChatModal(true);
                   } finally {
@@ -616,7 +616,7 @@ const OrderTrackingScreen: React.FC = () => {
                           if (chatScrollRef.current) chatScrollRef.current.scrollToEnd({ animated: true });
                         });
                       }
-                    } catch (e) {
+                    } catch (_e) {
                       setChatError('Unexpected error sending message');
                     } finally {
                       setChatSending(false);
@@ -640,7 +640,7 @@ const OrderTrackingScreen: React.FC = () => {
                           if (chatScrollRef.current) chatScrollRef.current.scrollToEnd({ animated: true });
                         });
                       }
-                    } catch (e) {
+                    } catch (_e) {
                       setChatError('Unexpected error sending message');
                     } finally {
                       setChatSending(false);
@@ -965,6 +965,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: '#E0E0E0'
+  },
+  chatText: {
+    color: '#333333',
+    fontSize: 14,
+    fontFamily: fontFamily.light
   },
   retryButton: {
     backgroundColor: '#00bf63',
