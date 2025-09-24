@@ -301,11 +301,22 @@ const AddressSelectionScreen: React.FC = () => {
 
       const user = JSON.parse(userData);
 
+      // If local file URI, upload first to get http(s) URL
+      let prescriptionImageUrl: string | undefined = prescriptionData.imageUri;
+      if (prescriptionImageUrl && prescriptionImageUrl.startsWith('file:')) {
+        const uploadRes = await apiService.uploadPrescriptionFile(prescriptionImageUrl as string);
+        if (!uploadRes.success || !uploadRes.data?.url) {
+          Alert.alert('Upload Failed', 'Could not upload prescription image. Please try again.');
+          return;
+        }
+        prescriptionImageUrl = uploadRes.data.url;
+      }
+
       // Prepare order data for API
       const orderData = {
         customer_username: user.username,
         pharmacy_id: selectedPharmacy.id,
-        prescription_image_url: prescriptionData.imageUri, // This will be uploaded to S3 later
+        prescription_image_url: prescriptionImageUrl || '',
         prescription_notes: prescriptionData.notes || '',
         address: {
           street_address: addressData.street_address,

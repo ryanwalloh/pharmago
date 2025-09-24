@@ -219,6 +219,14 @@ def direct_prescription_order_creation(request):
             
             logger.info(f"✅ Prescription order created successfully: {order.order_number}")
             
+            # Build absolute prescription image URL for client convenience
+            absolute_prescription_url = None
+            if prescription_image_url:
+                try:
+                    absolute_prescription_url = request.build_absolute_uri(prescription_image_url)
+                except Exception:
+                    absolute_prescription_url = prescription_image_url
+
             return JsonResponse({
                 'success': True,
                 'message': 'Prescription order created successfully',
@@ -237,7 +245,7 @@ def direct_prescription_order_creation(request):
                         'full_address': delivery_address.full_address
                     },
                     'payment_method': payment_method_name,
-                    'prescription_image_url': prescription_image_url,
+                    'prescription_image_url': absolute_prescription_url,
                     'created_at': order.created_at.isoformat(),
                     'estimated_delivery': None  # Will be set when pharmacist processes
                 }
@@ -266,7 +274,7 @@ def get_order_status(request, order_id):
     try:
         order = Order.objects.get(id=order_id)
         
-        # Get pharmacy information from the first order line
+            # Get pharmacy information from the first order line
         pharmacy = None
         pharmacy_name = 'Unknown'
         pharmacy_id = None
@@ -288,6 +296,9 @@ def get_order_status(request, order_id):
             # Get storefront image from user documents using the same pattern as active-pharmacies endpoint
             try:
                 from api.users.models import UserDocument
+                import os
+                import boto3
+                from urllib.parse import urlparse
                 
                 # Look for storefront image document using the same pattern as active-pharmacies
                 storefront_doc = UserDocument.objects.filter(
@@ -303,8 +314,34 @@ def get_order_status(request, order_id):
                     ).first()
                 
                 if storefront_doc and storefront_doc.file_url:
-                    # Use the same proxy pattern as active-pharmacies endpoint
-                    pharmacy_storefront_image_url = request.build_absolute_uri(f"/api/document/{storefront_doc.id}/")
+                    # Prefer presigned S3 URL for mobile compatibility; fallback to backend proxy
+                    try:
+                        from botocore.config import Config
+                        bucket_name = os.getenv('AWS_STORAGE_BUCKET_NAME', 'pharmago-user-uploads')
+                        region = os.getenv('AWS_S3_REGION_NAME', 'ap-southeast-2')
+                        parsed = urlparse(storefront_doc.file_url)
+                        key = parsed.path.lstrip('/')
+                        if key.startswith(f"{bucket_name}/"):
+                            key = key[len(bucket_name) + 1:]
+                        s3_client = boto3.client(
+                            's3',
+                            aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
+                            aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY'),
+                            region_name=region,
+                            endpoint_url=f"https://s3.{region}.amazonaws.com",
+                            config=Config(signature_version='s3v4')
+                        )
+                        pharmacy_storefront_image_url = s3_client.generate_presigned_url(
+                            'get_object',
+                            Params={'Bucket': bucket_name, 'Key': key},
+                            ExpiresIn=3600
+                        )
+                    except Exception:
+                        # Prefer dedicated storefront proxy endpoint; fallback to generic document endpoint
+                        try:
+                            pharmacy_storefront_image_url = request.build_absolute_uri(f"/api/pharmacy-storefront/{pharmacy.id}/")
+                        except Exception:
+                            pharmacy_storefront_image_url = request.build_absolute_uri(f"/api/document/{storefront_doc.id}/")
                     logger.info(f"Found storefront image for pharmacy {pharmacy.id}: {pharmacy_storefront_image_url}")
                 else:
                     logger.info(f"No storefront image found for pharmacy {pharmacy.id}")
@@ -312,6 +349,17 @@ def get_order_status(request, order_id):
             except Exception as e:
                 logger.warning(f"Could not fetch pharmacy storefront image: {str(e)}")
         
+        # Normalize prescription image URL to absolute
+        absolute_prescription_url = None
+        if order.prescription_image_url:
+            try:
+                if str(order.prescription_image_url).startswith('http'):
+                    absolute_prescription_url = order.prescription_image_url
+                else:
+                    absolute_prescription_url = request.build_absolute_uri(order.prescription_image_url)
+            except Exception:
+                absolute_prescription_url = order.prescription_image_url
+
         return JsonResponse({
             'success': True,
             'data': {
@@ -332,7 +380,7 @@ def get_order_status(request, order_id):
                 'delivery_address': order.delivery_address.full_address,
                 'delivery_latitude': float(order.delivery_address.latitude) if getattr(order.delivery_address, 'latitude', None) is not None else None,
                 'delivery_longitude': float(order.delivery_address.longitude) if getattr(order.delivery_address, 'longitude', None) is not None else None,
-                'prescription_image_url': order.prescription_image_url,
+                'prescription_image_url': absolute_prescription_url,
                 'prescription_notes': order.prescription_notes,
                 'created_at': order.created_at.isoformat(),
                 'updated_at': order.updated_at.isoformat(),
