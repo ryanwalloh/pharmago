@@ -1,13 +1,43 @@
 // API service for customer app
 // API configuration for different environments
+import Constants from 'expo-constants';
+import { NativeModules } from 'react-native';
+
 const getApiBaseUrl = () => {
-  // Check if running on web (localhost works)
+  // Web (localhost)
   if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
     return 'http://localhost:8000/api/v1';
   }
-  
-  // For mobile devices, use the computer's IP address
-  // Update this IP address to match your development machine's IP
+
+  // Optional: EXPO_PUBLIC_API_BASE override (e.g., http://192.168.1.10:8000)
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore
+  const envBase: string | undefined = process.env.EXPO_PUBLIC_API_BASE;
+  if (envBase) {
+    const normalized = envBase.endsWith('/') ? envBase.slice(0, -1) : envBase;
+    return `${normalized}/api/v1`;
+  }
+
+  // Try to derive host from Expo packager/SourceCode script URL
+  try {
+    const expHostUri: string | undefined = (Constants as any)?.expoConfig?.hostUri
+      || (Constants as any)?.manifest?.debuggerHost
+      || (NativeModules as any)?.SourceCode?.scriptURL;
+
+    if (expHostUri) {
+      // expHostUri examples:
+      //  - '192.168.0.5:8081'
+      //  - 'exp://192.168.0.5:8081'
+      //  - 'http://192.168.0.5:8081/index.bundle?...'
+      const withoutScheme = expHostUri.replace(/^\w+:\/\//, '');
+      const host = withoutScheme.split(':')[0].split('/')[0];
+      if (host && /^(\d{1,3}\.){3}\d{1,3}$/.test(host)) {
+        return `http://${host}:8000/api/v1`;
+      }
+    }
+  } catch {}
+
+  // Fallback (update if needed)
   return 'http://192.168.254.103:8000/api/v1';
 };
 
@@ -356,15 +386,46 @@ class ApiService {
   }
 
   // Prescription methods
-  async uploadPrescriptionImage(imageData: string): Promise<ApiResponse<any>> {
-    console.log('📸 Uploading prescription image...');
-    return this.makeRequest('/prescriptions/upload/', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ image_data: imageData }),
-    });
+  async uploadPrescriptionFile(
+    localUri: string,
+    orderId?: number
+  ): Promise<ApiResponse<{ url: string; order_updated?: boolean; order_id?: number }>> {
+    try {
+      const url = `${this.getDirectBaseUrl()}/upload-prescription-image/`;
+      console.log('📸 Uploading prescription image (multipart)...', { url, localUri, orderId });
+
+      const form = new FormData();
+      form.append('file', {
+        uri: localUri,
+        name: 'prescription.jpg',
+        type: 'image/jpeg',
+      } as any);
+      if (orderId) {
+        form.append('order_id', String(orderId));
+      }
+
+      const response = await fetch(url, {
+        method: 'POST',
+        // Do NOT set Content-Type; let fetch/RN set correct boundary for multipart
+        body: form,
+      });
+
+      const json = await response.json();
+      if (!response.ok || !json.success) {
+        return { success: false, error: json.error || 'Upload failed', message: json.message };
+      }
+
+      return {
+        success: true,
+        data: {
+          url: json.url,
+          order_updated: json.order_updated,
+          order_id: json.order_id,
+        },
+      };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Upload error' };
+    }
   }
 
   // Prescription order methods
@@ -382,6 +443,29 @@ class ApiService {
   async getOrderStatus(orderId: string): Promise<ApiResponse<any>> {
     console.log('📦 Getting order status for ID:', orderId);
     return this.makeDirectRequest(`/order-status/${orderId}/`);
+  }
+
+  // Chat (dev direct endpoints)
+  async getOrCreateOrderChatRoom(orderId: number, pharmacyId?: number): Promise<ApiResponse<any>> {
+    return this.makeDirectRequest('/order-chat-room/', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ order_id: orderId, pharmacy_id: pharmacyId })
+    });
+  }
+
+  async getOrderChatMessages(roomId: number, limit: number = 100): Promise<ApiResponse<any>> {
+    return this.makeDirectRequest(`/order-chat-messages/?room_id=${roomId}&limit=${limit}`);
+  }
+
+  async sendOrderChatMessage(roomId: number, content: string): Promise<ApiResponse<any>> {
+    return this.makeDirectRequest('/order-chat-send-customer/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ room_id: roomId, content })
+    });
   }
 }
 

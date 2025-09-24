@@ -24,6 +24,7 @@ from django.views.decorators.csrf import csrf_exempt
 from api import views
 from api.orders.direct_endpoints import direct_prescription_order_creation, get_order_status
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
+import os
 
 
 def test_api(request):
@@ -138,8 +139,37 @@ def direct_active_pharmacies(request):
                 
                 if storefront_doc:
                     storefront_document_id = storefront_doc.id
-                    # Prefer serving via backend proxy to avoid S3 public access/CORS issues
-                    storefront_image_url = request.build_absolute_uri(f"/api/document/{storefront_doc.id}/")
+                    # Prefer presigned S3 URL for mobile compatibility
+                    try:
+                        import boto3
+                        from urllib.parse import urlparse
+                        from botocore.config import Config
+                        bucket_name = os.getenv('AWS_STORAGE_BUCKET_NAME', 'pharmago-user-uploads')
+                        region = os.getenv('AWS_S3_REGION_NAME', 'ap-southeast-2')
+                        parsed = urlparse(storefront_doc.file_url)
+                        key = parsed.path.lstrip('/')
+                        if key.startswith(f"{bucket_name}/"):
+                            key = key[len(bucket_name) + 1:]
+                        s3_client = boto3.client(
+                            's3',
+                            aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
+                            aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY'),
+                            region_name=region,
+                            endpoint_url=f"https://s3.{region}.amazonaws.com",
+                            config=Config(signature_version='s3v4')
+                        )
+                        presigned = s3_client.generate_presigned_url(
+                            'get_object',
+                            Params={'Bucket': bucket_name, 'Key': key},
+                            ExpiresIn=3600
+                        )
+                        storefront_image_url = presigned
+                    except Exception as _e:
+                        # Fallback to backend proxy (new dedicated endpoint preferred)
+                        try:
+                            storefront_image_url = request.build_absolute_uri(f"/api/pharmacy-storefront/{p.id}/")
+                        except Exception:
+                            storefront_image_url = request.build_absolute_uri(f"/api/document/{storefront_doc.id}/")
             except Exception as e:
                 print(f"Error fetching storefront image for pharmacy {p.id}: {e}")
             
@@ -270,38 +300,54 @@ def serve_document(request, document_id):
                 region_name=os.getenv('AWS_S3_REGION_NAME', 'ap-southeast-2')
             )
             
-            # Extract bucket and key from URL
+            # Extract bucket and key from URL robustly
+            from urllib.parse import urlparse
+            import mimetypes
             bucket_name = os.getenv('AWS_STORAGE_BUCKET_NAME', 'pharmago-user-uploads')
-            # Extract key from URL like: https://bucket.s3.region.amazonaws.com/key
-            url_parts = document.file_url.split('/')
-            key = '/'.join(url_parts[3:])  # Everything after the bucket name
+            parsed = urlparse(document.file_url)
+            path = parsed.path.lstrip('/')  # e.g., 'bucket/key' or just 'key'
+            # If path starts with bucket name, strip it
+            if path.startswith(f"{bucket_name}/"):
+                key = path[len(bucket_name) + 1:]
+            else:
+                key = path
             
             # Fetch the object from S3
             response = s3_client.get_object(Bucket=bucket_name, Key=key)
             file_content = response['Body'].read()
             
-            # Determine content type based on file extension
-            content_type = 'application/octet-stream'
-            if document.file_url.lower().endswith(('.jpg', '.jpeg')):
-                content_type = 'image/jpeg'
-            elif document.file_url.lower().endswith('.png'):
-                content_type = 'image/png'
-            elif document.file_url.lower().endswith('.pdf'):
-                content_type = 'application/pdf'
-            elif document.file_url.lower().endswith('.gif'):
-                content_type = 'image/gif'
+            # Determine content type based on file extension in path (ignore query params)
+            guessed, _ = mimetypes.guess_type(parsed.path)
+            content_type = response.get('ContentType') or guessed or 'application/octet-stream'
             
             # Return the file content
-            django_response = HttpResponse(
-                file_content,
-                content_type=content_type
-            )
-            django_response['Content-Disposition'] = f'inline; filename="{document.id_type.name if document.id_type else "document"}.{document.file_url.split(".")[-1]}"'
+            django_response = HttpResponse(file_content, content_type=content_type)
+            # Propagate size headers when available
+            content_length = response.get('ContentLength')
+            if content_length is not None:
+                django_response['Content-Length'] = str(content_length)
+            django_response['Accept-Ranges'] = 'bytes'
+            django_response['Cache-Control'] = 'public, max-age=86400'
+            # Best-effort filename
+            filename_ext = os.path.splitext(parsed.path)[1] or ''
+            django_response['Content-Disposition'] = f'inline; filename="{(document.id_type.name if document.id_type else "document")} {document.id}{filename_ext}"'
             return django_response
             
         except ClientError as e:
             print(f"ERROR fetching document from S3: {e}")
-            raise Http404("Unable to fetch document")
+            # Fallback: redirect to original S3 URL if accessible
+            try:
+                from django.shortcuts import redirect
+                return redirect(document.file_url)
+            except Exception as _:
+                raise Http404("Unable to fetch document")
+        except Exception as e:
+            print(f"ERROR unexpected when serving document: {e}")
+            try:
+                from django.shortcuts import redirect
+                return redirect(document.file_url)
+            except Exception as _:
+                raise Http404("Error serving document")
             
     except UserDocument.DoesNotExist:
         print(f"ERROR: Document with ID {document_id} not found")
@@ -310,6 +356,260 @@ def serve_document(request, document_id):
         print(f"ERROR in serve_document: {e}")
         raise Http404("Error serving document")
 
+
+def serve_pharmacy_storefront(request, pharmacy_id):
+    """Serve pharmacy storefront image through backend proxy.
+    Looks up the pharmacy's storefront UserDocument and streams via S3 get_object.
+    """
+    from django.http import HttpResponse, Http404
+    import boto3
+    from botocore.exceptions import ClientError
+    from urllib.parse import urlparse
+    from api.users.models import Pharmacy, UserDocument
+
+    try:
+        pharmacy = Pharmacy.objects.get(id=pharmacy_id)
+
+        # Find storefront doc by id_type name contains 'storefront' or filename contains 'storefront'
+        storefront_doc = UserDocument.objects.filter(
+            user=pharmacy.user,
+            id_type__name__icontains='storefront'
+        ).first()
+        if not storefront_doc:
+            storefront_doc = UserDocument.objects.filter(
+                user=pharmacy.user,
+                document_file__icontains='storefront'
+            ).first()
+
+        if not storefront_doc or not storefront_doc.file_url:
+            raise Http404("Storefront image not found")
+
+        # Use boto3 to fetch the file from S3
+        s3_client = boto3.client(
+            's3',
+            aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
+            aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY'),
+            region_name=os.getenv('AWS_S3_REGION_NAME', 'ap-southeast-2')
+        )
+
+        bucket_name = os.getenv('AWS_STORAGE_BUCKET_NAME', 'pharmago-user-uploads')
+        parsed = urlparse(storefront_doc.file_url)
+        path = parsed.path.lstrip('/')
+        if path.startswith(f"{bucket_name}/"):
+            key = path[len(bucket_name) + 1:]
+        else:
+            key = path
+
+        response = s3_client.get_object(Bucket=bucket_name, Key=key)
+        file_content = response['Body'].read()
+        content_type = response.get('ContentType') or 'image/jpeg'
+
+        django_response = HttpResponse(file_content, content_type=content_type)
+        content_length = response.get('ContentLength')
+        if content_length is not None:
+            django_response['Content-Length'] = str(content_length)
+        django_response['Cache-Control'] = 'public, max-age=86400'
+        django_response['Accept-Ranges'] = 'bytes'
+        return django_response
+
+    except Pharmacy.DoesNotExist:
+        raise Http404("Pharmacy not found")
+    except ClientError as e:
+        print(f"ERROR fetching storefront from S3: {e}")
+        # Last resort: try redirecting to the original S3 URL
+        try:
+            from django.shortcuts import redirect
+            return redirect(storefront_doc.file_url)
+        except Exception:
+            raise Http404("Unable to fetch storefront image")
+    except Exception as e:
+        print(f"ERROR in serve_pharmacy_storefront: {e}")
+        raise Http404("Error serving storefront image")
+
+def document_presigned_url(request, document_id):
+    """Return a presigned S3 URL for a given UserDocument id (dev-only direct endpoint)."""
+    try:
+        from api.users.models import UserDocument
+        import boto3
+        from urllib.parse import urlparse
+        import os
+
+        doc = UserDocument.objects.get(id=document_id)
+        if not doc.file_url:
+            return JsonResponse({'success': False, 'error': 'Document has no file_url'}, status=404)
+
+        bucket_name = os.getenv('AWS_STORAGE_BUCKET_NAME', 'pharmago-user-uploads')
+        parsed = urlparse(doc.file_url)
+        key = parsed.path.lstrip('/')
+        if key.startswith(f"{bucket_name}/"):
+            key = key[len(bucket_name) + 1:]
+
+        s3 = boto3.client(
+            's3',
+            aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
+            aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY'),
+            region_name=os.getenv('AWS_S3_REGION_NAME', 'ap-southeast-2')
+        )
+
+        url = s3.generate_presigned_url(
+            'get_object', Params={'Bucket': bucket_name, 'Key': key}, ExpiresIn=3600
+        )
+        return JsonResponse({'success': True, 'url': url})
+    except UserDocument.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'Document not found'}, status=404)
+    except Exception as e:
+        print(f"ERROR in document_presigned_url: {e}")
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
+def aws_diagnostics(request):
+    """Simple diagnostics endpoint to verify AWS credentials and bucket access in dev."""
+    try:
+        import boto3
+        import os
+        sts = boto3.client(
+            'sts',
+            aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
+            aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY'),
+            region_name=os.getenv('AWS_S3_REGION_NAME', 'ap-southeast-2')
+        )
+        ident = sts.get_caller_identity()
+        return JsonResponse({
+            'success': True,
+            'account': ident.get('Account'),
+            'arn': ident.get('Arn'),
+            'user_id': ident.get('UserId'),
+            'region': os.getenv('AWS_S3_REGION_NAME'),
+            'bucket': os.getenv('AWS_STORAGE_BUCKET_NAME'),
+        })
+    except Exception as e:
+        print(f"ERROR in aws_diagnostics: {e}")
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+def serve_prescription_image(request, order_id):
+    """Serve prescription image through Django backend to handle S3 access"""
+    from api.orders.models import Order
+    from django.http import HttpResponse, Http404
+    import boto3
+    from botocore.exceptions import ClientError
+    import os
+    
+    try:
+        # Get the order
+        order = Order.objects.get(id=order_id)
+        
+        if not order.prescription_image_url:
+            raise Http404("Prescription image not found")
+        
+        # Use boto3 to fetch the file from S3
+        try:
+            # Initialize S3 client
+            s3_client = boto3.client(
+                's3',
+                aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
+                aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY'),
+                region_name=os.getenv('AWS_S3_REGION_NAME', 'ap-southeast-2')
+            )
+            
+            # Extract bucket and key from URL
+            bucket_name = os.getenv('AWS_STORAGE_BUCKET_NAME', 'pharmago-user-uploads')
+            # Extract key from URL like: https://bucket.s3.region.amazonaws.com/key
+            url_parts = order.prescription_image_url.split('/')
+            key = '/'.join(url_parts[3:])  # Everything after the bucket name
+            
+            # Fetch the object from S3
+            response = s3_client.get_object(Bucket=bucket_name, Key=key)
+            file_content = response['Body'].read()
+            
+            # Determine content type based on file extension
+            content_type = 'application/octet-stream'
+            if order.prescription_image_url.lower().endswith(('.jpg', '.jpeg')):
+                content_type = 'image/jpeg'
+            elif order.prescription_image_url.lower().endswith('.png'):
+                content_type = 'image/png'
+            elif order.prescription_image_url.lower().endswith('.pdf'):
+                content_type = 'application/pdf'
+            elif order.prescription_image_url.lower().endswith('.gif'):
+                content_type = 'image/gif'
+            
+            # Return the file content
+            django_response = HttpResponse(
+                file_content,
+                content_type=content_type
+            )
+            django_response['Content-Disposition'] = f'inline; filename="prescription_{order_id}.{order.prescription_image_url.split(".")[-1]}"'
+            return django_response
+            
+        except ClientError as e:
+            print(f"ERROR fetching prescription image from S3: {e}")
+            raise Http404("Unable to fetch prescription image")
+            
+    except Order.DoesNotExist:
+        print(f"ERROR: Order with ID {order_id} not found")
+        raise Http404("Order not found")
+    except Exception as e:
+        print(f"ERROR in serve_prescription_image: {e}")
+        raise Http404("Error serving prescription image")
+
+
+@csrf_exempt
+def upload_prescription_image(request):
+    """Upload prescription image to default storage (e.g., S3) and return a public URL.
+    Optionally updates an order's prescription_image_url when order_id is provided."""
+    if request.method != 'POST':
+        return JsonResponse({
+            'success': False,
+            'error': 'Method not allowed'
+        }, status=405)
+
+    try:
+        from django.core.files.storage import default_storage
+        from django.utils import timezone
+        from api.orders.models import Order
+        import uuid
+        import os
+
+        file_obj = request.FILES.get('file') or request.FILES.get('image')
+        if not file_obj:
+            return JsonResponse({
+                'success': False,
+                'error': 'No file uploaded. Use form-data with key "file" or "image".'
+            }, status=400)
+
+        # Build deterministic path: prescriptions/YYYY/MM/DD/uuid.ext
+        today_path = timezone.now().strftime('%Y/%m/%d')
+        _, ext = os.path.splitext(file_obj.name or '')
+        if not ext:
+            ext = '.jpg'
+        filename = f"prescriptions/{today_path}/{uuid.uuid4().hex}{ext}"
+
+        saved_path = default_storage.save(filename, file_obj)
+        file_url = default_storage.url(saved_path)
+
+        order_id = request.POST.get('order_id') or request.GET.get('order_id')
+        updated = False
+        if order_id:
+            try:
+                order = Order.objects.get(id=int(order_id))
+                order.prescription_image_url = file_url
+                order.save(update_fields=['prescription_image_url'])
+                updated = True
+            except (Order.DoesNotExist, ValueError):
+                pass
+
+        return JsonResponse({
+            'success': True,
+            'url': file_url,
+            'order_id': order_id,
+            'order_updated': updated
+        })
+
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': 'Upload failed',
+            'message': str(e)
+        }, status=500)
 
 @csrf_exempt
 def approve_pharmacy(request, pharmacy_id):
@@ -1556,6 +1856,132 @@ def direct_pharmacy_inventory(request, pharmacy_id):
         }, status=500)
 
 
+def direct_pharmacy_orders(request, pharmacy_id):
+    """Direct pharmacy orders endpoint that bypasses all authentication"""
+    try:
+        from api.orders.models import Order, OrderLine
+        from api.users.models import Pharmacy
+        
+        # Get pharmacy
+        try:
+            pharmacy = Pharmacy.objects.get(id=pharmacy_id)
+        except Pharmacy.DoesNotExist:
+            return JsonResponse({
+                'error': 'Pharmacy not found',
+                'pharmacy_id': pharmacy_id
+            }, status=404)
+        
+        # Get orders for this pharmacy using the visibility pattern
+        # Order → OrderLine → PharmacyInventory → Pharmacy
+        orders = Order.objects.filter(
+            order_lines__inventory_item__pharmacy=pharmacy
+        ).distinct().select_related('customer', 'delivery_address').order_by('-created_at')
+        
+        # Group orders by status
+        orders_data = {
+            'pending': [],
+            'preparing': [],
+            'ready': []
+        }
+        
+        for order in orders:
+            # Get order lines for this pharmacy
+            order_lines = order.order_lines.filter(
+                inventory_item__pharmacy=pharmacy
+            ).select_related('inventory_item')
+            
+            # Check if this is a prescription order
+            is_prescription_order = bool(order.prescription_image_url or order.prescription_status)
+            
+            # Build customer address (barangay and city only)
+            customer_address = f"{order.delivery_address.barangay}, {order.delivery_address.city}"
+            
+            # Build prescription image URL
+            # If it's an absolute URL already, keep it; if it's a local media path, make it absolute
+            prescription_image_url = None
+            if order.prescription_image_url:
+                if str(order.prescription_image_url).startswith('http'):
+                    prescription_image_url = order.prescription_image_url
+                else:
+                    prescription_image_url = request.build_absolute_uri(order.prescription_image_url)
+            
+            # Build order data
+            order_data = {
+                'id': order.id,
+                'orderNumber': order.order_number,
+                'customerName': f"{order.customer.first_name} {order.customer.last_name}",
+                'customerAddress': customer_address,
+                'riderName': order.get_rider_name() or 'Not Assigned',
+                'riderPhone': 'N/A',  # Will be populated when rider is assigned
+                'totalAmount': float(order.total_amount),
+                'createdAt': order.created_at.isoformat(),
+                'orderStatus': order.order_status,
+                'paymentStatus': order.payment_status,
+                'prescriptionStatus': order.prescription_status,
+                'isPrescriptionOrder': is_prescription_order,
+                'prescriptionImageUrl': prescription_image_url,
+                'prescriptionNotes': order.prescription_notes,
+                'items': []
+            }
+            
+            # Add order line items (exclude placeholder items for prescription orders)
+            for line in order_lines:
+                # Skip placeholder items (unit_price=0) for prescription orders
+                if is_prescription_order and line.unit_price == 0:
+                    continue
+                    
+                item_data = {
+                    'product': line.inventory_item.display_name,
+                    'quantity': line.quantity,
+                    'unitPrice': float(line.unit_price),
+                    'totalPrice': float(line.total_price)
+                }
+                order_data['items'].append(item_data)
+            
+            # Categorize by status
+            if order.order_status == 'pending':
+                orders_data['pending'].append(order_data)
+            elif order.order_status in ['accepted', 'preparing']:
+                orders_data['preparing'].append(order_data)
+            elif order.order_status in ['ready_for_pickup', 'picked_up']:
+                orders_data['ready'].append(order_data)
+        
+        # Calculate statistics
+        total_orders = orders.count()
+        pending_count = len(orders_data['pending'])
+        preparing_count = len(orders_data['preparing'])
+        ready_count = len(orders_data['ready'])
+        
+        # Log the request
+        print(f"=== PHARMACY ORDERS REQUEST ===")
+        print(f"Pharmacy: {pharmacy.pharmacy_name} (ID: {pharmacy_id})")
+        print(f"Total orders: {total_orders}")
+        print(f"Pending: {pending_count}")
+        print(f"Preparing: {preparing_count}")
+        print(f"Ready: {ready_count}")
+        print("=== END PHARMACY ORDERS REQUEST ===")
+        
+        return JsonResponse({
+            'success': True,
+            'pharmacy_id': pharmacy_id,
+            'pharmacy_name': pharmacy.pharmacy_name,
+            'totalOrders': total_orders,
+            'pendingOrders': pending_count,
+            'preparingOrders': preparing_count,
+            'readyOrders': ready_count,
+            'orders': orders_data
+        })
+        
+    except Exception as e:
+        print(f"ERROR in direct_pharmacy_orders: {e}")
+        return JsonResponse({
+            'success': False,
+            'error': 'Failed to fetch pharmacy orders',
+            'pharmacy_id': pharmacy_id,
+            'orders': {'pending': [], 'preparing': [], 'ready': []}
+        }, status=500)
+
+
 @csrf_exempt
 def toggle_inventory_availability(request, pharmacy_id, item_id):
     """Toggle availability of a specific inventory item"""
@@ -1764,6 +2190,518 @@ def update_inventory_item(request, pharmacy_id, item_id):
         }, status=500)
 
 
+@csrf_exempt
+def attach_prescription_items(request):
+    """Attach selected inventory items to an existing prescription order (direct endpoint).
+
+    Request body JSON:
+    {
+      "order_id": 123,
+      "pharmacy_id": 45,
+      "items": [{"inventory_item_id": 1, "quantity": 2}, ...],
+      "notes": "optional pharmacist notes"
+    }
+    """
+    if request.method == 'OPTIONS':
+        # Allow CORS preflight in dev
+        return JsonResponse({'success': True})
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
+
+    try:
+        print("=== ATTACH PRESCRIPTION ITEMS - START ===")
+        print(f"Method: {request.method}")
+        print(f"Content-Type: {request.content_type}")
+        try:
+            print(f"Raw body: {request.body[:1000]}")
+        except Exception:
+            pass
+        import json
+        from decimal import Decimal
+        from api.orders.models import Order, OrderLine
+        from api.inventory.models import PharmacyInventory, MedicineCategory
+        from api.users.models import Pharmacy
+        from django.db.models import Sum
+
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError as e:
+            print(f"JSON decode error: {e}")
+            return JsonResponse({'success': False, 'error': 'Invalid JSON body'}, status=400)
+
+        order_id = data.get('order_id')
+        pharmacy_id = data.get('pharmacy_id')
+        items = data.get('items', [])
+        pharmacist_notes = data.get('notes', '')
+
+        print(f"Parsed payload → order_id: {order_id}, pharmacy_id: {pharmacy_id}, items: {len(items)}, notes: {bool(pharmacist_notes)}")
+        if not order_id or not pharmacy_id:
+            print("Validation failed: missing order_id or pharmacy_id")
+            return JsonResponse({'success': False, 'error': 'order_id and pharmacy_id are required'}, status=400)
+        if not isinstance(items, list) or len(items) == 0:
+            print("Validation failed: empty items list")
+            return JsonResponse({'success': False, 'error': 'items must be a non-empty list'}, status=400)
+
+        try:
+            order = Order.objects.get(id=order_id)
+        except Order.DoesNotExist:
+            print(f"Order not found: {order_id}")
+            return JsonResponse({'success': False, 'error': 'Order not found'}, status=404)
+
+        try:
+            pharmacy = Pharmacy.objects.get(id=pharmacy_id)
+        except Pharmacy.DoesNotExist:
+            print(f"Pharmacy not found: {pharmacy_id}")
+            return JsonResponse({'success': False, 'error': 'Pharmacy not found'}, status=404)
+
+        # Ensure order is linked to this pharmacy via at least a placeholder order line
+        if not order.order_lines.filter(inventory_item__pharmacy=pharmacy).exists():
+            print("Order not linked to pharmacy yet → creating placeholder line")
+            # Create or reuse placeholder inventory
+            category, _ = MedicineCategory.objects.get_or_create(
+                name='Custom Products',
+                defaults={
+                    'description': 'Custom products created by pharmacies',
+                    'is_active': True,
+                    'sort_order': 0,
+                }
+            )
+            placeholder_inventory, _ = PharmacyInventory.objects.get_or_create(
+                pharmacy=pharmacy,
+                medicine=None,
+                defaults={
+                    'category': category,
+                    'name': 'Prescription Review',
+                    'form': 'solution',
+                    'dosage': 'N/A',
+                    'description': 'Placeholder for prescription-only orders',
+                    'prescription_required': True,
+                    'price': Decimal('0.00'),
+                    'original_price': Decimal('0.00'),
+                    'cost_price': Decimal('0.00'),
+                    'stock_quantity': 0,
+                    'is_available': True,
+                }
+            )
+            OrderLine.objects.create(
+                order=order,
+                inventory_item=placeholder_inventory,
+                quantity=1,
+                unit_price=Decimal('0.00'),
+                total_price=Decimal('0.00'),
+                prescription_required=True,
+                prescription_status='pending',
+                prescription_notes='Prescription review placeholder created automatically',
+                notes='Auto-linked to pharmacy during attach'
+            )
+
+        added_lines = []
+        errors = []
+
+        for entry in items:
+            print(f"Processing item: {entry}")
+            inv_id = entry.get('inventory_item_id') or entry.get('id')
+            quantity = entry.get('quantity', 1)
+            try:
+                quantity = int(quantity)
+            except Exception:
+                quantity = 1
+            if not inv_id or quantity <= 0:
+                errors.append({'inventory_item_id': inv_id, 'error': 'Invalid item or quantity'})
+                print(f"  → skipped: invalid item or quantity (id={inv_id}, qty={quantity})")
+                continue
+
+            inv_item = PharmacyInventory.objects.filter(id=inv_id, pharmacy=pharmacy).first()
+            if not inv_item:
+                errors.append({'inventory_item_id': inv_id, 'error': 'Inventory item not found for this pharmacy'})
+                print(f"  → skipped: inventory item not found (id={inv_id})")
+                continue
+
+            # No stock decrement/validation in this flow; availability toggle handles visibility
+
+            unit_price = inv_item.price
+            total_price = unit_price * quantity
+
+            line = OrderLine.objects.create(
+                order=order,
+                inventory_item=inv_item,
+                quantity=quantity,
+                unit_price=unit_price,
+                total_price=total_price,
+                prescription_required=inv_item.prescription_required,
+                prescription_status='approved' if inv_item.prescription_required else '',
+                notes='Added from pharmacist prescription review'
+            )
+            print(f"  → created order line id={line.id} for inventory id={inv_item.id}")
+
+            added_lines.append({
+                'order_line_id': line.id,
+                'inventory_item_id': inv_item.id,
+                'name': inv_item.display_name,
+                'quantity': quantity,
+                'unit_price': float(unit_price),
+                'total_price': float(total_price),
+            })
+
+        # Update order and totals
+        if pharmacist_notes:
+            order.prescription_notes = (order.prescription_notes or '') + (f"\n{pharmacist_notes}" if order.prescription_notes else pharmacist_notes)
+
+        # Keep prescription status pending until customer approves pricing
+        # if added_lines: leave as pending
+
+        print("Recalculating order totals (bypassing model.calculate_totals)...")
+        try:
+            line_total = order.order_lines.aggregate(total=Sum('total_price'))['total'] or Decimal('0.00')
+        except Exception as e:
+            print(f"Aggregate subtotal error: {e}")
+            line_total = Decimal('0.00')
+
+        # Coerce delivery_fee and discount_amount to Decimal safely
+        delivery_fee = order.delivery_fee if isinstance(getattr(order, 'delivery_fee', Decimal('0.00')), Decimal) else Decimal(str(order.delivery_fee or 0))
+        discount_amount = order.discount_amount if isinstance(getattr(order, 'discount_amount', Decimal('0.00')), Decimal) else Decimal(str(order.discount_amount or 0))
+
+        order.subtotal = line_total
+        order.tax_amount = Decimal('0.00')
+        order.total_amount = (order.subtotal + delivery_fee) - discount_amount
+        # Do not move order to preparing; wait for customer approval
+        order.save()
+
+        print("=== ATTACH PRESCRIPTION ITEMS - SUCCESS ===")
+        return JsonResponse({
+            'success': True,
+            'order_id': order.id,
+            'total_added': len(added_lines),
+            'added_lines': added_lines,
+            'errors': errors,
+            'order_total_amount': float(order.total_amount),
+            'order_status': order.order_status,
+            'prescription_status': order.prescription_status,
+        })
+
+    except Exception as e:
+        import traceback
+        print("=== ATTACH PRESCRIPTION ITEMS - ERROR ===")
+        print(f"Error: {e}")
+        print(traceback.format_exc())
+        return JsonResponse({'success': False, 'error': 'Failed to attach items to order'}, status=500)
+
+
+@csrf_exempt
+def get_or_create_order_chat_room(request):
+    """Dev endpoint: Get or create a ChatRoom for a given order and ensure participants.
+
+    Request JSON:
+      { "order_id": 123, "pharmacy_id": 45 (optional fallback) }
+
+    Response JSON:
+      { "success": true, "room": { "id": 1, "room_id": "CHAT...", "order_id": 123, "title": "...", "status": "open" } }
+    """
+    try:
+        import json
+        from api.orders.models import Order
+        from api.chat.models import ChatRoom, ChatParticipant, ChatMessage
+        from api.users.models import Pharmacy
+
+        if request.method == 'OPTIONS':
+            return JsonResponse({'success': True})
+        if request.method != 'POST':
+            return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
+
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({'success': False, 'error': 'Invalid JSON body'}, status=400)
+
+        order_id = data.get('order_id')
+        pharmacy_id = data.get('pharmacy_id')
+        if not order_id:
+            return JsonResponse({'success': False, 'error': 'order_id is required'}, status=400)
+
+        try:
+            order = Order.objects.get(id=order_id)
+        except Order.DoesNotExist:
+            return JsonResponse({'success': False, 'error': 'Order not found'}, status=404)
+
+        # Resolve pharmacy via first order line if possible
+        pharmacy = None
+        try:
+            first_line = order.order_lines.select_related('inventory_item__pharmacy').first()
+            if first_line and getattr(first_line.inventory_item, 'pharmacy', None):
+                pharmacy = first_line.inventory_item.pharmacy
+        except Exception:
+            pharmacy = None
+
+        if not pharmacy and pharmacy_id:
+            try:
+                pharmacy = Pharmacy.objects.get(id=pharmacy_id)
+            except Pharmacy.DoesNotExist:
+                pass
+
+        # Get or create room for this order
+        room = ChatRoom.objects.filter(order=order).first()
+        if not room:
+            room = ChatRoom.objects.create(
+                order=order,
+                title=f"Order #{order.order_number} Chat"
+            )
+            # System message
+            ChatMessage.create_system_message(room, f"Chat room created for Order #{order.order_number}")
+
+        # Ensure participants: customer and pharmacy (if available)
+        try:
+            customer_user = order.customer.user
+            ChatParticipant.objects.get_or_create(room=room, user=customer_user, defaults={'role': 'customer'})
+        except Exception:
+            pass
+
+        if pharmacy and getattr(pharmacy, 'user', None):
+            ChatParticipant.objects.get_or_create(room=room, user=pharmacy.user, defaults={'role': 'pharmacy'})
+
+        return JsonResponse({
+            'success': True,
+            'room': {
+                'id': room.id,
+                'room_id': room.room_id,
+                'order_id': order.id,
+                'title': room.title,
+                'status': room.status,
+            }
+        })
+
+    except Exception as e:
+        import traceback
+        print("=== ORDER CHAT ROOM - ERROR ===")
+        print(f"Error: {e}")
+        print(traceback.format_exc())
+        return JsonResponse({'success': False, 'error': 'Failed to create or fetch chat room'}, status=500)
+
+
+@csrf_exempt
+def get_order_chat_messages(request):
+    """Dev endpoint: List messages for a chat room.
+
+    Query params:
+      room_id: int (required)
+      limit: int (optional, default 50, max 200)
+    """
+    try:
+        from api.chat.models import ChatRoom, ChatMessage
+        from django.utils.dateparse import parse_datetime
+
+        if request.method == 'OPTIONS':
+            return JsonResponse({'success': True})
+        if request.method != 'GET':
+            return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
+
+        room_id = request.GET.get('room_id')
+        limit_param = request.GET.get('limit', '50')
+        try:
+            limit = max(1, min(200, int(limit_param)))
+        except ValueError:
+            limit = 50
+
+        if not room_id:
+            return JsonResponse({'success': False, 'error': 'room_id is required'}, status=400)
+
+        try:
+            room = ChatRoom.objects.get(id=int(room_id))
+        except (ChatRoom.DoesNotExist, ValueError):
+            return JsonResponse({'success': False, 'error': 'Room not found'}, status=404)
+
+        messages_qs = ChatMessage.objects.filter(room=room, is_deleted=False).order_by('timestamp')
+        messages = list(messages_qs[:limit])
+
+        def serialize(msg):
+            return {
+                'id': msg.id,
+                'sender_name': msg.sender_name,
+                'sender_role': msg.sender_role,
+                'message_type': msg.message_type,
+                'content': msg.content,
+                'file_path': msg.file_path,
+                'timestamp': msg.timestamp.isoformat() if msg.timestamp else None,
+                'is_system_message': msg.is_system_message,
+            }
+
+        return JsonResponse({
+            'success': True,
+            'room': {
+                'id': room.id,
+                'room_id': room.room_id,
+            },
+            'count': len(messages),
+            'messages': [serialize(m) for m in messages],
+        })
+
+    except Exception as e:
+        import traceback
+        print("=== ORDER CHAT MESSAGES - ERROR ===")
+        print(f"Error: {e}")
+        print(traceback.format_exc())
+        return JsonResponse({'success': False, 'error': 'Failed to fetch messages'}, status=500)
+
+
+@csrf_exempt
+def send_order_chat_message(request):
+    """Dev endpoint: Send a text chat message to a room as the pharmacy user.
+
+    Request JSON:
+      { "room_id": 45, "pharmacy_id": 22, "content": "Hello" }
+    """
+    try:
+        import json
+        from api.chat.models import ChatRoom, ChatParticipant, ChatMessage
+        from api.users.models import Pharmacy
+
+        if request.method == 'OPTIONS':
+            return JsonResponse({'success': True})
+        if request.method != 'POST':
+            return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
+
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({'success': False, 'error': 'Invalid JSON body'}, status=400)
+
+        room_id = data.get('room_id')
+        pharmacy_id = data.get('pharmacy_id')
+        content = (data.get('content') or '').strip()
+
+        if not room_id or not pharmacy_id:
+            return JsonResponse({'success': False, 'error': 'room_id and pharmacy_id are required'}, status=400)
+        if not content:
+            return JsonResponse({'success': False, 'error': 'content cannot be empty'}, status=400)
+
+        try:
+            room = ChatRoom.objects.get(id=int(room_id))
+        except (ChatRoom.DoesNotExist, ValueError):
+            return JsonResponse({'success': False, 'error': 'Room not found'}, status=404)
+
+        try:
+            pharmacy = Pharmacy.objects.get(id=int(pharmacy_id))
+            sender_user = pharmacy.user
+        except (Pharmacy.DoesNotExist, ValueError):
+            return JsonResponse({'success': False, 'error': 'Pharmacy not found'}, status=404)
+
+        participant, _ = ChatParticipant.objects.get_or_create(
+            room=room,
+            user=sender_user,
+            defaults={'role': 'pharmacy'}
+        )
+
+        message = ChatMessage.objects.create(
+            room=room,
+            sender=participant,
+            message_type='text',
+            content=content
+        )
+
+        # Mark as delivered for dev flow
+        try:
+            message.mark_as_delivered()
+        except Exception:
+            pass
+
+        return JsonResponse({
+            'success': True,
+            'message': {
+                'id': message.id,
+                'sender_name': message.sender_name,
+                'sender_role': message.sender_role,
+                'message_type': message.message_type,
+                'content': message.content,
+                'timestamp': message.timestamp.isoformat() if message.timestamp else None,
+                'is_system_message': message.is_system_message,
+            }
+        }, status=201)
+
+    except Exception as e:
+        import traceback
+        print("=== ORDER CHAT SEND - ERROR ===")
+        print(f"Error: {e}")
+        print(traceback.format_exc())
+        return JsonResponse({'success': False, 'error': 'Failed to send message'}, status=500)
+
+
+@csrf_exempt
+def send_order_chat_message_customer(request):
+    """Dev endpoint: Send a text chat message to a room as the customer user.
+
+    Request JSON:
+      { "room_id": 45, "content": "Hello" }
+    """
+    try:
+        import json
+        from api.chat.models import ChatRoom, ChatParticipant, ChatMessage
+        from api.orders.models import Order
+
+        if request.method == 'OPTIONS':
+            return JsonResponse({'success': True})
+        if request.method != 'POST':
+            return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
+
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({'success': False, 'error': 'Invalid JSON body'}, status=400)
+
+        room_id = data.get('room_id')
+        content = (data.get('content') or '').strip()
+        if not room_id:
+            return JsonResponse({'success': False, 'error': 'room_id is required'}, status=400)
+        if not content:
+            return JsonResponse({'success': False, 'error': 'content cannot be empty'}, status=400)
+
+        try:
+            room = ChatRoom.objects.select_related('order__customer__user').get(id=int(room_id))
+        except (ChatRoom.DoesNotExist, ValueError):
+            return JsonResponse({'success': False, 'error': 'Room not found'}, status=404)
+
+        # Resolve customer user from room.order
+        try:
+            customer_user = room.order.customer.user
+        except Exception:
+            return JsonResponse({'success': False, 'error': 'Customer not found for this order'}, status=404)
+
+        participant, _ = ChatParticipant.objects.get_or_create(
+            room=room,
+            user=customer_user,
+            defaults={'role': 'customer'}
+        )
+
+        message = ChatMessage.objects.create(
+            room=room,
+            sender=participant,
+            message_type='text',
+            content=content
+        )
+
+        try:
+            message.mark_as_delivered()
+        except Exception:
+            pass
+
+        return JsonResponse({
+            'success': True,
+            'message': {
+                'id': message.id,
+                'sender_name': message.sender_name,
+                'sender_role': message.sender_role,
+                'message_type': message.message_type,
+                'content': message.content,
+                'timestamp': message.timestamp.isoformat() if message.timestamp else None,
+                'is_system_message': message.is_system_message,
+            }
+        }, status=201)
+
+    except Exception as e:
+        import traceback
+        print("=== ORDER CHAT SEND (CUSTOMER) - ERROR ===")
+        print(f"Error: {e}")
+        print(traceback.format_exc())
+        return JsonResponse({'success': False, 'error': 'Failed to send message'}, status=500)
+
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/test/', test_api),
@@ -1773,6 +2711,11 @@ urlpatterns = [
     path('api/active-pharmacies/', direct_active_pharmacies),  # Direct endpoint for approved & active pharmacies
     path('api/pharmacy-details/<int:pharmacy_id>/', direct_pharmacy_details),  # Direct endpoint for pharmacy details
     path('api/document/<int:document_id>/', serve_document),  # Direct endpoint for serving documents
+    path('api/pharmacy-storefront/<int:pharmacy_id>/', serve_pharmacy_storefront),  # Direct endpoint for storefront image
+    path('api/document-presigned/<int:document_id>/', document_presigned_url),  # Dev: presigned URL for a document
+    path('api/aws-diagnostics/', aws_diagnostics),  # Dev: verify credentials
+    path('api/prescription-image/<int:order_id>/', serve_prescription_image),  # Direct endpoint for serving prescription images
+    path('api/upload-prescription-image/', upload_prescription_image),  # Direct endpoint for uploading prescription images
     path('api/approve-pharmacy/<int:pharmacy_id>/', approve_pharmacy),  # Direct endpoint for approving pharmacy
     path('api/generate-login-token/<int:pharmacy_id>/', generate_login_token),  # Direct endpoint for generating login token
     path('api/validate-login-token/<str:token>/', validate_login_token),  # Direct endpoint for validating login token
@@ -1784,8 +2727,14 @@ urlpatterns = [
     path('api/add-custom-products-to-inventory/', add_custom_products_to_inventory),  # Direct endpoint for adding custom products to inventory
     path('api/medicine-categories/', direct_medicine_categories),  # Direct endpoint for medicine categories
     path('api/pharmacy-inventory/<int:pharmacy_id>/', direct_pharmacy_inventory),
+    path('api/pharmacy-orders/<int:pharmacy_id>/', direct_pharmacy_orders),  # Direct endpoint for pharmacy orders
     path('api/toggle-availability/<int:pharmacy_id>/<int:item_id>/', toggle_inventory_availability),  # Direct endpoint for pharmacy inventory
     path('api/update-inventory-item/<int:pharmacy_id>/<int:item_id>/', update_inventory_item),  # Direct endpoint for updating inventory items
+    path('api/attach-prescription-items/', attach_prescription_items),  # Direct endpoint for attaching items to order
+    path('api/order-chat-room/', get_or_create_order_chat_room),  # Direct endpoint for order chat room
+    path('api/order-chat-messages/', get_order_chat_messages),  # Direct endpoint for listing chat messages
+    path('api/order-chat-send/', send_order_chat_message),  # Direct endpoint for sending chat messages (pharmacy)
+    path('api/order-chat-send-customer/', send_order_chat_message_customer),  # Direct endpoint for sending chat messages (customer)
     
     # Order endpoints
     path('api/create-prescription-order/', direct_prescription_order_creation),  # Direct endpoint for prescription order creation
