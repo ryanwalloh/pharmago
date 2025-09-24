@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 const PharmacyDashboard = () => {
@@ -61,6 +61,25 @@ const PharmacyDashboard = () => {
     outOfStockItems: 0,
     lowStockItems: 0
   });
+
+  // Review modal search state
+  const [reviewSearchQuery, setReviewSearchQuery] = useState('');
+  const [reviewSearchResults, setReviewSearchResults] = useState([]);
+  const [reviewSelectedItems, setReviewSelectedItems] = useState([]);
+  const [reviewSearching, setReviewSearching] = useState(false);
+  const reviewSearchDebounceRef = useRef(null);
+  const [isPrescriptionImagePreviewOpen, setIsPrescriptionImagePreviewOpen] = useState(false);
+  const [prescriptionImagePreviewUrl, setPrescriptionImagePreviewUrl] = useState('');
+  const [showChatPanel, setShowChatPanel] = useState(false);
+  const [chatRoom, setChatRoom] = useState(null);
+  const [chatLoading, setChatLoading] = useState(false);
+  const [chatError, setChatError] = useState('');
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatMessagesLoading, setChatMessagesLoading] = useState(false);
+  const chatPollRef = useRef(null);
+  const chatMessagesContainerRef = useRef(null);
+  const [chatInput, setChatInput] = useState('');
+  const [chatSending, setChatSending] = useState(false);
 
   // State for edit modal
   const [showEditModal, setShowEditModal] = useState(false);
@@ -180,13 +199,61 @@ const PharmacyDashboard = () => {
     readyOrders: orders.ready.length
   });
 
+  // Function to fetch orders from API
+  const fetchOrders = async (pharmacyId) => {
+    try {
+      console.log(`Fetching orders for pharmacy ID: ${pharmacyId}`);
+      const response = await fetch(`http://127.0.0.1:8000/api/pharmacy-orders/${pharmacyId}/`);
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Orders API Response:', data);
+        
+        if (data.success) {
+          // Update orders state with real data
+          setOrders({
+            pending: data.orders.pending || [],
+            preparing: data.orders.preparing || [],
+            ready: data.orders.ready || []
+          });
+          
+          // Update stats
+          setStats(prev => ({
+            ...prev,
+            totalOrders: data.totalOrders || 0,
+            pendingOrders: data.pendingOrders || 0,
+            preparingOrders: data.preparingOrders || 0,
+            readyOrders: data.readyOrders || 0
+          }));
+          
+          console.log(`✅ Loaded ${data.totalOrders} orders from database`);
+        } else {
+          console.error('API returned error:', data.error);
+        }
+      } else {
+        console.error('Failed to fetch orders:', response.status, response.statusText);
+        const errorText = await response.text();
+        console.error('Error details:', errorText);
+      }
+    } catch (error) {
+      console.error('Error fetching orders:', error);
+      console.log('Using mock data for development...');
+    }
+  };
+
   useEffect(() => {
     // Load pharmacy and user info from localStorage
     const storedPharmacyInfo = localStorage.getItem('pharmacy_info');
     const storedUserInfo = localStorage.getItem('pharmacy_user');
 
     if (storedPharmacyInfo) {
-      setPharmacyInfo(JSON.parse(storedPharmacyInfo));
+      const pharmacyData = JSON.parse(storedPharmacyInfo);
+      setPharmacyInfo(pharmacyData);
+      
+      // Fetch orders if we have pharmacy ID
+      if (pharmacyData && pharmacyData.id) {
+        fetchOrders(pharmacyData.id);
+      }
     }
     if (storedUserInfo) {
       setUserInfo(JSON.parse(storedUserInfo));
@@ -210,10 +277,36 @@ const PharmacyDashboard = () => {
 
   const handleViewOrder = (order) => {
     setSelectedOrder(order);
+    // Ensure inventory is loaded for review search
+    if (!inventoryData.categories || inventoryData.categories.length === 0) {
+      fetchPharmacyInventory();
+    }
+    // Reset review search state when opening
+    setReviewSearchQuery('');
+    setReviewSearchResults([]);
+    setReviewSelectedItems([]);
+    setReviewSearching(false);
   };
 
   const handleCloseModal = () => {
     setSelectedOrder(null);
+    setReviewSearchQuery('');
+    setReviewSearchResults([]);
+    setReviewSelectedItems([]);
+    setReviewSearching(false);
+    if (reviewSearchDebounceRef.current) {
+      clearTimeout(reviewSearchDebounceRef.current);
+      reviewSearchDebounceRef.current = null;
+    }
+    // Cleanup chat polling when closing modal
+    if (chatPollRef.current) {
+      clearInterval(chatPollRef.current);
+      chatPollRef.current = null;
+    }
+    setShowChatPanel(false);
+    setChatRoom(null);
+    setChatMessages([]);
+    setChatError('');
   };
 
   const handlePrepareOrder = (orderId) => {
@@ -248,6 +341,103 @@ const PharmacyDashboard = () => {
       ...prev,
       ready: prev.ready.filter(order => order.id !== orderId)
     }));
+  };
+
+  const handleAttachPrescriptionItems = async (order) => {
+    try {
+      console.log('🔗 Attaching prescription items - start', { orderId: order?.id, selectedCount: reviewSelectedItems.length });
+      const storedPharmacyInfo = localStorage.getItem('pharmacy_info');
+      if (!storedPharmacyInfo) {
+        alert('Pharmacy information not found. Please log in again.');
+        console.error('No pharmacy_info in localStorage');
+        return;
+      }
+      const pharmacy = JSON.parse(storedPharmacyInfo);
+      if (!pharmacy?.id) {
+        alert('Invalid pharmacy data.');
+        console.error('Invalid pharmacy parsed from localStorage', storedPharmacyInfo);
+        return;
+      }
+
+      if (!reviewSelectedItems.length) {
+        alert('Please select at least one item to add.');
+        console.warn('No items selected');
+        return;
+      }
+
+      const payload = {
+        order_id: order.id,
+        pharmacy_id: pharmacy.id,
+        items: reviewSelectedItems.map(item => ({
+          inventory_item_id: item.id,
+          quantity: 1
+        })),
+        notes: reviewSearchQuery ? `Matched items for: ${reviewSearchQuery}` : ''
+      };
+      console.log('📤 Attach payload', payload);
+
+      const response = await fetch('http://127.0.0.1:8000/api/attach-prescription-items/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+
+      const text = await response.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        data = { success: false, error: 'Invalid JSON from server', raw: text };
+      }
+      console.log('📥 Attach response', { status: response.status, ok: response.ok, data });
+      if (!response.ok || !data.success) {
+        console.error('Attach items failed:', data);
+        alert(data.error || 'Failed to add items to order.');
+        return;
+      }
+
+      // Refresh orders to reflect updated totals and items
+      fetchOrders(pharmacy.id);
+
+      // Clear selection and close modal
+      setReviewSelectedItems([]);
+      setReviewSearchQuery('');
+      setReviewSearchResults([]);
+      console.log('✅ Attach success', data);
+      // Close the modal after attaching items
+      setSelectedOrder(null);
+    } catch (err) {
+      console.error('❌ Error attaching items:', err);
+      alert('An unexpected error occurred.');
+    }
+  };
+
+  // Fetch chat messages (polling)
+  const fetchChatMessages = async (roomId) => {
+    try {
+      setChatMessagesLoading(true);
+      const resp = await fetch(`http://127.0.0.1:8000/api/order-chat-messages/?room_id=${roomId}&limit=100`);
+      const data = await resp.json();
+      if (!resp.ok || !data.success) {
+        console.error('Fetch messages failed', data);
+        setChatError(data.error || 'Failed to fetch messages');
+        return;
+      }
+      setChatMessages(data.messages || []);
+      // Auto-scroll to bottom
+      requestAnimationFrame(() => {
+        if (chatMessagesContainerRef.current) {
+          chatMessagesContainerRef.current.scrollTop = chatMessagesContainerRef.current.scrollHeight;
+        }
+      });
+    } catch (e) {
+      console.error('Fetch messages error', e);
+      setChatError('Unexpected error fetching messages');
+    } finally {
+      setChatMessagesLoading(false);
+    }
   };
 
   // Quick Add functionality
@@ -1999,40 +2189,404 @@ const PharmacyDashboard = () => {
 
           {/* Order Modal */}
           {selectedOrder && (
-            <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-              <div className="bg-white p-5 rounded-lg w-96 relative">
+            <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4">
+              <div className="bg-white rounded-2xl w-full max-w-4xl h-[600px] relative shadow-2xl overflow-hidden flex">
                 <span 
                   className="absolute top-2 right-4 text-2xl cursor-pointer"
                   onClick={handleCloseModal}
                 >
                   ×
                 </span>
-                <div className="mb-4">
-                  <p className="mb-4">Orders for Order No. <span className="font-bold">{selectedOrder.orderNumber}</span></p>
-                  {selectedOrder.items.map((item, index) => (
-                    <p key={index} className="mb-1">{item.product} x {item.quantity}</p>
-                  ))}
+                <div className="w-full h-full flex">
+                  {selectedOrder.isPrescriptionOrder ? (
+                    <>
+                      {/* Left: Image or Chat */}
+                      <div className="w-1/2 relative bg-gray-50">
+                        {!showChatPanel ? (
+                          <div className="w-full h-full p-4 flex items-center justify-center">
+                            {selectedOrder.prescriptionImageUrl ? (
+                              <img 
+                                src={selectedOrder.prescriptionImageUrl} 
+                                alt="Prescription" 
+                                className="max-h-full max-w-full object-contain rounded cursor-zoom-in"
+                                onClick={() => {
+                                  setPrescriptionImagePreviewUrl(selectedOrder.prescriptionImageUrl);
+                                  setIsPrescriptionImagePreviewOpen(true);
+                                }}
+                                onError={(e) => {
+                                  e.target.style.display = 'none';
+                                  e.target.nextSibling.style.display = 'block';
+                                }}
+                              />
+                            ) : (
+                              <div className="text-gray-500 text-center">
+                                No prescription image available
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="w-full h-full flex flex-col">
+                            {/* Chat Header */}
+                            <div className="px-4 py-3 border-b bg-white flex items-center justify-between">
+                              <div className="min-w-0">
+                                <h3 className="text-sm font-semibold text-gray-800 truncate">Chat with Customer</h3>
+                                <p className="text-xs text-gray-500 truncate">Order No. {selectedOrder.orderNumber}{chatRoom ? ` • Room ${chatRoom.room_id}` : ''}</p>
+                              </div>
+                              <button
+                                className="text-xs text-[#2c786c] hover:underline"
+                                onClick={() => setShowChatPanel(false)}
+                              >
+                                Back to Image
+                              </button>
+                            </div>
+
+                            {/* Messages Container */}
+                            <div ref={chatMessagesContainerRef} className="flex-1 overflow-auto p-4 space-y-3 bg-gray-50">
+                              {chatError && (
+                                <div className="text-xs text-red-600 text-center">{chatError}</div>
+                              )}
+                              {!chatError && chatMessages.length === 0 && !chatMessagesLoading && (
+                                <div className="text-xs text-gray-500 text-center">No messages yet.</div>
+                              )}
+                              {chatMessages.map((m) => (
+                                <div key={m.id} className="flex flex-col">
+                                  <div className="text-[11px] text-gray-500">{m.sender_name} • {new Date(m.timestamp).toLocaleString()}</div>
+                                  <div className={`inline-block max-w-[85%] mt-1 px-3 py-2 rounded-lg text-sm ${m.is_system_message ? 'bg-gray-200 text-gray-700' : 'bg-white border text-gray-800'}`}>
+                                    {m.content}
+                                  </div>
+                                </div>
+                              ))}
+                              {chatMessagesLoading && (
+                                <div className="text-xs text-gray-500 text-center">Loading messages…</div>
+                              )}
+                            </div>
+
+                            {/* Composer */}
+                            <div className="p-3 border-t bg-white">
+                              <div className="flex items-center space-x-2">
+                                <input
+                                  type="text"
+                                  className="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2c786c]"
+                                  placeholder="Type a message..."
+                                  value={chatInput}
+                                  onChange={(e) => setChatInput(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      e.preventDefault();
+                                      if (!chatSending) {
+                                        const btn = document.getElementById('chat-send-btn');
+                                        if (btn) btn.click();
+                                      }
+                                    }
+                                  }}
+                                  disabled={chatSending}
+                                />
+                                <button
+                                  id="chat-send-btn"
+                                  className="px-3 py-2 rounded-lg bg-[#2c786c] text-white text-sm disabled:opacity-50"
+                                  disabled={chatSending || !chatRoom || !chatInput.trim()}
+                                  onClick={async () => {
+                                    if (!chatRoom || !chatInput.trim()) return;
+                                    try {
+                                      setChatSending(true);
+                                      const storedPharmacyInfo = localStorage.getItem('pharmacy_info');
+                                      const pharmacy = storedPharmacyInfo ? JSON.parse(storedPharmacyInfo) : null;
+                                      const payload = {
+                                        room_id: chatRoom.id,
+                                        pharmacy_id: pharmacy?.id,
+                                        content: chatInput.trim(),
+                                      };
+                                      // Optimistic append
+                                      const optimistic = {
+                                        id: `temp-${Date.now()}`,
+                                        sender_name: 'You',
+                                        sender_role: 'Pharmacy',
+                                        message_type: 'text',
+                                        content: payload.content,
+                                        timestamp: new Date().toISOString(),
+                                        is_system_message: false,
+                                      };
+                                      setChatMessages((prev) => [...prev, optimistic]);
+                                      setChatInput('');
+                                      requestAnimationFrame(() => {
+                                        if (chatMessagesContainerRef.current) {
+                                          chatMessagesContainerRef.current.scrollTop = chatMessagesContainerRef.current.scrollHeight;
+                                        }
+                                      });
+                                      // Send
+                                      const resp = await fetch('http://127.0.0.1:8000/api/order-chat-send/', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify(payload)
+                                      });
+                                      const data = await resp.json();
+                                      if (!resp.ok || !data.success) {
+                                        console.error('Send message failed', data);
+                                        setChatError(data.error || 'Failed to send message');
+                                        // fallback: refetch to reconcile
+                                        await fetchChatMessages(chatRoom.id);
+                                        return;
+                                      }
+                                      // Reconcile list (simple refetch)
+                                      await fetchChatMessages(chatRoom.id);
+                                    } catch (e) {
+                                      console.error('Send message error', e);
+                                      setChatError('Unexpected error sending message');
+                                    } finally {
+                                      setChatSending(false);
+                                    }
+                                  }}
+                                >
+                                  {chatSending ? 'Sending…' : 'Send'}
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                        {!showChatPanel && selectedOrder.prescriptionNotes && (
+                          <div className="absolute bottom-0 left-0 right-0 bg-white/80 backdrop-blur-sm p-3 text-sm">
+                            <div className="text-gray-700">{selectedOrder.prescriptionNotes}</div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Right: Search & Select */}
+                      <div className="w-1/2 p-6 flex flex-col">
+                        <div className="flex items-center justify-between mb-4">
+                          <h1 className="text-xl font-bold text-gray-800">Match Prescription Items</h1>
+                          <span className="text-xs text-gray-500">Order No. <span className="font-semibold">{selectedOrder.orderNumber}</span></span>
+                        </div>
+
+                        {/* Review Search */}
+                        <div className="mb-3">
+                      <label className="block text-sm text-gray-700 mb-1">Search inventory to match prescription</label>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          value={reviewSearchQuery}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            setReviewSearchQuery(value);
+                            // Debounced client-side filter across inventoryData
+                            if (reviewSearchDebounceRef.current) {
+                              clearTimeout(reviewSearchDebounceRef.current);
+                            }
+                            reviewSearchDebounceRef.current = setTimeout(() => {
+                              if (!value.trim()) {
+                                setReviewSearchResults([]);
+                                return;
+                              }
+                              setReviewSearching(true);
+                              const term = value.toLowerCase();
+                              const results = [];
+                              inventoryData.categories.forEach((category) => {
+                                (category.items || []).forEach((item) => {
+                                  const hay = [
+                                    item.name,
+                                    item.form,
+                                    item.dosage,
+                                    item.description,
+                                    item.manufacturer,
+                                  ]
+                                    .filter(Boolean)
+                                    .map((x) => String(x).toLowerCase())
+                                    .join(' ');
+                                  if (hay.includes(term)) {
+                                    results.push({ ...item, categoryName: category.name });
+                                  }
+                                });
+                              });
+                              setReviewSearchResults(results.slice(0, 50));
+                              setReviewSearching(false);
+                            }, 250);
+                          }}
+                          placeholder="e.g. Amoxicillin 500mg"
+                          className="w-full p-3 pl-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2c786c] focus:border-transparent"
+                        />
+                        <span className="absolute right-3 top-2.5 text-gray-400">
+                          {reviewSearching ? (
+                            <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4l3-3-3-3v4a8 8 0 100 16v-4l-3 3 3 3v-4a8 8 0 01-8-8z"></path>
+                            </svg>
+                          ) : (
+                            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-4.35-4.35M17 10A7 7 0 103 10a7 7 0 0014 0z" />
+                            </svg>
+                          )}
+                        </span>
+                      </div>
+                      </div>
+
+                      {/* Results list */}
+                      {reviewSearchQuery.trim() && (
+                        <div className="flex-1 overflow-auto border border-gray-200 rounded-lg divide-y">
+                          {reviewSearchResults.length === 0 && !reviewSearching && (
+                            <div className="p-3 text-sm text-gray-500">No results</div>
+                          )}
+                          {reviewSearchResults.map((item) => (
+                            <div key={item.id} className="flex items-start justify-between p-3 hover:bg-gray-50">
+                              <div className="mr-3">
+                                <div className="font-medium text-sm text-gray-900">{item.name}</div>
+                                <div className="text-xs text-gray-600">{item.form}{item.dosage ? ` • ${item.dosage}` : ''}</div>
+                                <div className="text-[11px] text-gray-500">{item.categoryName || item.category?.name}</div>
+                                {item.price != null && (
+                                  <div className="text-xs text-gray-800">₱{Number(item.price).toFixed(2)}</div>
+                                )}
+                                {item.stock_quantity != null && (
+                                  <div className="text-[11px] text-gray-500">Stock: {item.stock_quantity}</div>
+                                )}
+                              </div>
+                              <button
+                                onClick={() => {
+                                  if (!reviewSelectedItems.find((x) => x.id === item.id)) {
+                                    setReviewSelectedItems((prev) => [...prev, item]);
+                                  }
+                                }}
+                                className="flex items-center justify-center h-8 w-8 rounded-full bg-green-600 text-white hover:bg-green-700"
+                                title="Add"
+                              >
+                                +
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Selected items (quick view) */}
+                      <div className="mt-3">
+                        <div className="text-sm font-medium text-gray-700 mb-2">Selected</div>
+                        {reviewSelectedItems.length === 0 ? (
+                          <div className="text-xs text-gray-500">No items selected yet.</div>
+                        ) : (
+                          <div className="flex flex-wrap gap-2">
+                            {reviewSelectedItems.map((item) => (
+                              <span key={item.id} className="inline-flex items-center px-2 py-1 rounded-full bg-green-50 text-green-700 text-xs border border-green-200">
+                                {item.name}
+                                <button
+                                  className="ml-2 text-green-700 hover:text-green-900"
+                                  onClick={() => setReviewSelectedItems((prev) => prev.filter((x) => x.id !== item.id))}
+                                  title="Remove"
+                                >
+                                  ×
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* Actions */}
+                      <div className="mt-4 space-y-2">
+                        {orders.pending.includes(selectedOrder) && (
+                          <>
+                            <button 
+                              onClick={() => handleAttachPrescriptionItems(selectedOrder)}
+                              className="w-full bg-[#2c786c] text-white p-3 rounded-xl text-base cursor-pointer hover:bg-[#1e5a52]"
+                            >
+                              Add Selected Items to Order
+                            </button>
+                            <button
+                              onClick={async () => {
+                                try {
+                                  setChatError('');
+                                  setChatLoading(true);
+                                  const storedPharmacyInfo = localStorage.getItem('pharmacy_info');
+                                  const pharmacy = storedPharmacyInfo ? JSON.parse(storedPharmacyInfo) : null;
+                                  const payload = { order_id: selectedOrder.id };
+                                  if (pharmacy?.id) payload.pharmacy_id = pharmacy.id;
+                                  const resp = await fetch('http://127.0.0.1:8000/api/order-chat-room/', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify(payload)
+                                  });
+                                  const text = await resp.text();
+                                  let data;
+                                  try { data = JSON.parse(text); } catch (_) { data = { success: false, error: 'Invalid JSON', raw: text }; }
+                                  if (!resp.ok || !data.success) {
+                                    console.error('Create/Fetch chat room failed', data);
+                                    setChatError(data.error || 'Failed to open chat.');
+                                    return;
+                                  }
+                                  setChatRoom(data.room);
+                                  setShowChatPanel(true);
+                                  // Immediately fetch messages and start polling
+                                  await fetchChatMessages(data.room.id);
+                                  if (chatPollRef.current) clearInterval(chatPollRef.current);
+                                  chatPollRef.current = setInterval(() => {
+                                    fetchChatMessages(data.room.id);
+                                  }, 12000);
+                                } catch (e) {
+                                  console.error('Open chat error', e);
+                                  setChatError('Unexpected error opening chat.');
+                                } finally {
+                                  setChatLoading(false);
+                                }
+                              }}
+                              className="w-full bg-gray-800 text-white p-3 rounded-xl text-base cursor-pointer hover:bg-black disabled:opacity-50"
+                              disabled={chatLoading}
+                            >
+                              {chatLoading ? 'Opening Chat…' : 'Open Chat with Customer'}
+                            </button>
+                            <button 
+                              onClick={() => handlePrepareOrder(selectedOrder.id)}
+                              className="w-full bg-green-500 text-white p-3 rounded-xl text-base cursor-pointer hover:bg-green-600"
+                            >
+                              Prepare Order
+                            </button>
+                          </>
+                        )}
+                        {orders.preparing.includes(selectedOrder) && (
+                          <button 
+                            onClick={() => handleReadyOrder(selectedOrder.id)}
+                            className="w-full bg-orange-500 text-white p-3 rounded-xl text-base cursor-pointer hover:bg-orange-600"
+                          >
+                            Ready
+                          </button>
+                        )}
+                      </div>
+                      </div>
+                    </>
+                  ) : (
+                    // Show regular items for non-prescription orders
+                    <div className="w-full p-6">
+                      <h2 className="text-lg font-semibold mb-3">Order Items</h2>
+                      <div className="space-y-2">
+                        {selectedOrder.items.map((item, index) => (
+                          <div key={index} className="text-sm">{item.product} x {item.quantity}</div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <div className="flex justify-center">
-                  {orders.pending.includes(selectedOrder) && (
-                    <button 
-                      onClick={() => handlePrepareOrder(selectedOrder.id)}
-                      className="w-full bg-green-500 text-white p-3 rounded-2xl text-lg cursor-pointer"
-                    >
-                      Prepare Order
-                    </button>
-                  )}
-                  {orders.preparing.includes(selectedOrder) && (
-                    <button 
-                      onClick={() => handleReadyOrder(selectedOrder.id)}
-                      className="w-full bg-orange-500 text-white p-3 rounded-2xl text-lg cursor-pointer"
-                    >
-                      Ready
-                    </button>
-                  )}
+
+                {/* Prescription Image Fullscreen Preview */}
+                {isPrescriptionImagePreviewOpen && prescriptionImagePreviewUrl && (
+                  <div className="fixed inset-0 z-50">
+                    <div
+                      className="absolute inset-0 bg-black bg-opacity-80"
+                      onClick={() => setIsPrescriptionImagePreviewOpen(false)}
+                    />
+                    <div className="absolute inset-0 flex items-center justify-center p-4">
+                      <div className="relative max-w-5xl w-full">
+                        <button
+                          className="absolute -top-10 right-0 text-white text-2xl"
+                          onClick={() => setIsPrescriptionImagePreviewOpen(false)}
+                          aria-label="Close preview"
+                        >
+                          ×
+                        </button>
+                        <img
+                          src={prescriptionImagePreviewUrl}
+                          alt="Prescription Preview"
+                          className="w-full h-[80vh] object-contain rounded shadow-lg"
+                        />
+                      </div>
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
+            </div>
             )}
 
           {/* Tab Headers */}
@@ -2070,8 +2624,12 @@ const PharmacyDashboard = () => {
                     <p className="text-gray-600 text-xs lg:text-sm">{formatTime(order.createdAt)}</p>
                   </div>
                   <div className="text-center">
-                    <h3 className="text-sm lg:text-lg font-medium">₱{order.totalAmount.toFixed(2)}</h3>
-                    <p className="text-gray-600 text-xs lg:text-sm">Paid</p>
+                    <h3 className="text-sm lg:text-lg font-medium">
+                      {order.isPrescriptionOrder ? 'Prescription Order' : `₱${order.totalAmount.toFixed(2)}`}
+                    </h3>
+                    <p className="text-gray-600 text-xs lg:text-sm">
+                      {order.isPrescriptionOrder ? "Waiting for customer's approval of the pricing" : 'Paid'}
+                    </p>
                   </div>
                   <div className="text-center">
                     <button 
@@ -2117,8 +2675,12 @@ const PharmacyDashboard = () => {
                     <p className="text-gray-600 text-xs lg:text-sm">{formatTime(order.createdAt)}</p>
                   </div>
                   <div className="text-center">
-                    <h3 className="text-sm lg:text-lg font-medium">₱{order.totalAmount.toFixed(2)}</h3>
-                    <p className="text-gray-600 text-xs lg:text-sm">Paid</p>
+                    <h3 className="text-sm lg:text-lg font-medium">
+                      {order.isPrescriptionOrder ? 'Prescription Order' : `₱${order.totalAmount.toFixed(2)}`}
+                    </h3>
+                    <p className="text-gray-600 text-xs lg:text-sm">
+                      {order.isPrescriptionOrder ? "Waiting for customer's approval of the pricing" : 'Paid'}
+                    </p>
                   </div>
                   <div className="text-center">
                     <button 
@@ -2158,8 +2720,12 @@ const PharmacyDashboard = () => {
                     <p className="text-gray-600 text-xs lg:text-sm">{formatTime(order.createdAt)}</p>
                   </div>
                   <div className="text-center">
-                    <h3 className="text-sm lg:text-lg font-medium">₱{order.totalAmount.toFixed(2)}</h3>
-                    <p className="text-gray-600 text-xs lg:text-sm">Paid</p>
+                    <h3 className="text-sm lg:text-lg font-medium">
+                      {order.isPrescriptionOrder ? 'Prescription Order' : `₱${order.totalAmount.toFixed(2)}`}
+                    </h3>
+                    <p className="text-gray-600 text-xs lg:text-sm">
+                      {order.isPrescriptionOrder ? 'Review Required' : 'Paid'}
+                    </p>
                   </div>
                   <div className="text-center">
                     <button 
