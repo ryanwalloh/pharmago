@@ -2,6 +2,7 @@
 // API configuration for different environments
 import Constants from 'expo-constants';
 import { NativeModules } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const getApiBaseUrl = () => {
   // Web (localhost)
@@ -63,6 +64,7 @@ export interface ApiResponse<T> {
 
 class ApiService {
   private baseURL: string;
+  private authToken: string | null = null;
 
   constructor(baseURL: string = API_BASE_URL) {
     this.baseURL = baseURL;
@@ -71,10 +73,18 @@ class ApiService {
 
   private async makeRequest<T>(
     endpoint: string,
-    options: RequestInit = {}
+    options: RequestInit = {},
+    suppressAuthLog: boolean = false
   ): Promise<ApiResponse<T>> {
     try {
       const url = `${this.baseURL}${endpoint}`;
+      // Attach auth token if present (lazy-load from storage once)
+      try {
+        if (!this.authToken) {
+          const stored = await AsyncStorage.getItem('auth_token');
+          if (stored) this.authToken = stored;
+        }
+      } catch {}
       
       // Debug logging
       console.log('🚀 API Request:', {
@@ -88,6 +98,7 @@ class ApiService {
       const response = await fetch(url, {
         headers: {
           'Content-Type': 'application/json',
+          ...(this.authToken ? { 'Authorization': `Bearer ${this.authToken}` } : {}),
           ...options.headers,
         },
         ...options,
@@ -109,13 +120,16 @@ class ApiService {
       });
 
       if (!response.ok) {
-        console.error('❌ API Request Failed:', {
-          status: response.status,
-          statusText: response.statusText,
-          error: data.error || data.details || 'Request failed',
-          message: data.message,
-          timestamp: new Date().toISOString()
-        });
+        const isAuthError = response.status === 401 || response.status === 403;
+        if (!(suppressAuthLog && isAuthError)) {
+          console.error('❌ API Request Failed:', {
+            status: response.status,
+            statusText: response.statusText,
+            error: data.error || data.details || 'Request failed',
+            message: data.message,
+            timestamp: new Date().toISOString()
+          });
+        }
         
         return {
           success: false,
@@ -447,6 +461,17 @@ class ApiService {
 
   // Chat (dev direct endpoints)
   async getOrCreateOrderChatRoom(orderId: number, pharmacyId?: number): Promise<ApiResponse<any>> {
+    // Try secure route first
+    const secure = await this.makeRequest(`/chat-rooms/get-or-create-by-order/`, {
+      method: 'POST',
+      body: JSON.stringify({ order_id: orderId })
+    }, true);
+    if (secure.success) {
+      // Normalize to { room }
+      const roomObj = (secure.data as any) || {};
+      return { success: true, data: { room: roomObj } };
+    }
+    // Fallback to dev route
     return this.makeDirectRequest('/order-chat-room/', {
       method: 'POST',
       headers: {
@@ -457,15 +482,73 @@ class ApiService {
   }
 
   async getOrderChatMessages(roomId: number, limit: number = 100): Promise<ApiResponse<any>> {
+    // Secure
+    const secure = await this.makeRequest(`/chat-rooms/${roomId}/messages/`, {}, true);
+    if (secure.success) {
+      // DRF returns a list or paginated results; normalize to { messages, count }
+      const payload: any = secure.data;
+      const messages = Array.isArray(payload) ? payload : (Array.isArray(payload?.results) ? payload.results : []);
+      return { success: true, data: { room: { id: roomId }, messages, count: messages.length } };
+    }
+    // Fallback
     return this.makeDirectRequest(`/order-chat-messages/?room_id=${roomId}&limit=${limit}`);
   }
 
   async sendOrderChatMessage(roomId: number, content: string): Promise<ApiResponse<any>> {
+    // Secure
+    const secure = await this.makeRequest(`/chat-rooms/${roomId}/send/`, {
+      method: 'POST',
+      body: JSON.stringify({ content })
+    }, true);
+    if (secure.success) return secure;
+    // Fallback (dev)
     return this.makeDirectRequest('/order-chat-send-customer/', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ room_id: roomId, content })
     });
+  }
+
+  async markOrderChatRead(roomId: number, pharmacyId?: number): Promise<ApiResponse<any>> {
+    // Secure
+    const secure = await this.makeRequest(`/chat-rooms/${roomId}/mark-read/`, { method: 'POST' }, true);
+    if (secure.success) return secure;
+    // Fallback
+    return this.makeDirectRequest('/order-chat-mark-read/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(pharmacyId ? { room_id: roomId, pharmacy_id: pharmacyId } : { room_id: roomId })
+    });
+  }
+
+  async setOrderChatTyping(roomId: number, isTyping: boolean, pharmacyId?: number): Promise<ApiResponse<any>> {
+    // Secure
+    const secure = await this.makeRequest(`/chat-rooms/${roomId}/typing/`, {
+      method: 'POST',
+      body: JSON.stringify({ is_typing: isTyping })
+    }, true);
+    if (secure.success) return secure;
+    // Fallback
+    return this.makeDirectRequest('/order-chat-typing/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(pharmacyId ? { room_id: roomId, pharmacy_id: pharmacyId, is_typing: isTyping } : { room_id: roomId, is_typing: isTyping })
+    });
+  }
+
+  async getOrderChatTypingStatus(roomId: number): Promise<ApiResponse<any>> {
+    const secure = await this.makeRequest(`/chat-rooms/${roomId}/typing-status/`, {}, true);
+    if (secure.success) return secure;
+    return this.makeDirectRequest(`/order-chat-typing-status/?room_id=${roomId}`);
+  }
+
+  // Allow app to set or clear the auth token used for secure endpoints
+  setAuthToken(token: string | null) {
+    this.authToken = token;
+    try {
+      if (token) AsyncStorage.setItem('auth_token', token);
+      else AsyncStorage.removeItem('auth_token');
+    } catch {}
   }
 }
 
