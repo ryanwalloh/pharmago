@@ -120,6 +120,58 @@ class ChatRoomViewSet(viewsets.ModelViewSet):
         
         serializer = ChatRoomDetailSerializer(room)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=['post'], url_path='get-or-create-by-order')
+    def get_or_create_by_order(self, request):
+        """Get or create a chat room for a given order, ensuring current user is a participant.
+
+        Body: { order_id: int }
+        """
+        from api.orders.models import Order
+        order_id = request.data.get('order_id')
+        if not order_id:
+            return Response({'error': 'order_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            order = Order.objects.get(id=int(order_id))
+        except (Order.DoesNotExist, ValueError):
+            return Response({'error': 'Order not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        # Only the order's customer or pharmacy staff are allowed participants
+        is_customer = False
+        is_pharmacy = False
+        try:
+            is_customer = (hasattr(order, 'customer') and order.customer and order.customer.user_id == request.user.id)
+        except Exception:
+            is_customer = False
+
+        try:
+            from api.users.models import Pharmacy
+            is_pharmacy = Pharmacy.objects.filter(user=request.user).exists()
+        except Exception:
+            is_pharmacy = False
+
+        if not (is_customer or is_pharmacy):
+            return Response({'error': 'Not allowed for this order'}, status=status.HTTP_403_FORBIDDEN)
+
+        # Get or create room
+        room, created = ChatRoom.objects.get_or_create(order=order, defaults={
+            'title': f"Order #{getattr(order, 'order_number', order.id)} Chat"
+        })
+
+        # Ensure current user is a participant
+        role = 'customer' if is_customer else 'pharmacy'
+        ChatParticipant.objects.get_or_create(room=room, user=request.user, defaults={'role': role})
+
+        # Ensure customer participant exists
+        try:
+            if hasattr(order, 'customer') and order.customer and order.customer.user:
+                ChatParticipant.objects.get_or_create(room=room, user=order.customer.user, defaults={'role': 'customer'})
+        except Exception:
+            pass
+
+        serializer = ChatRoomDetailSerializer(room)
+        return Response(serializer.data)
     
     @action(detail=True, methods=['post'])
     def close_room(self, request, pk=None):
@@ -192,6 +244,106 @@ class ChatRoomViewSet(viewsets.ModelViewSet):
         
         serializer = ChatMessageListSerializer(messages, many=True)
         return Response(serializer.data)
+
+    @action(detail=True, methods=['post'], url_path='mark-read')
+    def mark_read_room(self, request, pk=None):
+        """Mark messages in the room as read for the current user (room-wide)."""
+        room = self.get_object()  # queryset already restricted to participant rooms
+        try:
+            participant = ChatParticipant.objects.get(room=room, user=request.user)
+        except ChatParticipant.DoesNotExist:
+            return Response({'error': 'Not a participant of this room'}, status=status.HTTP_403_FORBIDDEN)
+
+        now = timezone.now()
+        # Mark any non-self messages as delivered if not yet delivered
+        delivered_count = ChatMessage.objects.filter(room=room).exclude(sender=participant).filter(delivered_at__isnull=True).update(status='delivered', delivered_at=now)
+        # Then mark as read
+        read_count = ChatMessage.objects.filter(room=room).exclude(sender=participant).filter(read_at__isnull=True).update(status='read', read_at=now)
+
+        # Simple audit log
+        try:
+            ChatMessage.create_system_message(room, f"{request.user.id} marked messages as read")
+        except Exception:
+            pass
+
+        return Response({'success': True, 'delivered_count': int(delivered_count), 'read_count': int(read_count)})
+
+    @action(detail=True, methods=['post'], url_path='typing')
+    def set_typing(self, request, pk=None):
+        """Set typing state for current user in the room with short TTL."""
+        from django.core.cache import cache
+        room = self.get_object()
+        try:
+            participant = ChatParticipant.objects.get(room=room, user=request.user)
+        except ChatParticipant.DoesNotExist:
+            return Response({'error': 'Not a participant of this room'}, status=status.HTTP_403_FORBIDDEN)
+
+        is_typing = bool(request.data.get('is_typing', True))
+        role = participant.role or 'customer'
+        key = f"chat_typing:{room.id}:{role}"
+        if is_typing:
+            cache.set(key, True, timeout=7)
+        else:
+            cache.delete(key)
+
+        return Response({'success': True, 'typing': {role: is_typing}})
+
+    @action(detail=True, methods=['get'], url_path='typing-status')
+    def typing_status(self, request, pk=None):
+        """Get current typing state for the room."""
+        from django.core.cache import cache
+        room = self.get_object()
+        customer = bool(cache.get(f"chat_typing:{room.id}:customer"))
+        pharmacy = bool(cache.get(f"chat_typing:{room.id}:pharmacy"))
+        return Response({'success': True, 'typing': {'customer': customer, 'pharmacy': pharmacy}})
+
+    @action(detail=True, methods=['post'], url_path='send')
+    def send(self, request, pk=None):
+        """Send a text message to this room as the current user."""
+        room = self.get_object()
+        content = (request.data.get('content') or '').strip()
+        if not content:
+            return Response({'error': 'content cannot be empty'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            participant = ChatParticipant.objects.get(room=room, user=request.user)
+        except ChatParticipant.DoesNotExist:
+            return Response({'error': 'Not a participant of this room'}, status=status.HTTP_403_FORBIDDEN)
+
+        # Create message
+        message = ChatMessage.objects.create(
+            room=room,
+            sender=participant,
+            message_type='text',
+            content=content,
+        )
+
+        # Mark delivered for in-app flow
+        try:
+            message.mark_as_delivered()
+        except Exception:
+            pass
+
+        # Update room last activity
+        try:
+            room.save()
+        except Exception:
+            pass
+
+        return Response({
+            'success': True,
+            'message': {
+                'id': message.id,
+                'sender_name': message.sender_name,
+                'sender_role': message.sender_role,
+                'message_type': message.message_type,
+                'content': message.content,
+                'timestamp': message.timestamp,
+                'status': message.status,
+                'delivered_at': message.delivered_at,
+                'read_at': message.read_at,
+            }
+        }, status=status.HTTP_201_CREATED)
     
     @action(detail=True, methods=['get'])
     def stats(self, request, pk=None):

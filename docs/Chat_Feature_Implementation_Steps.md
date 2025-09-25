@@ -166,18 +166,28 @@ Implementation notes:
 Result: Confirmed; both sides can send/receive, with polling keeping the view updated.
 
 ## Phase 9 — Quality & UX Iterations
-### 9.1 Message status & read receipts
-- Use mark-as-read endpoint when chat panel is focused.
-- Style delivered/read ticks (optional visual).
+Status: 9.1 and 9.2 DONE; 9.3 optional/pending
 
-### 9.2 Typing indicator (optional)
-- MVP: Debounced “typing…” flag stored in room metadata and cleared after timeout.
+### 9.1 Message status & read receipts (DONE)
+- Use mark-as-read when chat panel is focused/open.
+- Delivered/read ticks render on sender-side bubbles.
+- Optimizations: silent background refresh (no UI flicker), fetch-in-flight guard to avoid overlapping polls.
+
+### 9.2 Typing indicator (DONE)
+- Debounced “typing…” stored transiently (cache) with short TTL.
+- Poll typing-status every ~4s only while the chat is open.
+- Throttled input events to ≤1 req/sec; auto-clear after inactivity.
 
 ### 9.3 Attachments (optional)
 - Extend send to support `image/file` with upload → message includes `file_path` and `file_type`.
 
 ### 9.4 Testing
-- Verify status transitions; send/receive read events; optional typing/attachments.
+- Verify status transitions; send/receive read events; typing events.
+
+### 9.5 UI styling & alignment (DONE)
+- Pharmacy web: customer messages use green bubble; pharmacy messages right-aligned.
+- Mobile app: pharmacy messages use green bubble; customer messages right-aligned.
+- Polling while open: messages every ~12s; typing every ~4s; typing/send debounced.
 
 ## Phase 10 — Realtime (Optional, Later)
 ### 10.1 Transport upgrade
@@ -188,17 +198,30 @@ Result: Confirmed; both sides can send/receive, with polling keeping the view up
 - Open two clients → messages appear instantly without polling.
 
 ## Phase 11 — Permissions, Security, and Auditing
+Status: PARTIALLY DONE
+
 ### 11.1 Tighten access
-- Replace dev endpoints with authenticated routes.
-- Ensure only participants can access a room and messages.
+- Added authenticated DRF routes under `/api/v1` (see API Shapes below):
+  - `POST /api/v1/chat-rooms/get-or-create-by-order/`
+  - `GET /api/v1/chat-rooms/{id}/messages/`
+  - `POST /api/v1/chat-rooms/{id}/send/`
+  - `POST /api/v1/chat-rooms/{id}/mark-read/`
+  - `POST /api/v1/chat-rooms/{id}/typing/`
+  - `GET /api/v1/chat-rooms/{id}/typing-status/`
+- Only room participants (order customer or pharmacy staff) can access.
+- Dev endpoints are now gated behind `DEBUG`/feature flag and serve as fallback in dev.
+
+Next:
+- Switch clients fully to `/api/v1` once auth token is available; keep dev fallback in dev builds only.
+- Add structured audit logs (send/read events) and optional retention policy.
 
 ### 11.2 Logging & retention
-- Add structured logs for message events.
-- Optional retention/archival policy.
+- Add structured logs for message events (pending).
+- Optional retention/archival policy (pending).
 
 ### 11.3 Testing
 - Attempt unauthorized access; ensure 403/404.
-- Confirm logs are recorded as designed.
+- Confirm logs are recorded.
 
 ## Phase 12 — Rollout & Monitoring
 ### 12.1 Feature flag
@@ -211,6 +234,53 @@ Result: Confirmed; both sides can send/receive, with polling keeping the view up
 - Canary rollout checks; rollback plan prepared.
 
 ## API Shapes (reference)
+### Secure (authenticated) Endpoints (DRF)
+
+#### Get/Create Room by Order (secure)
+Request:
+```json
+{ "order_id": 123 }
+```
+Response (room object):
+```json
+{ "id": 45, "room_id": "CHAT20250925154656", "order": 123, "title": "Order #... Chat", "status": "open" }
+```
+
+#### List Messages (secure)
+`GET /api/v1/chat-rooms/{id}/messages/`
+Response (list or paginated):
+```json
+[
+  { "id": 1, "sender_name": "Pharmacy", "sender_role": "pharmacy", "sender_role_code": "pharmacy", "message_type": "text", "content": "Hello", "timestamp": "2025-09-25T15:00:00Z", "status": "delivered", "delivered_at": "2025-09-25T15:00:01Z", "read_at": null }
+]
+```
+
+#### Send Message (secure)
+`POST /api/v1/chat-rooms/{id}/send/`
+Request:
+```json
+{ "content": "Hello" }
+```
+Response:
+```json
+{ "success": true, "message": { "id": 99, "content": "Hello", "status": "delivered" } }
+```
+
+#### Mark Room Read (secure)
+`POST /api/v1/chat-rooms/{id}/mark-read/`
+Response:
+```json
+{ "success": true, "delivered_count": 3, "read_count": 3 }
+```
+
+#### Typing (secure)
+`POST /api/v1/chat-rooms/{id}/typing/` → { "is_typing": true }
+
+`GET /api/v1/chat-rooms/{id}/typing-status/` →
+```json
+{ "success": true, "typing": { "customer": false, "pharmacy": true } }
+```
+
 ### Get/Create Room (dev)
 Request:
 ```json
@@ -246,9 +316,12 @@ Response:
 - Auth mismatch between dev endpoints and DRF viewsets → use dev bridges first, retrofit auth later.
 - Realtime complexity → defer to polling first.
 - Message ordering/timezones → always sort by `timestamp`; display local time via client.
+- Overlapping polls/fetches → guard with in-flight refs and use silent refresh for background updates.
+- Typing spam → debounce client events; limit polling to while chat is open.
 
 ## Definition of Done (MVP)
 - Pharmacy and customer can exchange text messages in an order-scoped room.
 - Messages persist and reload on both clients.
-- Basic read marks and polling in place.
+- Basic read marks, typing, and polling in place.
+- Secure endpoints available; dev endpoints gated in dev; clients prefer secure when authenticated.
 
