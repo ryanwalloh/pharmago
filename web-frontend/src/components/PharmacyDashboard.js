@@ -78,6 +78,8 @@ const PharmacyDashboard = () => {
   const [chatMessagesLoading, setChatMessagesLoading] = useState(false);
   const chatPollRef = useRef(null);
   const chatMessagesContainerRef = useRef(null);
+  const [chatTyping, setChatTyping] = useState({ customer: false, pharmacy: false });
+  const chatTypingPollRef = useRef(null);
   const [chatInput, setChatInput] = useState('');
   const [chatSending, setChatSending] = useState(false);
 
@@ -415,9 +417,12 @@ const PharmacyDashboard = () => {
   };
 
   // Fetch chat messages (polling)
-  const fetchChatMessages = async (roomId) => {
+  const chatFetchInFlightRef = useRef(false);
+  const fetchChatMessages = async (roomId, { silent = false } = {}) => {
     try {
-      setChatMessagesLoading(true);
+      if (chatFetchInFlightRef.current) return;
+      chatFetchInFlightRef.current = true;
+      if (!silent) setChatMessagesLoading(true);
       const resp = await fetch(`http://127.0.0.1:8000/api/order-chat-messages/?room_id=${roomId}&limit=100`);
       const data = await resp.json();
       if (!resp.ok || !data.success) {
@@ -432,13 +437,77 @@ const PharmacyDashboard = () => {
           chatMessagesContainerRef.current.scrollTop = chatMessagesContainerRef.current.scrollHeight;
         }
       });
+      // Mark as read for pharmacy side (do not await)
+      try {
+        const storedPharmacyInfo = localStorage.getItem('pharmacy_info');
+        const pharmacy = storedPharmacyInfo ? JSON.parse(storedPharmacyInfo) : null;
+        fetch('http://127.0.0.1:8000/api/order-chat-mark-read/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ room_id: roomId, pharmacy_id: pharmacy?.id }),
+        });
+        // Immediately re-poll typing to ensure indicator shows promptly
+        try { pollTypingStatus(roomId); } catch (_) {}
+      } catch (_) {}
     } catch (e) {
       console.error('Fetch messages error', e);
       setChatError('Unexpected error fetching messages');
     } finally {
+      chatFetchInFlightRef.current = false;
       setChatMessagesLoading(false);
     }
   };
+
+  // Typing: send pharmacy typing state (debounced on input change)
+  const sendTypingState = useRef(null);
+  if (!sendTypingState.current) {
+    let typingTimeout;
+    sendTypingState.current = async (roomId, isTyping) => {
+      try {
+        const storedPharmacyInfo = localStorage.getItem('pharmacy_info');
+        const pharmacy = storedPharmacyInfo ? JSON.parse(storedPharmacyInfo) : null;
+        await fetch('http://127.0.0.1:8000/api/order-chat-typing/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ room_id: roomId, pharmacy_id: pharmacy?.id, is_typing: !!isTyping }),
+        });
+      } catch (_) {}
+      clearTimeout(typingTimeout);
+      if (isTyping) {
+        typingTimeout = setTimeout(() => sendTypingState.current(roomId, false), 5000);
+      }
+    };
+  }
+
+  const pollTypingStatus = async (roomId) => {
+    try {
+      const resp = await fetch(`http://127.0.0.1:8000/api/order-chat-typing-status/?room_id=${roomId}`);
+      const data = await resp.json();
+      if (resp.ok && data.success && data.typing) {
+        setChatTyping(data.typing);
+      }
+    } catch (_) {}
+  };
+
+  // Ensure typing status polling only runs when chat panel is open
+  useEffect(() => {
+    if (showChatPanel && chatRoom) {
+      if (chatTypingPollRef.current) clearInterval(chatTypingPollRef.current);
+      chatTypingPollRef.current = setInterval(() => {
+        pollTypingStatus(chatRoom.id);
+      }, 4000);
+    } else if (chatTypingPollRef.current) {
+      clearInterval(chatTypingPollRef.current);
+      chatTypingPollRef.current = null;
+      setChatTyping({ customer: false, pharmacy: false });
+    }
+    return () => {
+      if (chatTypingPollRef.current) {
+        clearInterval(chatTypingPollRef.current);
+        chatTypingPollRef.current = null;
+      }
+    };
+  }, [showChatPanel, chatRoom?.id]);
 
   // Quick Add functionality
   const handleQuickAdd = async () => {
@@ -2231,10 +2300,16 @@ const PharmacyDashboard = () => {
                               <div className="min-w-0">
                                 <h3 className="text-sm font-semibold text-gray-800 truncate">Chat with Customer</h3>
                                 <p className="text-xs text-gray-500 truncate">Order No. {selectedOrder.orderNumber}{chatRoom ? ` • Room ${chatRoom.room_id}` : ''}</p>
+                                {chatTyping.customer && (
+                                  <p className="text-[11px] text-[#2c786c] mt-0.5">Customer is typing…</p>
+                                )}
                               </div>
                               <button
                                 className="text-xs text-[#2c786c] hover:underline"
-                                onClick={() => setShowChatPanel(false)}
+                                onClick={() => {
+                                  setShowChatPanel(false);
+                                  if (chatTypingPollRef.current) { clearInterval(chatTypingPollRef.current); chatTypingPollRef.current = null; }
+                                }}
                               >
                                 Back to Image
                               </button>
@@ -2249,14 +2324,19 @@ const PharmacyDashboard = () => {
                                 <div className="text-xs text-gray-500 text-center">No messages yet.</div>
                               )}
                               {chatMessages.map((m) => (
-                                <div key={m.id} className="flex flex-col">
+                                <div key={m.id} className={`flex flex-col ${((m.sender_role_code === 'pharmacy') || (m.sender_role === 'pharmacy')) ? 'items-end text-right' : 'items-start'}`}>
                                   <div className="text-[11px] text-gray-500">{m.sender_name} • {new Date(m.timestamp).toLocaleString()}</div>
-                                  <div className={`inline-block max-w-[85%] mt-1 px-3 py-2 rounded-lg text-sm ${m.is_system_message ? 'bg-gray-200 text-gray-700' : 'bg-white border text-gray-800'}`}>
+                                  <div className={`inline-block max-w-[85%] mt-1 px-3 py-2 rounded-lg text-sm ${m.is_system_message ? 'bg-gray-200 text-gray-700' : ((m.sender_role_code === 'customer' || m.sender_role === 'customer') ? 'bg-green-50 border border-green-200 text-green-900' : 'bg-white border text-gray-800')}`}>
                                     {m.content}
+                                    {!m.is_system_message && (m.sender_role_code === 'pharmacy' || m.sender_role === 'pharmacy') && (
+                                      <span className="ml-2 align-middle text-[10px] text-gray-400">
+                                        {m.read_at ? '✓✓' : (m.delivered_at ? '✓' : '')}
+                                      </span>
+                                    )}
                                   </div>
                                 </div>
                               ))}
-                              {chatMessagesLoading && (
+                              {chatMessagesLoading && chatMessages.length === 0 && (
                                 <div className="text-xs text-gray-500 text-center">Loading messages…</div>
                               )}
                             </div>
@@ -2269,7 +2349,10 @@ const PharmacyDashboard = () => {
                                   className="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2c786c]"
                                   placeholder="Type a message..."
                                   value={chatInput}
-                                  onChange={(e) => setChatInput(e.target.value)}
+                                  onChange={(e) => {
+                                    setChatInput(e.target.value);
+                                    if (chatRoom) sendTypingState.current(chatRoom.id, true);
+                                  }}
                                   onKeyDown={(e) => {
                                     if (e.key === 'Enter') {
                                       e.preventDefault();
@@ -2323,12 +2406,12 @@ const PharmacyDashboard = () => {
                                       if (!resp.ok || !data.success) {
                                         console.error('Send message failed', data);
                                         setChatError(data.error || 'Failed to send message');
-                                        // fallback: refetch to reconcile
-                                        await fetchChatMessages(chatRoom.id);
+                                        // fallback: refetch to reconcile (silent)
+                                        await fetchChatMessages(chatRoom.id, { silent: true });
                                         return;
                                       }
                                       // Reconcile list (simple refetch)
-                                      await fetchChatMessages(chatRoom.id);
+                                      await fetchChatMessages(chatRoom.id, { silent: true });
                                     } catch (e) {
                                       console.error('Send message error', e);
                                       setChatError('Unexpected error sending message');
@@ -2514,8 +2597,13 @@ const PharmacyDashboard = () => {
                                   await fetchChatMessages(data.room.id);
                                   if (chatPollRef.current) clearInterval(chatPollRef.current);
                                   chatPollRef.current = setInterval(() => {
-                                    fetchChatMessages(data.room.id);
+                                    fetchChatMessages(data.room.id, { silent: true });
                                   }, 12000);
+                                  // Start typing status polling
+                                  if (chatTypingPollRef.current) clearInterval(chatTypingPollRef.current);
+                                  chatTypingPollRef.current = setInterval(() => {
+                                    pollTypingStatus(data.room.id);
+                                  }, 4000);
                                 } catch (e) {
                                   console.error('Open chat error', e);
                                   setChatError('Unexpected error opening chat.');

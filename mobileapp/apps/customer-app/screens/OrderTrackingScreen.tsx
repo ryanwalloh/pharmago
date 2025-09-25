@@ -70,18 +70,34 @@ const OrderTrackingScreen: React.FC = () => {
   const chatScrollRef = useRef<ScrollView | null>(null);
   const [chatInput, setChatInput] = useState('');
   const [chatSending, setChatSending] = useState(false);
+  const [chatTyping, setChatTyping] = useState<{ customer?: boolean; pharmacy?: boolean }>({});
+  const chatTypingPollRef = useRef<any>(null);
+  const chatFetchInFlightRef = useRef<boolean>(false);
+  const typingTimerRef = useRef<any>(null);
+  const isMountedRef = useRef<boolean>(true);
 
   const fetchChatMessages = useCallback(async () => {
     try {
       if (!chatRoom?.id) return;
+      if (chatFetchInFlightRef.current) return;
+      chatFetchInFlightRef.current = true;
       const msgs = await apiService.getOrderChatMessages(chatRoom.id, 100);
       if (msgs.success && (msgs.data as any)?.messages) {
+        if (!isMountedRef.current) return;
         setChatMessages((msgs.data as any).messages);
+        // After fetching, mark others' messages as read (customer context)
+        try {
+          await apiService.markOrderChatRead(chatRoom.id);
+        } catch {}
       } else if (!msgs.success) {
+        if (!isMountedRef.current) return;
         setChatError(msgs.error || 'Failed to load messages');
       }
     } catch (_e) {
+      if (!isMountedRef.current) return;
       setChatError('Unexpected error loading messages');
+    } finally {
+      chatFetchInFlightRef.current = false;
     }
   }, [chatRoom?.id]);
 
@@ -272,6 +288,36 @@ const OrderTrackingScreen: React.FC = () => {
       return () => clearTimeout(timer);
     }
   }, [orderData]);
+
+  // Start/stop typing polling with modal
+  useEffect(() => {
+    isMountedRef.current = true;
+    const start = async () => {
+      try {
+        if (showChatModal && chatRoom?.id) {
+          const poll = async () => {
+            const res = await apiService.getOrderChatTypingStatus(chatRoom.id);
+            if (res.success && (res.data as any)?.typing) setChatTyping((res.data as any).typing);
+          };
+          await poll();
+          if (chatTypingPollRef.current) clearInterval(chatTypingPollRef.current);
+          chatTypingPollRef.current = setInterval(poll, 4000);
+        } else if (chatTypingPollRef.current) {
+          clearInterval(chatTypingPollRef.current);
+          chatTypingPollRef.current = null;
+          setChatTyping({});
+        }
+      } catch {}
+    };
+    start();
+    return () => {
+      isMountedRef.current = false;
+      if (chatTypingPollRef.current) {
+        clearInterval(chatTypingPollRef.current);
+        chatTypingPollRef.current = null;
+      }
+    };
+  }, [showChatModal, chatRoom?.id]);
 
 
   const formatTime = (dateString: string) => {
@@ -546,6 +592,11 @@ const OrderTrackingScreen: React.FC = () => {
           </View>
         </View>
       </ScrollView>
+      {chatTyping?.pharmacy ? (
+        <Text style={{ paddingHorizontal: 16, paddingBottom: 6, color: '#00bf63', fontSize: 12, fontFamily: fontFamily.light }}>
+          Pharmacy is typing…
+        </Text>
+      ) : null}
       {/* Cleanup polling when modal closes */}
       {showChatModal ? null : (chatPollRef.current ? (clearInterval(chatPollRef.current), chatPollRef.current = null, null) : null)}
       {/* Chat Modal - full width, bottom-aligned (touching left/right/bottom) */}
@@ -580,10 +631,19 @@ const OrderTrackingScreen: React.FC = () => {
                 <Text style={styles.chatEmpty}>No messages yet.</Text>
               )}
               {chatMessages.map((m) => (
-                <View key={m.id} style={{ marginBottom: 12 }}>
+                <View key={m.id} style={{ marginBottom: 12, alignItems: (m.sender_role_code === 'customer' || m.sender_role === 'customer') ? 'flex-end' : 'flex-start' }}>
                   <Text style={styles.chatMeta}>{m.sender_name} • {new Date(m.timestamp).toLocaleString()}</Text>
-                  <View style={[styles.chatBubble, m.is_system_message ? styles.chatSystem : styles.chatUser]}>
+                  <View style={[
+                    styles.chatBubble,
+                    m.is_system_message ? styles.chatSystem : ((m.sender_role_code === 'pharmacy' || m.sender_role === 'pharmacy') ? styles.chatPharmacy : styles.chatUser),
+                    { flexDirection: 'row', alignItems: 'center' }
+                  ]}>
                     <Text style={styles.chatText}>{m.content}</Text>
+                    {!m.is_system_message && (m.sender_role_code === 'customer' || m.sender_role === 'customer') ? (
+                      <Text style={{ marginLeft: 6, fontSize: 10, color: '#9E9E9E' }}>
+                        {m.read_at ? '✓✓' : (m.delivered_at ? '✓' : '')}
+                      </Text>
+                    ) : null}
                   </View>
                 </View>
               ))}
@@ -599,14 +659,35 @@ const OrderTrackingScreen: React.FC = () => {
                   style={{ flex: 1, borderWidth: 1, borderColor: '#E0E0E0', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: '#333333', fontFamily: fontFamily.light }}
                   placeholder="Type a message..."
                   value={chatInput}
-                  onChangeText={setChatInput}
+                  onChangeText={(text) => {
+                    setChatInput(text);
+                    try {
+                      if (chatRoom?.id) {
+                        if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+                        apiService.setOrderChatTyping(chatRoom.id, true);
+                        typingTimerRef.current = setTimeout(() => {
+                          apiService.setOrderChatTyping(chatRoom.id, false);
+                        }, 2000);
+                      }
+                    } catch {}
+                  }}
                   editable={!chatSending}
                   returnKeyType="send"
                   onSubmitEditing={async () => {
                     if (!chatRoom?.id || !chatInput.trim() || chatSending) return;
+                    const sendWithTimeout = async <T,>(p: Promise<ApiResponse<T>>, ms: number): Promise<ApiResponse<T>> => {
+                      return await new Promise<ApiResponse<T>>((resolve) => {
+                        let done = false;
+                        const t = setTimeout(() => {
+                          if (!done) resolve({ success: false, error: 'Timeout sending message' } as any);
+                        }, ms);
+                        p.then((r) => { done = true; clearTimeout(t); resolve(r); })
+                         .catch(() => { done = true; clearTimeout(t); resolve({ success: false, error: 'Network error' } as any); });
+                      });
+                    };
                     try {
                       setChatSending(true);
-                      const res = await apiService.sendOrderChatMessage(chatRoom.id, chatInput.trim());
+                      const res = await sendWithTimeout(apiService.sendOrderChatMessage(chatRoom.id, chatInput.trim()), 10000);
                       if (!res.success) {
                         setChatError(res.error || 'Failed to send message');
                       } else {
@@ -628,9 +709,19 @@ const OrderTrackingScreen: React.FC = () => {
                   disabled={chatSending || !chatInput.trim() || !chatRoom?.id}
                   onPress={async () => {
                     if (!chatRoom?.id || !chatInput.trim() || chatSending) return;
+                    const sendWithTimeout = async <T,>(p: Promise<ApiResponse<T>>, ms: number): Promise<ApiResponse<T>> => {
+                      return await new Promise<ApiResponse<T>>((resolve) => {
+                        let done = false;
+                        const t = setTimeout(() => {
+                          if (!done) resolve({ success: false, error: 'Timeout sending message' } as any);
+                        }, ms);
+                        p.then((r) => { done = true; clearTimeout(t); resolve(r); })
+                         .catch(() => { done = true; clearTimeout(t); resolve({ success: false, error: 'Network error' } as any); });
+                      });
+                    };
                     try {
                       setChatSending(true);
-                      const res = await apiService.sendOrderChatMessage(chatRoom.id, chatInput.trim());
+                      const res = await sendWithTimeout(apiService.sendOrderChatMessage(chatRoom.id, chatInput.trim()), 10000);
                       if (!res.success) {
                         setChatError(res.error || 'Failed to send message');
                       } else {
@@ -965,6 +1056,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: '#E0E0E0'
+  },
+  chatPharmacy: {
+    backgroundColor: '#E8F5E9',
+    borderWidth: 1,
+    borderColor: '#C8E6C9'
   },
   chatText: {
     color: '#333333',
