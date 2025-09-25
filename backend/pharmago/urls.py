@@ -2517,11 +2517,15 @@ def get_order_chat_messages(request):
                 'id': msg.id,
                 'sender_name': msg.sender_name,
                 'sender_role': msg.sender_role,
+                'sender_role_code': getattr(msg.sender, 'role', None),
                 'message_type': msg.message_type,
                 'content': msg.content,
                 'file_path': msg.file_path,
                 'timestamp': msg.timestamp.isoformat() if msg.timestamp else None,
                 'is_system_message': msg.is_system_message,
+                'status': getattr(msg, 'status', None),
+                'delivered_at': msg.delivered_at.isoformat() if getattr(msg, 'delivered_at', None) else None,
+                'read_at': msg.read_at.isoformat() if getattr(msg, 'read_at', None) else None,
             }
 
         return JsonResponse({
@@ -2541,6 +2545,215 @@ def get_order_chat_messages(request):
         print(traceback.format_exc())
         return JsonResponse({'success': False, 'error': 'Failed to fetch messages'}, status=500)
 
+
+@csrf_exempt
+def mark_order_chat_messages_read(request):
+    """Dev endpoint: Mark messages in a room as read for the acting participant.
+
+    Request JSON:
+      { "room_id": 45, "pharmacy_id": 22 }    # pharmacy marks customer messages as read
+      { "room_id": 45 }                         # customer marks pharmacy messages as read
+    """
+    try:
+        import json
+        from django.utils import timezone
+        from api.chat.models import ChatRoom, ChatParticipant, ChatMessage
+        from api.users.models import Pharmacy
+
+        if request.method == 'OPTIONS':
+            return JsonResponse({'success': True})
+        if request.method != 'POST':
+            return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
+
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({'success': False, 'error': 'Invalid JSON body'}, status=400)
+
+        room_id = data.get('room_id')
+        pharmacy_id = data.get('pharmacy_id')
+        if not room_id:
+            return JsonResponse({'success': False, 'error': 'room_id is required'}, status=400)
+
+        try:
+            room = ChatRoom.objects.select_related('order__customer__user').get(id=int(room_id))
+        except (ChatRoom.DoesNotExist, ValueError):
+            return JsonResponse({'success': False, 'error': 'Room not found'}, status=404)
+
+        # Determine acting participant (pharmacy if pharmacy_id provided; otherwise customer)
+        acting_participant = None
+        if pharmacy_id:
+            try:
+                pharmacy = Pharmacy.objects.get(id=int(pharmacy_id))
+                acting_user = pharmacy.user
+            except (Pharmacy.DoesNotExist, ValueError):
+                return JsonResponse({'success': False, 'error': 'Pharmacy not found'}, status=404)
+            acting_participant, _ = ChatParticipant.objects.get_or_create(
+                room=room, user=acting_user, defaults={'role': 'pharmacy'}
+            )
+        else:
+            # Customer inferred from order
+            try:
+                acting_user = room.order.customer.user
+            except Exception:
+                return JsonResponse({'success': False, 'error': 'Customer not found for this order'}, status=404)
+            acting_participant, _ = ChatParticipant.objects.get_or_create(
+                room=room, user=acting_user, defaults={'role': 'customer'}
+            )
+
+        # First, mark any non-self messages as delivered if not yet delivered
+        now = timezone.now()
+        delivered_count = (
+            ChatMessage.objects
+            .filter(room=room)
+            .exclude(sender=acting_participant)
+            .filter(delivered_at__isnull=True)
+            .update(status='delivered', delivered_at=now)
+        )
+
+        # Then, mark any non-self messages as read if not yet read
+        read_count = (
+            ChatMessage.objects
+            .filter(room=room)
+            .exclude(sender=acting_participant)
+            .filter(read_at__isnull=True)
+            .update(status='read', read_at=now)
+        )
+
+        return JsonResponse({
+            'success': True,
+            'room': { 'id': room.id, 'room_id': room.room_id },
+            'delivered_count': int(delivered_count),
+            'read_count': int(read_count),
+        })
+
+    except Exception as e:
+        import traceback
+        print("=== ORDER CHAT MARK READ - ERROR ===")
+        print(f"Error: {e}")
+        print(traceback.format_exc())
+        return JsonResponse({'success': False, 'error': 'Failed to mark messages as read'}, status=500)
+
+
+@csrf_exempt
+def set_order_chat_typing(request):
+    """Dev endpoint: Set typing flag for a participant in a chat room with TTL.
+
+    Request JSON:
+      { "room_id": 45, "pharmacy_id": 22, "is_typing": true }
+      { "room_id": 45, "is_typing": true }
+    """
+    try:
+        import json
+        from django.core.cache import cache
+        from api.chat.models import ChatRoom, ChatParticipant
+        from api.users.models import Pharmacy
+
+        if request.method == 'OPTIONS':
+            return JsonResponse({'success': True})
+        if request.method != 'POST':
+            return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
+
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({'success': False, 'error': 'Invalid JSON body'}, status=400)
+
+        room_id = data.get('room_id')
+        pharmacy_id = data.get('pharmacy_id')
+        is_typing = bool(data.get('is_typing', True))
+        if not room_id:
+            return JsonResponse({'success': False, 'error': 'room_id is required'}, status=400)
+
+        try:
+            room = ChatRoom.objects.select_related('order__customer__user').get(id=int(room_id))
+        except (ChatRoom.DoesNotExist, ValueError):
+            return JsonResponse({'success': False, 'error': 'Room not found'}, status=404)
+
+        # Resolve actor role
+        role = 'customer'
+        if pharmacy_id:
+            try:
+                pharmacy = Pharmacy.objects.get(id=int(pharmacy_id))
+                actor_user = pharmacy.user
+                role = 'pharmacy'
+            except (Pharmacy.DoesNotExist, ValueError):
+                return JsonResponse({'success': False, 'error': 'Pharmacy not found'}, status=404)
+        else:
+            # Default to customer side
+            actor_user = room.order.customer.user if getattr(room.order, 'customer', None) else None
+
+        if actor_user:
+            ChatParticipant.objects.get_or_create(
+                room=room,
+                user=actor_user,
+                defaults={'role': role}
+            )
+
+        key = f"chat_typing:{room.id}:{role}"
+        if is_typing:
+            cache.set(key, True, timeout=7)
+        else:
+            cache.delete(key)
+
+        return JsonResponse({
+            'success': True,
+            'room': { 'id': room.id, 'room_id': room.room_id },
+            'typing': { role: bool(is_typing) }
+        })
+
+    except Exception as e:
+        import traceback
+        print("=== ORDER CHAT SET TYPING - ERROR ===")
+        print(f"Error: {e}")
+        print(traceback.format_exc())
+        return JsonResponse({'success': False, 'error': 'Failed to set typing state'}, status=500)
+
+
+def _get_typing_state(cache, room_id):
+    customer = bool(cache.get(f"chat_typing:{room_id}:customer"))
+    pharmacy = bool(cache.get(f"chat_typing:{room_id}:pharmacy"))
+    return {'customer': customer, 'pharmacy': pharmacy}
+
+
+@csrf_exempt
+def get_order_chat_typing_status(request):
+    """Dev endpoint: Get current typing state for a room.
+
+    Query params:
+      room_id: int
+    """
+    try:
+        from django.core.cache import cache
+        from api.chat.models import ChatRoom
+
+        if request.method == 'OPTIONS':
+            return JsonResponse({'success': True})
+        if request.method != 'GET':
+            return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
+
+        room_id = request.GET.get('room_id')
+        if not room_id:
+            return JsonResponse({'success': False, 'error': 'room_id is required'}, status=400)
+
+        try:
+            room = ChatRoom.objects.get(id=int(room_id))
+        except (ChatRoom.DoesNotExist, ValueError):
+            return JsonResponse({'success': False, 'error': 'Room not found'}, status=404)
+
+        typing = _get_typing_state(cache, room.id)
+        return JsonResponse({
+            'success': True,
+            'room': { 'id': room.id, 'room_id': room.room_id },
+            'typing': typing,
+        })
+
+    except Exception as e:
+        import traceback
+        print("=== ORDER CHAT TYPING STATUS - ERROR ===")
+        print(f"Error: {e}")
+        print(traceback.format_exc())
+        return JsonResponse({'success': False, 'error': 'Failed to fetch typing status'}, status=500)
 
 @csrf_exempt
 def send_order_chat_message(request):
@@ -2731,10 +2944,6 @@ urlpatterns = [
     path('api/toggle-availability/<int:pharmacy_id>/<int:item_id>/', toggle_inventory_availability),  # Direct endpoint for pharmacy inventory
     path('api/update-inventory-item/<int:pharmacy_id>/<int:item_id>/', update_inventory_item),  # Direct endpoint for updating inventory items
     path('api/attach-prescription-items/', attach_prescription_items),  # Direct endpoint for attaching items to order
-    path('api/order-chat-room/', get_or_create_order_chat_room),  # Direct endpoint for order chat room
-    path('api/order-chat-messages/', get_order_chat_messages),  # Direct endpoint for listing chat messages
-    path('api/order-chat-send/', send_order_chat_message),  # Direct endpoint for sending chat messages (pharmacy)
-    path('api/order-chat-send-customer/', send_order_chat_message_customer),  # Direct endpoint for sending chat messages (customer)
     
     # Order endpoints
     path('api/create-prescription-order/', direct_prescription_order_creation),  # Direct endpoint for prescription order creation
@@ -2751,6 +2960,15 @@ urlpatterns = [
 
 # Serve static files in development using staticfiles finders (admin assets, app static)
 if settings.DEBUG:
+    urlpatterns += [
+        path('api/order-chat-room/', get_or_create_order_chat_room),  # Dev: order chat room
+        path('api/order-chat-messages/', get_order_chat_messages),  # Dev: list chat messages
+        path('api/order-chat-typing/', set_order_chat_typing),  # Dev: typing flag
+        path('api/order-chat-typing-status/', get_order_chat_typing_status),  # Dev: typing status
+        path('api/order-chat-mark-read/', mark_order_chat_messages_read),  # Dev: mark read
+        path('api/order-chat-send/', send_order_chat_message),  # Dev: send (pharmacy)
+        path('api/order-chat-send-customer/', send_order_chat_message_customer),  # Dev: send (customer)
+    ]
     urlpatterns += staticfiles_urlpatterns()
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
