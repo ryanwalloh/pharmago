@@ -126,71 +126,11 @@ const PharmacyDashboard = () => {
 
   // Mock data for orders
   const [orders, setOrders] = useState({
-    pending: [
-      {
-        id: 1,
-        orderNumber: 'ORD20240115001',
-        customerName: 'John Doe',
-        customerAddress: 'Barangay 1, Quezon City',
-        riderName: 'Mike Johnson',
-        riderPhone: '+63 912 345 6789',
-        totalAmount: 1250.00,
-        createdAt: '2024-01-15T10:30:00Z',
-        items: [
-          { product: 'Paracetamol 500mg', quantity: 2 },
-          { product: 'Vitamin C 1000mg', quantity: 1 },
-          { product: 'Cough Syrup', quantity: 1 }
-        ]
-      },
-      {
-        id: 2,
-        orderNumber: 'ORD20240115002',
-        customerName: 'Jane Smith',
-        customerAddress: 'Barangay 2, Makati City',
-        riderName: 'Not Assigned',
-        riderPhone: 'N/A',
-        totalAmount: 890.50,
-        createdAt: '2024-01-15T11:15:00Z',
-        items: [
-          { product: 'Amoxicillin 250mg', quantity: 1 },
-          { product: 'Ibuprofen 400mg', quantity: 2 }
-        ]
-      }
-    ],
-    preparing: [
-      {
-        id: 3,
-        orderNumber: 'ORD20240115003',
-        customerName: 'Robert Wilson',
-        customerAddress: 'Barangay 3, Manila',
-        riderName: 'Sarah Davis',
-        riderPhone: '+63 917 123 4567',
-        totalAmount: 2100.75,
-        createdAt: '2024-01-15T09:45:00Z',
-        items: [
-          { product: 'Insulin Pen', quantity: 1 },
-          { product: 'Blood Glucose Test Strips', quantity: 2 },
-          { product: 'Diabetic Socks', quantity: 1 }
-        ]
-      }
-    ],
-    ready: [
-      {
-        id: 4,
-        orderNumber: 'ORD20240115004',
-        customerName: 'Maria Garcia',
-        customerAddress: 'Barangay 4, Taguig',
-        riderName: 'David Brown',
-        riderPhone: '+63 918 987 6543',
-        totalAmount: 750.25,
-        createdAt: '2024-01-15T08:20:00Z',
-        items: [
-          { product: 'Antihistamine Tablets', quantity: 1 },
-          { product: 'Nasal Spray', quantity: 1 }
-        ]
-      }
-    ]
+    pending: [],
+    preparing: [],
+    ready: []
   });
+  const [ordersLoading, setOrdersLoading] = useState(true);
 
   // Pharmacy statistics
   const [stats, setStats] = useState({
@@ -204,6 +144,7 @@ const PharmacyDashboard = () => {
   // Function to fetch orders from API
   const fetchOrders = async (pharmacyId) => {
     try {
+      setOrdersLoading(true);
       console.log(`Fetching orders for pharmacy ID: ${pharmacyId}`);
       const response = await fetch(`http://127.0.0.1:8000/api/pharmacy-orders/${pharmacyId}/`);
       
@@ -212,14 +153,11 @@ const PharmacyDashboard = () => {
         console.log('Orders API Response:', data);
         
         if (data.success) {
-          // Update orders state with real data
           setOrders({
             pending: data.orders.pending || [],
             preparing: data.orders.preparing || [],
             ready: data.orders.ready || []
           });
-          
-          // Update stats
           setStats(prev => ({
             ...prev,
             totalOrders: data.totalOrders || 0,
@@ -227,7 +165,6 @@ const PharmacyDashboard = () => {
             preparingOrders: data.preparingOrders || 0,
             readyOrders: data.readyOrders || 0
           }));
-          
           console.log(`✅ Loaded ${data.totalOrders} orders from database`);
         } else {
           console.error('API returned error:', data.error);
@@ -237,11 +174,45 @@ const PharmacyDashboard = () => {
         const errorText = await response.text();
         console.error('Error details:', errorText);
       }
-    } catch (error) {
-      console.error('Error fetching orders:', error);
-      console.log('Using mock data for development...');
+    } catch (err) {
+      console.error('Unexpected error fetching orders', err);
+    } finally {
+      setOrdersLoading(false);
     }
   };
+
+  // Lightweight auto-refresh using backend cache version key emitted by signals
+  useEffect(() => {
+    let cancelled = false;
+    let intervalId = null;
+    const storedPharmacyInfo = localStorage.getItem('pharmacy_info');
+    const pharmacy = storedPharmacyInfo ? JSON.parse(storedPharmacyInfo) : null;
+    const pid = pharmacy?.id;
+    let lastVersion = null;
+
+    const poll = async () => {
+      if (!pid) return;
+      try {
+        const resp = await fetch(`http://127.0.0.1:8000/api/cache-version/?key=${encodeURIComponent(`orders:version:pharmacy:${pid}`)}`);
+        if (!resp.ok) return;
+        const json = await resp.json();
+        const ver = json?.value || null;
+        if (ver && ver !== lastVersion) {
+          lastVersion = ver;
+          await fetchOrders(pid);
+        }
+      } catch (_) {}
+    };
+
+    // initial read and then light polling
+    poll();
+    intervalId = setInterval(poll, 7000);
+
+    return () => {
+      cancelled = true;
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, []);
 
   useEffect(() => {
     // Load pharmacy and user info from localStorage
@@ -251,8 +222,6 @@ const PharmacyDashboard = () => {
     if (storedPharmacyInfo) {
       const pharmacyData = JSON.parse(storedPharmacyInfo);
       setPharmacyInfo(pharmacyData);
-      
-      // Fetch orders if we have pharmacy ID
       if (pharmacyData && pharmacyData.id) {
         fetchOrders(pharmacyData.id);
       }
@@ -408,8 +377,7 @@ const PharmacyDashboard = () => {
       setReviewSearchQuery('');
       setReviewSearchResults([]);
       console.log('✅ Attach success', data);
-      // Close the modal after attaching items
-      setSelectedOrder(null);
+      // Keep the modal open so pharmacist can send pricing
     } catch (err) {
       console.error('❌ Error attaching items:', err);
       alert('An unexpected error occurred.');
@@ -2308,7 +2276,10 @@ const PharmacyDashboard = () => {
                                 className="text-xs text-[#2c786c] hover:underline"
                                 onClick={() => {
                                   setShowChatPanel(false);
-                                  if (chatTypingPollRef.current) { clearInterval(chatTypingPollRef.current); chatTypingPollRef.current = null; }
+                                  if (chatTypingPollRef.current) {
+                                    clearInterval(chatTypingPollRef.current);
+                                    chatTypingPollRef.current = null;
+                                  }
                                 }}
                               >
                                 Back to Image
@@ -2326,7 +2297,7 @@ const PharmacyDashboard = () => {
                               {chatMessages.map((m) => (
                                 <div key={m.id} className={`flex flex-col ${((m.sender_role_code === 'pharmacy') || (m.sender_role === 'pharmacy')) ? 'items-end text-right' : 'items-start'}`}>
                                   <div className="text-[11px] text-gray-500">{m.sender_name} • {new Date(m.timestamp).toLocaleString()}</div>
-                                  <div className={`inline-block max-w-[85%] mt-1 px-3 py-2 rounded-lg text-sm ${m.is_system_message ? 'bg-gray-200 text-gray-700' : ((m.sender_role_code === 'customer' || m.sender_role === 'customer') ? 'bg-green-50 border border-green-200 text-green-900' : 'bg-white border text-gray-800')}`}>
+                                  <div className={`inline-block max-w-[85%] mt-1 px-3 py-2 rounded-lg text-sm ${m.is_system_message ? 'bg-gray-200 text-gray-700' : ((m.sender_role_code === 'customer' || m.sender_role === 'customer') ? 'bg-green-50 border border-green-200 text-green-900' : 'bg-white border text-gray-800')} ${m._optimistic ? 'opacity-50' : ''}`}>
                                     {m.content}
                                     {!m.is_system_message && (m.sender_role_code === 'pharmacy' || m.sender_role === 'pharmacy') && (
                                       <span className="ml-2 align-middle text-[10px] text-gray-400">
@@ -2334,6 +2305,9 @@ const PharmacyDashboard = () => {
                                       </span>
                                     )}
                                   </div>
+                                  {m._optimistic && (
+                                    <div className="text-[11px] text-gray-400 mt-1">Sending…</div>
+                                  )}
                                 </div>
                               ))}
                               {chatMessagesLoading && chatMessages.length === 0 && (
@@ -2561,7 +2535,7 @@ const PharmacyDashboard = () => {
                       
                       {/* Actions */}
                       <div className="mt-4 space-y-2">
-                        {orders.pending.includes(selectedOrder) && (
+                        {orders.pending.some(o => o.id === selectedOrder.id) && (
                           <>
                             <button 
                               onClick={() => handleAttachPrescriptionItems(selectedOrder)}
@@ -2595,6 +2569,16 @@ const PharmacyDashboard = () => {
                                   setShowChatPanel(true);
                                   // Immediately fetch messages and start polling
                                   await fetchChatMessages(data.room.id);
+                                  // Try to include quoted total in message
+                                  let quotedTotal = null;
+                                  try {
+                                    const statusResp = await fetch(`http://127.0.0.1:8000/api/order-status/${selectedOrder.id}/`);
+                                    const statusJson = await statusResp.json();
+                                    if (statusResp.ok && statusJson.success) {
+                                      const payload = statusJson.data || statusJson;
+                                      quotedTotal = typeof payload.total_amount === 'number' ? payload.total_amount : (payload.data?.total_amount || null);
+                                    }
+                                  } catch (_) {}
                                   if (chatPollRef.current) clearInterval(chatPollRef.current);
                                   chatPollRef.current = setInterval(() => {
                                     fetchChatMessages(data.room.id, { silent: true });
@@ -2604,6 +2588,82 @@ const PharmacyDashboard = () => {
                                   chatTypingPollRef.current = setInterval(() => {
                                     pollTypingStatus(data.room.id);
                                   }, 4000);
+                                  // Persist service & delivery fees first so the breakdown is accurate
+                                  try {
+                                    await fetch('http://127.0.0.1:8000/api/prepare-price-quote/', {
+                                      method: 'POST',
+                                      headers: { 'Content-Type': 'application/json' },
+                                      body: JSON.stringify({ order_id: selectedOrder.id })
+                                    });
+                                  } catch (_) {}
+                                  // Send pricing prompt message to customer (friendly invoice-style summary)
+                                  try {
+                                    // Fetch latest breakdown for invoice-like message
+                                    let subtotal = null, delivery = null, serviceFee = null, total = quotedTotal, itemLines = [];
+                                    try {
+                                      const statusResp2 = await fetch(`http://127.0.0.1:8000/api/order-status/${selectedOrder.id}/`);
+                                      const statusJson2 = await statusResp2.json();
+                                      const p = statusJson2?.data || statusJson2;
+                                      subtotal = typeof p?.subtotal === 'number' ? p.subtotal : null;
+                                      delivery = typeof p?.delivery_fee === 'number' ? p.delivery_fee : null;
+                                      serviceFee = typeof p?.tax_amount === 'number' ? p.tax_amount : null; // display as Service Fee
+                                      if (typeof p?.total_amount === 'number') total = p.total_amount;
+                                      if (Array.isArray(p?.items)) {
+                                        itemLines = p.items.map((it) => {
+                                          const nm = String((it && it.name) || 'Item');
+                                          const rawUnit = it && it.unit_price;
+                                          const unit = typeof rawUnit === 'number' ? rawUnit : (rawUnit ? Number(rawUnit) : null);
+                                          const priceStr = unit != null && !Number.isNaN(unit) ? `₱${Number(unit).toFixed(2)}` : '₱0.00';
+                                          return `- ${nm} — ${priceStr}`;
+                                        }).filter(Boolean);
+                                      }
+                                    } catch (_) {}
+                                    const parts = [];
+                                    if (subtotal != null) parts.push(`Subtotal: ₱${Number(subtotal).toFixed(2)}`);
+                                    if (serviceFee != null) parts.push(`Service Fee: ₱${Number(serviceFee).toFixed(2)}`);
+                                    if (delivery != null) parts.push(`Delivery Fee: ₱${Number(delivery).toFixed(2)}`);
+                                    const header = total != null
+                                      ? `Your price quote is ready: ₱${Number(total).toFixed(2)}`
+                                      : `Your price quote is ready.`;
+                                    const breakdown = parts.length ? `\n${parts.join('\n')}` : '';
+                                    const itemsLine = itemLines.length ? `\nItems:\n${itemLines.join('\n')}` : '';
+                                    const footer = total != null ? `\nTotal: ₱${Number(total).toFixed(2)}` : '';
+                                    const msgContent = `${header}${breakdown}${itemsLine}${footer}`;
+
+                                    // Optimistic pricing message (semi-transparent with Sending...)
+                                    const tempId = `temp-${Date.now()}`;
+                                    const optimisticMsg = {
+                                      id: tempId,
+                                      sender_name: 'You',
+                                      sender_role: 'pharmacy',
+                                      message_type: 'text',
+                                      content: msgContent,
+                                      timestamp: new Date().toISOString(),
+                                      is_system_message: false,
+                                      _optimistic: true
+                                    };
+                                    setChatMessages((prev) => [...prev, optimisticMsg]);
+                                    requestAnimationFrame(() => {
+                                      if (chatMessagesContainerRef.current) {
+                                        chatMessagesContainerRef.current.scrollTop = chatMessagesContainerRef.current.scrollHeight;
+                                      }
+                                    });
+
+                                    const sendResp = await fetch('http://127.0.0.1:8000/api/order-chat-send/', {
+                                      method: 'POST',
+                                      headers: { 'Content-Type': 'application/json' },
+                                      body: JSON.stringify({ room_id: data.room.id, pharmacy_id: pharmacy?.id, content: msgContent })
+                                    });
+                                    const sendJson = await sendResp.json();
+                                    if (!sendResp.ok || !sendJson.success) {
+                                      // Mark failure subtly or refetch
+                                      await fetchChatMessages(data.room.id, { silent: true });
+                                    } else {
+                                      // Reconcile list (refetch replaces optimistic with real message)
+                                      await fetchChatMessages(data.room.id, { silent: true });
+                                    }
+                                  } catch (_) {}
+                                  // Also nudge the customer's app to show pricing approval sheet by updating totals/state (client already polls)
                                 } catch (e) {
                                   console.error('Open chat error', e);
                                   setChatError('Unexpected error opening chat.');
@@ -2611,10 +2671,10 @@ const PharmacyDashboard = () => {
                                   setChatLoading(false);
                                 }
                               }}
-                              className="w-full bg-gray-800 text-white p-3 rounded-xl text-base cursor-pointer hover:bg-black disabled:opacity-50"
+                              className="w-full bg-blue-600 text-white p-3 rounded-xl text-base cursor-pointer hover:bg-blue-700 disabled:opacity-50"
                               disabled={chatLoading}
                             >
-                              {chatLoading ? 'Opening Chat…' : 'Open Chat with Customer'}
+                              {chatLoading ? 'Sending…' : 'Send Pricing to Customer'}
                             </button>
                             <button 
                               onClick={() => handlePrepareOrder(selectedOrder.id)}
@@ -2624,7 +2684,7 @@ const PharmacyDashboard = () => {
                             </button>
                           </>
                         )}
-                        {orders.preparing.includes(selectedOrder) && (
+                        {orders.preparing.some(o => o.id === selectedOrder.id) && (
                           <button 
                             onClick={() => handleReadyOrder(selectedOrder.id)}
                             className="w-full bg-orange-500 text-white p-3 rounded-xl text-base cursor-pointer hover:bg-orange-600"
@@ -2691,44 +2751,59 @@ const PharmacyDashboard = () => {
           <div className="mb-6">
             <h3 className="ml-2 lg:ml-5 text-gray-600 text-base lg:text-lg mb-3">New Orders({orders.pending.length})</h3>
             <div className="space-y-3">
-              {orders.pending.map(order => (
-                <div key={order.id} className="flex flex-col lg:flex-row justify-between items-start lg:items-center bg-white rounded-2xl p-4 lg:p-3 lg:px-20 space-y-3 lg:space-y-0">
-                  <div className="text-center">
-                    <h3 className="text-base lg:text-lg font-medium">Order #{order.id}</h3>
+              {ordersLoading ? (
+                <>
+                  <div className="animate-pulse bg-white rounded-2xl p-4 lg:p-3 lg:px-20">
+                    <div className="h-4 bg-gray-200 rounded w-24 mb-3"></div>
+                    <div className="h-3 bg-gray-200 rounded w-40 mb-2"></div>
+                    <div className="h-3 bg-gray-200 rounded w-56"></div>
                   </div>
-                  <div className="flex items-center">
-                    <img className="w-6 h-6 lg:w-8 lg:h-8 mr-2 lg:mr-3" src="/images/human.png" alt="Rider" />
-                  <div>
-                      <h3 className="text-sm lg:text-lg font-medium">{order.riderName}</h3>
-                      <p className="text-gray-600 text-xs lg:text-sm">{order.riderPhone}</p>
+                  <div className="animate-pulse bg-white rounded-2xl p-4 lg:p-3 lg:px-20">
+                    <div className="h-4 bg-gray-200 rounded w-24 mb-3"></div>
+                    <div className="h-3 bg-gray-200 rounded w-40 mb-2"></div>
+                    <div className="h-3 bg-gray-200 rounded w-56"></div>
+                  </div>
+                </>
+              ) : (
+                orders.pending.map(order => (
+                  <div key={order.id} className="flex flex-col lg:flex-row justify-between items-start lg:items-center bg-white rounded-2xl p-4 lg:p-3 lg:px-20 space-y-3 lg:space-y-0">
+                    <div className="text-center">
+                      <h3 className="text-base lg:text-lg font-medium">Order #{order.id}</h3>
+                    </div>
+                    <div className="flex items-center">
+                      <img className="w-6 h-6 lg:w-8 lg:h-8 mr-2 lg:mr-3" src="/images/human.png" alt="Rider" />
+                    <div>
+                        <h3 className="text-sm lg:text-lg font-medium">{order.riderName}</h3>
+                        <p className="text-gray-600 text-xs lg:text-sm">{order.riderPhone}</p>
+                      </div>
+                    </div>
+                    <div className="text-center">
+                      <h3 className="text-sm lg:text-lg font-medium">{order.customerName}</h3>
+                      <p className="text-gray-600 text-xs lg:text-sm truncate">{order.customerAddress}</p>
+                    </div>
+                    <div className="text-center">
+                      <h3 className="text-sm lg:text-lg font-medium">00:30:00</h3>
+                      <p className="text-gray-600 text-xs lg:text-sm">{formatTime(order.createdAt)}</p>
+                    </div>
+                    <div className="text-center">
+                      <h3 className="text-sm lg:text-lg font-medium">
+                        {order.isPrescriptionOrder ? 'Prescription Order' : `₱${order.totalAmount.toFixed(2)}`}
+                      </h3>
+                      <p className="text-gray-600 text-xs lg:text-sm">
+                        {order.isPrescriptionOrder ? "Waiting for customer's approval of the pricing" : 'Paid'}
+                      </p>
+                    </div>
+                    <div className="text-center">
+                      <button 
+                        onClick={() => handleViewOrder(order)}
+                        className="bg-green-500 text-white px-6 lg:px-10 py-2 lg:py-3 rounded-2xl text-sm lg:text-lg cursor-pointer"
+                      >
+                        View
+                      </button>
                     </div>
                   </div>
-                  <div className="text-center">
-                    <h3 className="text-sm lg:text-lg font-medium">{order.customerName}</h3>
-                    <p className="text-gray-600 text-xs lg:text-sm truncate">{order.customerAddress}</p>
-                  </div>
-                  <div className="text-center">
-                    <h3 className="text-sm lg:text-lg font-medium">00:30:00</h3>
-                    <p className="text-gray-600 text-xs lg:text-sm">{formatTime(order.createdAt)}</p>
-                  </div>
-                  <div className="text-center">
-                    <h3 className="text-sm lg:text-lg font-medium">
-                      {order.isPrescriptionOrder ? 'Prescription Order' : `₱${order.totalAmount.toFixed(2)}`}
-                    </h3>
-                    <p className="text-gray-600 text-xs lg:text-sm">
-                      {order.isPrescriptionOrder ? "Waiting for customer's approval of the pricing" : 'Paid'}
-                    </p>
-                  </div>
-                  <div className="text-center">
-                    <button 
-                      onClick={() => handleViewOrder(order)}
-                      className="bg-green-500 text-white px-6 lg:px-10 py-2 lg:py-3 rounded-2xl text-sm lg:text-lg cursor-pointer"
-                    >
-                      View
-                    </button>
-                  </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
 

@@ -603,6 +603,74 @@ def upload_prescription_image(request):
             'order_id': order_id,
             'order_updated': updated
         })
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': 'Upload failed',
+            'message': str(e)
+        }, status=500)
+
+@csrf_exempt
+def upload_driver_license_image(request):
+    """Upload driver's license image and create/update UserDocument for the current or specified user.
+
+    Form fields:
+      - file: binary image
+      - user_id (optional): int
+    Response: { success, url, document_id? }
+    """
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
+
+    try:
+        from django.core.files.storage import default_storage
+        from django.utils import timezone
+        from api.users.models import User, UserDocument
+        import uuid, os
+
+        file_obj = request.FILES.get('file') or request.FILES.get('image')
+        if not file_obj:
+            return JsonResponse({'success': False, 'error': 'No file uploaded'}, status=400)
+
+        today_path = timezone.now().strftime('%Y/%m/%d')
+        _, ext = os.path.splitext(file_obj.name or '')
+        if not ext:
+            ext = '.jpg'
+        filename = f"drivers_licenses/{today_path}/{uuid.uuid4().hex}{ext}"
+
+        saved_path = default_storage.save(filename, file_obj)
+        file_url = default_storage.url(saved_path)
+
+        # Resolve user
+        user_id_str = request.POST.get('user_id') or request.GET.get('user_id')
+        user = None
+        if user_id_str:
+            try:
+                user = User.objects.get(id=int(user_id_str))
+            except (User.DoesNotExist, ValueError):
+                user = None
+
+        document = None
+        if user:
+            try:
+                document = UserDocument.objects.create(
+                    user=user,
+                    id_type=None,
+                    file_url=file_url,
+                    document_file=file_url,
+                    status='uploaded'
+                )
+            except Exception:
+                document = None
+
+        return JsonResponse({
+            'success': True,
+            'url': file_url,
+            'document_id': getattr(document, 'id', None)
+        })
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': 'Upload failed', 'message': str(e)}, status=500)
+
 
     except Exception as e:
         return JsonResponse({
@@ -2388,6 +2456,170 @@ def attach_prescription_items(request):
 
 
 @csrf_exempt
+def prepare_price_quote(request):
+    """Set pricing fees (service fee and delivery fee) and recalculate totals for an order.
+
+    Request JSON: { "order_id": 123 }
+    Behavior: Sets tax_amount=19.00 (Service Fee), delivery_fee=29.00, recomputes total_amount.
+    Leaves status as-is (pending) so the customer can approve.
+    """
+    try:
+        import json
+        from decimal import Decimal
+        from django.db.models import Sum
+        from api.orders.models import Order
+
+        if request.method == 'OPTIONS':
+            return JsonResponse({'success': True})
+        if request.method != 'POST':
+            return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
+
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({'success': False, 'error': 'Invalid JSON body'}, status=400)
+
+        order_id = data.get('order_id')
+        if not order_id:
+            return JsonResponse({'success': False, 'error': 'order_id is required'}, status=400)
+
+        try:
+            order = Order.objects.get(id=int(order_id))
+        except (Order.DoesNotExist, ValueError):
+            return JsonResponse({'success': False, 'error': 'Order not found'}, status=404)
+
+        # Recalculate subtotal from order lines if needed
+        try:
+            subtotal = order.order_lines.aggregate(total=Sum('total_price'))['total'] or Decimal('0.00')
+        except Exception:
+            subtotal = Decimal('0.00')
+
+        order.subtotal = subtotal
+        order.tax_amount = Decimal('19.00')
+        order.delivery_fee = Decimal('29.00')
+
+        try:
+            discount_amount = order.discount_amount if isinstance(getattr(order, 'discount_amount', Decimal('0.00')), Decimal) else Decimal(str(order.discount_amount or 0))
+        except Exception:
+            discount_amount = Decimal('0.00')
+
+        order.total_amount = (order.subtotal + order.tax_amount + order.delivery_fee) - discount_amount
+        order.save()
+
+        return JsonResponse({
+            'success': True,
+            'order_id': order.id,
+            'subtotal': float(order.subtotal),
+            'service_fee': float(order.tax_amount),
+            'delivery_fee': float(order.delivery_fee),
+            'discount_amount': float(discount_amount),
+            'total_amount': float(order.total_amount),
+            'order_status': order.order_status,
+        })
+
+    except Exception as e:
+        import traceback
+        print("=== PREPARE PRICE QUOTE - ERROR ===")
+        print(f"Error: {e}")
+        print(traceback.format_exc())
+        return JsonResponse({'success': False, 'error': 'Failed to prepare price quote'}, status=500)
+
+@csrf_exempt
+def customer_pricing_approval(request):
+    """Customer approves pricing for a prescription order (direct endpoint).
+
+    Request JSON:
+      { "order_id": 123, "approve": true, "notes": "optional" }
+
+    Behavior:
+      - When approve=true: sets order_status=accepted if currently pending, and locks in totals
+      - When approve=false: keeps order pending and appends note; optional future: allow reject flow
+    """
+    try:
+        import json
+        from api.orders.models import Order
+        from api.chat.models import ChatRoom, ChatMessage
+
+        if request.method == 'OPTIONS':
+            return JsonResponse({'success': True})
+        if request.method != 'POST':
+            return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
+
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({'success': False, 'error': 'Invalid JSON body'}, status=400)
+
+        order_id = data.get('order_id')
+        approve = bool(data.get('approve', True))
+        notes = (data.get('notes') or '').strip()
+
+        if not order_id:
+            return JsonResponse({'success': False, 'error': 'order_id is required'}, status=400)
+
+        try:
+            order = Order.objects.get(id=int(order_id))
+        except (Order.DoesNotExist, ValueError):
+            return JsonResponse({'success': False, 'error': 'Order not found'}, status=404)
+
+        # Only handle pending orders; otherwise return current state
+        previous_status = order.order_status
+        if approve and order.order_status == Order.OrderStatus.PENDING:
+            # Hardcode fees per request
+            from decimal import Decimal
+            order.tax_amount = Decimal('19.00')
+            order.delivery_fee = Decimal('29.00')
+            # Recompute total: subtotal + tax + delivery (discount already applied on order)
+            try:
+                discount_amount = order.discount_amount if isinstance(getattr(order, 'discount_amount', Decimal('0.00')), Decimal) else Decimal(str(order.discount_amount or 0))
+            except Exception:
+                discount_amount = Decimal('0.00')
+            order.total_amount = (order.subtotal + order.tax_amount + order.delivery_fee) - discount_amount
+            # Advance status to preparing
+            order.order_status = Order.OrderStatus.PREPARING
+            if notes:
+                order.notes = f"{order.notes or ''}\nCustomer approved pricing: {notes}".strip()
+            order.save()
+
+            # Post a system message into chat (if room exists/creatable)
+            try:
+                room = None
+                from api.chat.models import ChatRoom
+                room = ChatRoom.objects.filter(order=order).first()
+                if not room:
+                    room = ChatRoom.objects.create(order=order, title=f"Order #{order.order_number} Chat")
+                ChatMessage.create_system_message(room, f"Customer approved pricing. Tax ₱19, Delivery ₱29 added. Status set to 'preparing'.")
+            except Exception:
+                pass
+
+            return JsonResponse({
+                'success': True,
+                'order_id': order.id,
+                'order_status': order.order_status,
+                'total_amount': float(order.total_amount),
+            })
+
+        # Not approved or already processed: keep pending, append note if any
+        if notes:
+            order.notes = f"{order.notes or ''}\nCustomer response: {notes}".strip()
+            order.save()
+
+        return JsonResponse({
+            'success': True,
+            'order_id': order.id,
+            'order_status': order.order_status,
+            'total_amount': float(order.total_amount),
+        })
+
+    except Exception as e:
+        import traceback
+        print("=== CUSTOMER PRICING APPROVAL - ERROR ===")
+        print(f"Error: {e}")
+        print(traceback.format_exc())
+        return JsonResponse({'success': False, 'error': 'Failed to process approval'}, status=500)
+
+
+@csrf_exempt
 def get_or_create_order_chat_room(request):
     """Dev endpoint: Get or create a ChatRoom for a given order and ensure participants.
 
@@ -2929,6 +3161,7 @@ urlpatterns = [
     path('api/aws-diagnostics/', aws_diagnostics),  # Dev: verify credentials
     path('api/prescription-image/<int:order_id>/', serve_prescription_image),  # Direct endpoint for serving prescription images
     path('api/upload-prescription-image/', upload_prescription_image),  # Direct endpoint for uploading prescription images
+    path('api/upload-driver-license/', upload_driver_license_image),  # Direct endpoint for rider driver's license upload
     path('api/approve-pharmacy/<int:pharmacy_id>/', approve_pharmacy),  # Direct endpoint for approving pharmacy
     path('api/generate-login-token/<int:pharmacy_id>/', generate_login_token),  # Direct endpoint for generating login token
     path('api/validate-login-token/<str:token>/', validate_login_token),  # Direct endpoint for validating login token
@@ -2944,10 +3177,18 @@ urlpatterns = [
     path('api/toggle-availability/<int:pharmacy_id>/<int:item_id>/', toggle_inventory_availability),  # Direct endpoint for pharmacy inventory
     path('api/update-inventory-item/<int:pharmacy_id>/<int:item_id>/', update_inventory_item),  # Direct endpoint for updating inventory items
     path('api/attach-prescription-items/', attach_prescription_items),  # Direct endpoint for attaching items to order
+    path('api/prepare-price-quote/', prepare_price_quote),  # Direct endpoint to set service & delivery fees
     
     # Order endpoints
     path('api/create-prescription-order/', direct_prescription_order_creation),  # Direct endpoint for prescription order creation
     path('api/order-status/<int:order_id>/', get_order_status),  # Direct endpoint for order status
+    path('api/customer-approve-pricing/', customer_pricing_approval),  # Direct endpoint for customer pricing approval
+    path('api/cache-version/', lambda request: (
+        __import__('django.http').http.JsonResponse({
+            'success': True,
+            'value': __import__('django.core.cache').core.cache.cache.get(request.GET.get('key') or '', None)
+        })
+    )),  # Minimal direct cache read for version keys
     
     # Include API URLs at the correct path
     path('api/', include('api.urls')),
