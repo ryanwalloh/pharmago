@@ -75,6 +75,9 @@ const OrderTrackingScreen: React.FC = () => {
   const chatFetchInFlightRef = useRef<boolean>(false);
   const typingTimerRef = useRef<any>(null);
   const isMountedRef = useRef<boolean>(true);
+  const [showPriceApprove, setShowPriceApprove] = useState(false);
+  const [approving, setApproving] = useState(false);
+  const [dismissedPricingPrompt, setDismissedPricingPrompt] = useState(false);
 
   const fetchChatMessages = useCallback(async () => {
     try {
@@ -258,6 +261,14 @@ const OrderTrackingScreen: React.FC = () => {
 
     initializeMap();
   }, [orderData, customerLocation]);
+
+  // Trigger pricing approval prompt when pending and total > 0
+  useEffect(() => {
+    if (!orderData) return;
+    const shouldPrompt = orderData.order_status === 'pending' && Number(orderData.total_amount || 0) > 0;
+    setShowPriceApprove(shouldPrompt && !dismissedPricingPrompt);
+    if (!shouldPrompt) setDismissedPricingPrompt(false);
+  }, [orderData, dismissedPricingPrompt]);
 
   // Cleanup effect - clear stored order when component unmounts
   useEffect(() => {
@@ -503,7 +514,10 @@ const OrderTrackingScreen: React.FC = () => {
           <View style={styles.statusPanel}>
             <View style={styles.statusItem}>
               <View style={styles.statusItemLeft}>
-                <View style={[styles.statusIconContainer, styles.activeStatus]}>
+                <View style={[
+                  styles.statusIconContainer,
+                  orderData?.order_status === 'pending' ? styles.activeStatus : null
+                ]}>
                   <Ionicons name="document-text-outline" size={24} color="#FFFFFF" />
                 </View>
                 <View style={styles.statusConnector} />
@@ -517,7 +531,10 @@ const OrderTrackingScreen: React.FC = () => {
 
             <View style={styles.statusItem}>
               <View style={styles.statusItemLeft}>
-                <View style={styles.statusIconContainer}>
+                <View style={[
+                  styles.statusIconContainer,
+                  (orderData?.order_status === 'accepted' || orderData?.order_status === 'preparing') ? styles.activeStatus : null
+                ]}>
                   <Ionicons name="cog-outline" size={24} color="#666666" />
                 </View>
                 <View style={styles.statusConnector} />
@@ -525,7 +542,9 @@ const OrderTrackingScreen: React.FC = () => {
               <View style={styles.statusItemRight}>
                 <Text style={styles.statusTitle}>Order Processing</Text>
                 <Text style={styles.statusSubtitle}>Processing order</Text>
-                <Text style={styles.statusTime}>-</Text>
+                <Text style={styles.statusTime}>
+                  {orderData?.updated_at ? formatTime(orderData.updated_at) : '-'}
+                </Text>
               </View>
             </View>
 
@@ -630,23 +649,58 @@ const OrderTrackingScreen: React.FC = () => {
               {!chatError && chatMessages.length === 0 && !chatLoading && (
                 <Text style={styles.chatEmpty}>No messages yet.</Text>
               )}
-              {chatMessages.map((m) => (
-                <View key={m.id} style={{ marginBottom: 12, alignItems: (m.sender_role_code === 'customer' || m.sender_role === 'customer') ? 'flex-end' : 'flex-start' }}>
-                  <Text style={styles.chatMeta}>{m.sender_name} • {new Date(m.timestamp).toLocaleString()}</Text>
-                  <View style={[
-                    styles.chatBubble,
-                    m.is_system_message ? styles.chatSystem : ((m.sender_role_code === 'pharmacy' || m.sender_role === 'pharmacy') ? styles.chatPharmacy : styles.chatUser),
-                    { flexDirection: 'row', alignItems: 'center' }
-                  ]}>
-                    <Text style={styles.chatText}>{m.content}</Text>
-                    {!m.is_system_message && (m.sender_role_code === 'customer' || m.sender_role === 'customer') ? (
-                      <Text style={{ marginLeft: 6, fontSize: 10, color: '#9E9E9E' }}>
-                        {m.read_at ? '✓✓' : (m.delivered_at ? '✓' : '')}
-                      </Text>
-                    ) : null}
+              {chatMessages.map((m) => {
+                const roleRaw = String(m.sender_role_code ?? m.sender_role ?? '').toLowerCase();
+                const isPharmacy = roleRaw.includes('pharmacy');
+                const isCustomer = roleRaw.includes('customer');
+                const isPricingPrompt = isPharmacy && typeof m.content === 'string' && /price quote/i.test(m.content);
+                return (
+                  <View key={m.id} style={{ marginBottom: 12, alignItems: isCustomer ? 'flex-end' : 'flex-start' }}>
+                    <Text style={styles.chatMeta}>{m.sender_name} • {new Date(m.timestamp).toLocaleString()}</Text>
+                    <View style={[
+                      styles.chatBubble,
+                      m.is_system_message ? styles.chatSystem : (isPharmacy ? styles.chatPharmacy : styles.chatUser),
+                      { flexDirection: 'column', alignItems: 'stretch' }
+                    ]}>
+                      <Text style={styles.chatText}>{m.content}</Text>
+                      {!m.is_system_message && isCustomer ? (
+                        <Text style={{ marginTop: 6, fontSize: 10, color: '#9E9E9E', alignSelf: 'flex-end' }}>
+                          {m.read_at ? '✓✓' : (m.delivered_at ? '✓' : '')}
+                        </Text>
+                      ) : null}
+                      {isPricingPrompt && orderData?.order_status === 'pending' && (
+                        <View style={{ flexDirection: 'row', marginTop: 10 }}>
+                          <TouchableOpacity
+                            style={{ flex: 1, paddingVertical: 10, borderRadius: 8, backgroundColor: '#eeeeee', alignItems: 'center', marginRight: 8 }}
+                            onPress={() => setDismissedPricingPrompt(true)}
+                          >
+                            <Text style={{ color: '#333', fontFamily: fontFamily.bold }}>Refuse</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={{ flex: 1, paddingVertical: 10, borderRadius: 8, backgroundColor: '#00bf63', alignItems: 'center', marginLeft: 8, opacity: approving ? 0.6 : 1 }}
+                            disabled={approving}
+                            onPress={async () => {
+                              try {
+                                setApproving(true);
+                                const res = await apiService.approvePricing(orderData.order_id, true);
+                                if (res.success) {
+                                  await fetchOrderData();
+                                  setDismissedPricingPrompt(true);
+                                  setShowChatModal(false);
+                                }
+                              } finally {
+                                setApproving(false);
+                              }
+                            }}
+                          >
+                            <Text style={{ color: '#fff', fontFamily: fontFamily.bold }}>Accept</Text>
+                          </TouchableOpacity>
+                        </View>
+                      )}
+                    </View>
                   </View>
-                </View>
-              ))}
+                );
+              })}
               {chatLoading && (
                 <Text style={styles.chatEmpty}>Loading…</Text>
               )}
