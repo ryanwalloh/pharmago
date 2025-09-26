@@ -1,6 +1,15 @@
 import { View, Image, StyleSheet } from 'react-native';
+import { useEffect } from 'react';
+import { useRouter } from 'expo-router';
 
 export default function LandingPage() {
+  const router = useRouter();
+  useEffect(() => {
+    const t = setTimeout(() => {
+      router.replace('/login');
+    }, 2000);
+    return () => clearTimeout(t);
+  }, [router]);
   return (
     <View style={styles.container}>
       <Image

@@ -360,6 +360,31 @@ def get_order_status(request, order_id):
             except Exception:
                 absolute_prescription_url = order.prescription_image_url
 
+        # Build items data (exclude zero-priced placeholder lines)
+        items_data = []
+        try:
+            for line in order.order_lines.select_related('inventory_item').all():
+                try:
+                    total_price_value = float(line.total_price)
+                except Exception:
+                    total_price_value = 0.0
+                if total_price_value <= 0:
+                    continue
+                item_name = None
+                try:
+                    # Prefer display_name if available
+                    item_name = getattr(line.inventory_item, 'display_name', None) or getattr(line.inventory_item, 'name', None) or 'Item'
+                except Exception:
+                    item_name = 'Item'
+                items_data.append({
+                    'name': item_name,
+                    'quantity': line.quantity,
+                    'unit_price': float(line.unit_price),
+                    'total_price': total_price_value,
+                })
+        except Exception:
+            items_data = []
+
         return JsonResponse({
             'success': True,
             'data': {
@@ -368,7 +393,12 @@ def get_order_status(request, order_id):
                 'order_status': order.order_status,
                 'prescription_status': order.prescription_status,
                 'payment_status': order.payment_status,
+                'subtotal': float(order.subtotal),
+                'tax_amount': float(order.tax_amount),
+                'delivery_fee': float(order.delivery_fee),
+                'discount_amount': float(order.discount_amount),
                 'total_amount': float(order.total_amount),
+                'items': items_data,
                 'pharmacy_name': pharmacy_name,
                 'pharmacy_id': pharmacy_id,
                 'pharmacy_barangay': pharmacy_barangay,

@@ -459,6 +459,20 @@ class ApiService {
     return this.makeDirectRequest(`/order-status/${orderId}/`);
   }
 
+  async approvePricing(orderId: number, approve: boolean = true, notes?: string): Promise<ApiResponse<any>> {
+    try {
+      const body: any = { order_id: orderId, approve };
+      if (notes && notes.trim().length > 0) body.notes = notes.trim();
+      return await this.makeDirectRequest('/customer-approve-pricing/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Approval failed' };
+    }
+  }
+
   // Chat (dev direct endpoints)
   async getOrCreateOrderChatRoom(orderId: number, pharmacyId?: number): Promise<ApiResponse<any>> {
     // Try secure route first
