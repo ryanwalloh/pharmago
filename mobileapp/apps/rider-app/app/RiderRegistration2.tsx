@@ -1,7 +1,6 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Image, Alert, ScrollView, ActivityIndicator } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Image, Alert, ScrollView } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiService } from '../../customer-app/services/api';
 import { useRouter } from 'expo-router';
@@ -12,7 +11,6 @@ import { useRouter } from 'expo-router';
 export default function RiderRegistration2() {
   const router = useRouter();
   const [selectedImageUri, setSelectedImageUri] = useState<string | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
   const savePartial = async (patch: any) => {
     try {
       const raw = await AsyncStorage.getItem('rider_registration');
@@ -31,6 +29,20 @@ export default function RiderRegistration2() {
       return false;
     }
   };
+
+  // Load any previously selected local file when returning to this step
+  useEffect(() => {
+    (async () => {
+      try {
+        const raw = await AsyncStorage.getItem('rider_registration');
+        if (raw) {
+          const obj = JSON.parse(raw);
+          const uri = obj?.step2?.drivers_license_local_uri as string | undefined;
+          if (uri) setSelectedImageUri(uri);
+        }
+      } catch {}
+    })();
+  }, []);
 
   const takePhoto = async () => {
     try {
@@ -56,7 +68,7 @@ export default function RiderRegistration2() {
         Alert.alert('Permissions', 'Camera and library permissions are required.');
         return;
       }
-      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [3, 4], quality: 0.8 });
+      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: (ImagePicker as any).MediaType?.Images || (ImagePicker as any).MediaTypeOptions?.Images, allowsEditing: true, aspect: [3, 4], quality: 0.8 });
       if (result.canceled) return;
       const uri = result.assets[0].uri;
       setSelectedImageUri(uri);
@@ -66,24 +78,7 @@ export default function RiderRegistration2() {
     }
   };
 
-  const uploadToS3 = async (uri: string): Promise<string | null> => {
-    try {
-      // Build FormData similar to prescription image upload
-      const fileInfo = await FileSystem.getInfoAsync(uri);
-      if (!fileInfo.exists) return null;
-      const name = `drivers_license_${Date.now()}.${uri.split('.').pop()}`;
-      const form = new FormData();
-      form.append('file', { uri, name, type: 'image/jpeg' } as any);
-      // Dedicated endpoint for driver's license upload
-      const res = await fetch(`${apiService.getDirectBaseUrl()}/upload-driver-license/`, { method: 'POST', body: form as any });
-      const json = await res.json();
-      if (!res.ok || !json.success) return null;
-      // Return the S3/public URL
-      return json.url || null;
-    } catch {
-      return null;
-    }
-  };
+  // Defer actual upload to a later step; we only persist local URI here
 
   return (
     <View style={styles.container}>
@@ -125,23 +120,12 @@ export default function RiderRegistration2() {
               Alert.alert('Missing Image', "Please upload a photo of your driver's license.");
               return;
             }
-            try {
-              setIsUploading(true);
-              const url = await uploadToS3(selectedImageUri);
-              if (!url) {
-                Alert.alert('Upload Failed', 'Could not upload image. Please try again.');
-                setIsUploading(false);
-                return;
-              }
-              // Save partial to AsyncStorage for last-step submission
-              await savePartial({ drivers_license_url: url, uploaded_at: Date.now() });
-              router.push('/RiderRegistration3');
-            } finally {
-              setIsUploading(false);
-            }
+            // Only persist local URI and proceed to step 3
+            await savePartial({ drivers_license_local_uri: selectedImageUri, saved_at: Date.now() });
+            router.push('/RiderRegistration3');
           }}
         >
-          {isUploading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.navText}>Next</Text>}
+          <Text style={styles.navText}>Next</Text>
         </TouchableOpacity>
       </View>
     </View>

@@ -88,6 +88,138 @@ def direct_pharmacy_stats(request):
         }, status=500)
 
 
+def direct_rider_stats(request):
+    """Direct rider statistics endpoint that bypasses all authentication"""
+    try:
+        from api.users.models import Rider, UserDocument, ValidID
+
+        total_riders = Rider.objects.filter(status='approved').count()
+        pending_approvals = Rider.objects.filter(status='pending').count()
+        active_riders = Rider.objects.filter(status='approved').count()
+        suspended_riders = Rider.objects.filter(status='suspended').count()
+
+        # Pending riders brief data
+        pending_riders_data = []
+        for r in Rider.objects.filter(status='pending').select_related('user').order_by('-created_at')[:500]:
+            pending_riders_data.append({
+                'id': r.id,
+                'first_name': r.first_name,
+                'last_name': r.last_name,
+                'email': getattr(r.user, 'email', None),
+                'phone_number': getattr(r.user, 'phone_number', None),
+                'vehicle_type': r.vehicle_type,
+                'plate_number': r.plate_number,
+            })
+
+        return JsonResponse({
+            'totalRiders': total_riders,
+            'pendingApprovals': pending_approvals,
+            'activeRiders': active_riders,
+            'suspendedRiders': suspended_riders,
+            'pendingRidersData': pending_riders_data,
+        })
+    except Exception as e:
+        print(f"ERROR in direct_rider_stats: {e}")
+        return JsonResponse({
+            'error': 'Failed to fetch rider statistics',
+            'totalRiders': 0,
+            'pendingApprovals': 0,
+            'activeRiders': 0,
+            'suspendedRiders': 0,
+            'pendingRidersData': []
+        }, status=500)
+
+@csrf_exempt
+def direct_rider_details(request, rider_id):
+    """Direct endpoint to fetch detailed rider info, including driver's license documents."""
+    try:
+        from api.users.models import Rider, UserDocument
+        from django.forms.models import model_to_dict
+
+        rider = Rider.objects.select_related('user').get(id=rider_id)
+        user = rider.user
+
+        # Collect driver's license docs
+        docs_qs = user.documents.all()
+        documents = []
+        for d in docs_qs:
+            is_dl = False
+            try:
+                if getattr(d.id_type, 'name', '') == 'drivers_license':
+                    is_dl = True
+            except Exception:
+                pass
+            if not is_dl and (d.file_url or ''):
+                if 'drivers_licenses/' in d.file_url:
+                    is_dl = True
+            if is_dl:
+                documents.append({
+                    'id': d.id,
+                    'file_url': d.file_url,
+                    'status': d.status,
+                    'document_type': 'drivers_license',
+                })
+
+        payload = {
+            'id': rider.id,
+            'first_name': rider.first_name,
+            'last_name': rider.last_name,
+            'middle_name': rider.middle_name,
+            'date_of_birth': rider.date_of_birth.isoformat() if rider.date_of_birth else None,
+            'gender': rider.gender,
+            'vehicle_type': rider.vehicle_type,
+            'vehicle_brand': rider.vehicle_brand,
+            'vehicle_model': rider.vehicle_model,
+            'plate_number': rider.plate_number,
+            'vehicle_color': rider.vehicle_color,
+            'status': rider.status,
+            'email': getattr(user, 'email', None),
+            'phone_number': getattr(user, 'phone_number', None),
+            'documents': documents,
+        }
+
+        return JsonResponse(payload)
+    except Rider.DoesNotExist:
+        return JsonResponse({'error': 'Rider not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': 'Failed to fetch rider details', 'message': str(e)}, status=500)
+
+@csrf_exempt
+def approve_rider_direct(request, rider_id):
+    """Direct endpoint to approve a rider application."""
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
+    try:
+        from api.users.models import Rider, User
+        from django.utils import timezone
+
+        rider = Rider.objects.select_related('user').get(id=rider_id)
+        # Promote to approved
+        rider.status = 'approved'
+        rider.is_fully_verified = True
+        rider.verified_at = timezone.now()
+        try:
+            admin_user = User.objects.filter(role='admin', is_superuser=True).first()
+            rider.verified_by = admin_user
+        except Exception:
+            pass
+        rider.save()
+
+        # Activate user account
+        rider.user.status = 'active'
+        rider.user.save(update_fields=['status'])
+
+        return JsonResponse({
+            'success': True,
+            'email': rider.user.email,
+            'phone_number': rider.user.phone_number,
+        })
+    except Rider.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'Rider not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': 'Failed to approve rider', 'message': str(e)}, status=500)
+
+
 def direct_pending_pharmacies(request):
     """Direct pending pharmacies endpoint that bypasses all authentication"""
     try:
@@ -678,6 +810,129 @@ def upload_driver_license_image(request):
             'error': 'Upload failed',
             'message': str(e)
         }, status=500)
+
+@csrf_exempt
+def complete_rider_registration(request):
+    """Direct endpoint to create User, Rider, and UserDocument entries for a rider registration.
+
+    Expected JSON body:
+      {
+        user: { username, email, phone_number, password, role='rider', first_name, last_name },
+        rider: { first_name, last_name, middle_name, date_of_birth, gender, vehicle_*..., drivers_license_uploaded },
+        documents: [{ id_type: 'drivers_license', file_url }]
+      }
+    """
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
+
+    import json
+    try:
+        payload = json.loads(request.body or '{}')
+
+        from api.users.models import User, Rider, UserDocument, ValidID
+        from django.db import transaction
+
+        user_data = payload.get('user') or {}
+        rider_data = payload.get('rider') or {}
+        documents = payload.get('documents') or []
+
+        # Basic validations
+        required_user = ['email', 'phone_number', 'password']
+        for f in required_user:
+            if not user_data.get(f):
+                return JsonResponse({'success': False, 'error': f'Missing user field: {f}'}, status=400)
+
+        if user_data.get('role') != 'rider':
+            user_data['role'] = 'rider'
+
+        with transaction.atomic():
+            # Create user
+            username = user_data.get('username') or user_data.get('email')
+            # Create as 'customer' first to avoid Rider signal creating an incomplete Rider
+            user = User.objects.create_user(
+                email=user_data.get('email'),
+                phone_number=user_data.get('phone_number'),
+                password=user_data.get('password'),
+                username=username,
+                role='customer',
+                first_name=user_data.get('first_name') or rider_data.get('first_name') or '',
+                last_name=user_data.get('last_name') or rider_data.get('last_name') or '',
+                status=User.UserStatus.PENDING
+            )
+
+            # Create rider profile
+            # Parse and validate date_of_birth
+            from django.utils.dateparse import parse_date
+            dob_raw = rider_data.get('date_of_birth')
+            dob = None
+            if isinstance(dob_raw, str):
+                dob = parse_date(dob_raw)
+            elif isinstance(dob_raw, (int, float)):
+                # Support epoch ms/seconds (rare)
+                try:
+                    import datetime
+                    # assume seconds if small, ms if large
+                    ts = int(dob_raw)
+                    if ts > 10_000_000_000:
+                        ts = ts / 1000
+                    dob = datetime.date.fromtimestamp(ts)
+                except Exception:
+                    dob = None
+            elif hasattr(dob_raw, 'year'):
+                dob = dob_raw
+
+            if dob is None:
+                return JsonResponse({'success': False, 'error': 'Invalid or missing rider.date_of_birth (YYYY-MM-DD)'}, status=400)
+
+            if not rider_data.get('gender'):
+                return JsonResponse({'success': False, 'error': 'Missing rider.gender'}, status=400)
+            if not rider_data.get('vehicle_type'):
+                return JsonResponse({'success': False, 'error': 'Missing rider.vehicle_type'}, status=400)
+
+            rider = Rider.objects.create(
+                user=user,
+                first_name=rider_data.get('first_name') or user.first_name,
+                last_name=rider_data.get('last_name') or user.last_name,
+                middle_name=rider_data.get('middle_name') or None,
+                date_of_birth=dob,
+                gender=rider_data.get('gender'),
+                vehicle_type=rider_data.get('vehicle_type'),
+                vehicle_brand=rider_data.get('vehicle_brand') or None,
+                vehicle_model=rider_data.get('vehicle_model') or None,
+                plate_number=rider_data.get('plate_number') or None,
+                vehicle_color=rider_data.get('vehicle_color') or None,
+                drivers_license_uploaded=bool(rider_data.get('drivers_license_uploaded')),
+            )
+
+            # Promote user to rider role after successful rider profile creation
+            user.role = 'rider'
+            user.save(update_fields=['role'])
+
+            # Create user documents
+            for doc in documents:
+                id_type_code = doc.get('id_type')
+                file_url = doc.get('file_url')
+                if not id_type_code or not file_url:
+                    continue
+                try:
+                    id_type = ValidID.objects.get(name=id_type_code)
+                except ValidID.DoesNotExist:
+                    # Auto-create drivers_license type if not present
+                    if id_type_code == 'drivers_license':
+                        id_type = ValidID.objects.create(name='drivers_license', category='primary', description='Driver\'s License')
+                    else:
+                        continue
+                UserDocument.objects.create(
+                    user=user,
+                    id_type=id_type,
+                    file_url=file_url,
+                    document_file=file_url,
+                    status=UserDocument.DocumentStatus.PENDING
+                )
+
+        return JsonResponse({'success': True, 'user_id': user.id})
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': 'Registration failed', 'message': str(e)}, status=500)
 
 @csrf_exempt
 def approve_pharmacy(request, pharmacy_id):
@@ -3162,6 +3417,10 @@ urlpatterns = [
     path('api/prescription-image/<int:order_id>/', serve_prescription_image),  # Direct endpoint for serving prescription images
     path('api/upload-prescription-image/', upload_prescription_image),  # Direct endpoint for uploading prescription images
     path('api/upload-driver-license/', upload_driver_license_image),  # Direct endpoint for rider driver's license upload
+    path('api/complete-rider-registration/', complete_rider_registration),  # Direct endpoint for rider registration completion
+    path('api/rider-stats/', direct_rider_stats),  # Direct endpoint for rider statistics
+    path('api/rider-details/<int:rider_id>/', direct_rider_details),  # Direct endpoint for rider details
+    path('api/approve-rider/<int:rider_id>/', approve_rider_direct),  # Direct endpoint for rider approval
     path('api/approve-pharmacy/<int:pharmacy_id>/', approve_pharmacy),  # Direct endpoint for approving pharmacy
     path('api/generate-login-token/<int:pharmacy_id>/', generate_login_token),  # Direct endpoint for generating login token
     path('api/validate-login-token/<str:token>/', validate_login_token),  # Direct endpoint for validating login token

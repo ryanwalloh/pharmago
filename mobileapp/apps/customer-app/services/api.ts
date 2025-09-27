@@ -442,6 +442,56 @@ class ApiService {
     }
   }
 
+  // Rider driver's license methods
+  async uploadDriverLicenseFile(
+    localUri: string,
+    userId?: number
+  ): Promise<ApiResponse<{ url: string; document_id?: number }>> {
+    try {
+      const url = `${this.getDirectBaseUrl()}/upload-driver-license/`;
+      console.log('🪪 Uploading driver license image (multipart)...', { url, localUri, userId });
+
+      const form = new FormData();
+      form.append('file', {
+        uri: localUri,
+        name: 'driver_license.jpg',
+        type: 'image/jpeg',
+      } as any);
+      if (userId) {
+        form.append('user_id', String(userId));
+      }
+
+      const response = await fetch(url, {
+        method: 'POST',
+        body: form,
+      });
+
+      const json = await response.json();
+      if (!response.ok || !json.success) {
+        return { success: false, error: json.error || 'Upload failed', message: json.message };
+      }
+
+      return {
+        success: true,
+        data: {
+          url: json.url,
+          document_id: json.document_id,
+        },
+      };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Upload error' };
+    }
+  }
+
+  // Rider registration completion (direct endpoint)
+  async completeRiderRegistration(payload: any): Promise<ApiResponse<any>> {
+    return this.makeDirectRequest('/complete-rider-registration/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  }
+
   // Prescription order methods
   async createPrescriptionOrder(orderData: any): Promise<ApiResponse<any>> {
     console.log('📦 Creating prescription order...');
