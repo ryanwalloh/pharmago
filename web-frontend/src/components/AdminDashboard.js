@@ -30,6 +30,28 @@ const AdminDashboard = () => {
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
   const [successData, setSuccessData] = useState(null);
 
+  // Riders: state (mirror of pharmacies)
+  const [riderStats, setRiderStats] = useState({
+    totalRiders: 0,
+    pendingApprovals: 0,
+    activeRiders: 0,
+    suspendedRiders: 0,
+    pendingRidersData: []
+  });
+  const [pendingRiders, setPendingRiders] = useState([]);
+  const [loadingPendingRiders, setLoadingPendingRiders] = useState(false);
+  const [riderActiveTile, setRiderActiveTile] = useState('pending');
+  const [riderSearchTerm, setRiderSearchTerm] = useState('');
+
+  // Rider modals
+  const [isRiderModalOpen, setIsRiderModalOpen] = useState(false);
+  const [selectedRider, setSelectedRider] = useState(null);
+  const [riderModalLoading, setRiderModalLoading] = useState(false);
+  const [detailedRiderData, setDetailedRiderData] = useState(null);
+  const [riderModalError, setRiderModalError] = useState(null);
+  const [isRiderSuccessOpen, setIsRiderSuccessOpen] = useState(false);
+  const [riderSuccessData, setRiderSuccessData] = useState(null);
+
   const handleLogout = () => {
     console.log('Logging out - removing token from localStorage');
     localStorage.removeItem('pharmago_admin_token');
@@ -87,6 +109,25 @@ const AdminDashboard = () => {
     }
   };
 
+  // Riders: fetch stats (direct endpoint, mirror pattern)
+  const fetchRiderStats = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await axios.get('http://127.0.0.1:8000/api/rider-stats/');
+      setRiderStats(response.data);
+      if (response.data.pendingRidersData) {
+        setPendingRiders(response.data.pendingRidersData);
+      }
+    } catch (err) {
+      // Fallback to empty counts if API not ready
+      setRiderStats({ totalRiders: 0, pendingApprovals: 0, activeRiders: 0, suspendedRiders: 0, pendingRidersData: [] });
+      setPendingRiders([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Fetch pending pharmacies from API
   const fetchPendingPharmacies = async () => {
     try {
@@ -138,11 +179,36 @@ const AdminDashboard = () => {
     }
   };
 
+  // Riders: fetch pending list (from stats response)
+  const fetchPendingRiders = async () => {
+    try {
+      setLoadingPendingRiders(true);
+      setError(null);
+      const response = await axios.get('http://127.0.0.1:8000/api/rider-stats/');
+      if (response.data.pendingRidersData) {
+        setPendingRiders(response.data.pendingRidersData);
+      } else {
+        setPendingRiders([]);
+      }
+    } catch (err) {
+      setPendingRiders([]);
+    } finally {
+      setLoadingPendingRiders(false);
+    }
+  };
+
   // Handle tile click
   const handleTileClick = (tileType) => {
     setActiveTile(tileType);
     if (tileType === 'pending') {
       fetchPendingPharmacies();
+    }
+  };
+
+  const handleRiderTileClick = (tileType) => {
+    setRiderActiveTile(tileType);
+    if (tileType === 'pending') {
+      fetchPendingRiders();
     }
   };
 
@@ -175,6 +241,61 @@ const AdminDashboard = () => {
     setModalLoading(false);
     setDetailedPharmacyData(null);
     setModalError(null);
+  };
+
+  // Riders: modal handlers
+  const handleViewRider = async (rider) => {
+    setSelectedRider(rider);
+    setIsRiderModalOpen(true);
+    setRiderModalLoading(true);
+    setRiderModalError(null);
+    setDetailedRiderData(null);
+    try {
+      const response = await axios.get(`http://127.0.0.1:8000/api/rider-details/${rider.id}/`);
+      setDetailedRiderData(response.data);
+      setRiderModalLoading(false);
+    } catch (err) {
+      setRiderModalError('Failed to load rider details. Please try again.');
+      setRiderModalLoading(false);
+    }
+  };
+
+  const handleCloseRiderModal = () => {
+    setIsRiderModalOpen(false);
+    setSelectedRider(null);
+    setRiderModalLoading(false);
+    setDetailedRiderData(null);
+    setRiderModalError(null);
+  };
+
+  const handleApproveRider = async () => {
+    if (!selectedRider) return;
+    try {
+      setRiderModalLoading(true);
+      const response = await axios.post(`http://127.0.0.1:8000/api/approve-rider/${selectedRider.id}/`);
+      if (response.data.success) {
+        setRiderSuccessData({
+          riderName: `${selectedRider.first_name} ${selectedRider.last_name}`,
+          email: response.data.email,
+          phone: response.data.phone_number,
+        });
+        setIsRiderSuccessOpen(true);
+        handleCloseRiderModal();
+        fetchRiderStats();
+        fetchPendingRiders();
+      } else {
+        throw new Error(response.data.message || 'Approval failed');
+      }
+    } catch (error) {
+      setRiderModalError('Failed to approve rider. Please try again.');
+    } finally {
+      setRiderModalLoading(false);
+    }
+  };
+
+  const handleCloseRiderSuccess = () => {
+    setIsRiderSuccessOpen(false);
+    setRiderSuccessData(null);
   };
 
   const handleCloseSuccessModal = () => {
@@ -244,6 +365,8 @@ const AdminDashboard = () => {
       
       // Fetch pharmacy statistics
       fetchPharmacyStats();
+      // Fetch rider statistics
+      fetchRiderStats();
     };
     
     checkAuthAndFetchData();
@@ -259,6 +382,263 @@ const AdminDashboard = () => {
     { id: 'Reports', label: 'Reports', icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z' },
     { id: 'Settings', label: 'Settings', icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z' }
   ];
+
+  const renderManageRiders = () => (
+    <div className="space-y-8">
+      <div className="mb-8">
+        <div className="flex justify-between items-center">
+          <h1 className="text-4xl font-bold text-[#2C7A5D] mb-2">Rider Management</h1>
+          <button
+            onClick={fetchRiderStats}
+            disabled={loading}
+            className="px-4 py-2 bg-[#4DAF7C] text-white rounded-lg hover:bg-[#6BBF9A] transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+          >
+            {loading ? (
+              <>
+                <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <span>Loading...</span>
+              </>
+            ) : (
+              <>
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                <span>Refresh</span>
+              </>
+            )}
+          </button>
+        </div>
+        {error && (
+          <div className="mt-2 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg">{error}</div>
+        )}
+      </div>
+
+      {/* Stats Tiles */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className={`p-4 hover:shadow-lg transition-all duration-200 transform hover:-translate-y-0.5 cursor-pointer ${riderActiveTile === 'total' ? 'ring-2 ring-[#4DAF7C] ring-opacity-50' : ''}`} style={{borderRadius: '25% 10%', backgroundColor: '#F1FEC6'}} onClick={() => handleRiderTileClick('total')}>
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-sm font-medium text-[#666666]">Total Riders</p>
+            <div className="p-3 bg-[#D5E8D4] rounded-xl">
+              <svg className="h-4 w-4 text-[#4DAF7C]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197" /></svg>
+            </div>
+          </div>
+          <h1 className="text-4xl mb-6 font-bold text-gray-700 mb-1">{riderStats.totalRiders}</h1>
+          <p className="text-sm text-[#999999]">Registered riders</p>
+        </div>
+
+        <div className={`p-4 hover:shadow-lg transition-all duration-200 transform hover:-translate-y-0.5 cursor-pointer ${riderActiveTile === 'pending' ? 'ring-2 ring-[#4DAF7C] ring-opacity-50' : ''}`} style={{borderRadius: '25% 10%', backgroundColor: '#C2DEDB'}} onClick={() => handleRiderTileClick('pending')}>
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-sm font-medium text-[#666666]">Pending Approvals</p>
+            <div className="p-3 bg-[#D5E8D4] rounded-xl">
+              <svg className="h-4 w-4 text-[#4DAF7C]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+            </div>
+          </div>
+          <h1 className="text-4xl mb-6 font-bold text-gray-700 mb-1">{riderStats.pendingApprovals}</h1>
+          <p className="text-sm text-[#999999]">Awaiting review</p>
+        </div>
+
+        <div className={`p-4 hover:shadow-lg transition-all duration-200 transform hover:-translate-y-0.5 cursor-pointer ${riderActiveTile === 'active' ? 'ring-2 ring-[#4DAF7C] ring-opacity-50' : ''}`} style={{borderRadius: '25% 10%', backgroundColor: '#FADADD'}} onClick={() => handleRiderTileClick('active')}>
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-sm font-medium text-[#666666]">Active Riders</p>
+            <div className="p-3 bg-[#D5E8D4] rounded-xl">
+              <svg className="h-4 w-4 text-[#4DAF7C]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+            </div>
+          </div>
+          <h1 className="text-4xl mb-6 font-bold text-gray-700 mb-1">{riderStats.activeRiders}</h1>
+          <p className="text-sm text-[#999999]">Currently operating</p>
+        </div>
+
+        <div className={`p-4 hover:shadow-lg transition-all duration-200 transform hover:-translate-y-0.5 cursor-pointer ${riderActiveTile === 'suspended' ? 'ring-2 ring-[#4DAF7C] ring-opacity-50' : ''}`} style={{borderRadius: '25% 10%', backgroundColor: '#C3BEF7'}} onClick={() => handleRiderTileClick('suspended')}>
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-sm font-medium text-[#666666]">Suspended</p>
+            <div className="p-3 bg-[#D5E8D4] rounded-xl"><svg className="h-4 w-4 text-[#4DAF7C]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728L5.636 5.636" /></svg></div>
+          </div>
+          <h1 className="text-4xl mb-6 font-bold text-gray-700 mb-1">{riderStats.suspendedRiders}</h1>
+          <p className="text-sm text-[#999999]">Temporarily disabled</p>
+        </div>
+      </div>
+
+      {/* List */}
+      <div className="bg-white rounded-2xl shadow-2xl border border-[#D5E8D4] p-8">
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-xl font-bold text-[#2C7A5D]">
+            {riderActiveTile === 'pending' ? 'Pending Riders' : riderActiveTile === 'active' ? 'Active Riders' : riderActiveTile === 'suspended' ? 'Suspended Riders' : 'All Riders'}
+          </h1>
+          <div className="flex space-x-2">
+            <button onClick={fetchRiderStats} disabled={loading} className="px-4 py-2 bg-[#4DAF7C] text-white rounded-lg hover:bg-[#6BBF9A] transition-colors duration-200">Refresh</button>
+          </div>
+        </div>
+
+        {/* Search */}
+        <div className="mb-6">
+          <div className="relative">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <svg className="h-5 w-5 text-[#999999]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+            </div>
+            <input type="text" placeholder="Search riders by name or phone..." value={riderSearchTerm} onChange={(e) => setRiderSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-3 border border-[#D5E8D4] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#6BBF9A] focus:ring-opacity-20 focus:border-[#6BBF9A] transition-all duration-200 text-sm" />
+            {riderSearchTerm && (
+              <button onClick={() => setRiderSearchTerm('')} className="absolute inset-y-0 right-0 pr-3 flex items-center text-[#999999] hover:text-[#666666] transition-colors duration-200">
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Pending Riders Table */}
+        {riderActiveTile === 'pending' ? (
+          loadingPendingRiders ? (
+            <div className="text-center py-8">
+              <div className="animate-spin mx-auto h-8 w-8 border-4 border-[#4DAF7C] border-t-transparent rounded-full"></div>
+              <p className="mt-2 text-sm text-[#666666]">Loading pending riders...</p>
+            </div>
+          ) : pendingRiders.length > 0 ? (
+            <div className="space-y-3">
+              <div className="grid grid-cols-12 gap-2 lg:gap-4 p-3 lg:p-4 bg-[#D5E8D4] rounded-xl border border-[#6BBF9A] font-semibold text-[#2C7A5D] text-xs lg:text-sm">
+                <div className="col-span-2">Name</div>
+                <div className="col-span-2">Phone</div>
+                <div className="col-span-3">Email</div>
+                <div className="col-span-3">Vehicle</div>
+                <div className="col-span-2 flex items-center justify-center"><span className="text-xs">Action</span></div>
+              </div>
+              {pendingRiders
+                .filter(r => `${r.first_name} ${r.last_name}`.toLowerCase().includes(riderSearchTerm.toLowerCase()) || (r.phone_number || '').includes(riderSearchTerm))
+                .map(rider => (
+                  <div key={rider.id} className="grid grid-cols-12 gap-2 lg:gap-4 p-3 lg:p-4 rounded-xl hover:bg-[#D5E8D4] transition-colors duration-200 border border-transparent hover:border-[#6BBF9A] items-center">
+                    <div className="col-span-2">
+                      <h3 className="font-semibold text-[#2C7A5D] text-xs lg:text-sm truncate">{rider.first_name} {rider.last_name}</h3>
+                    </div>
+                    <div className="col-span-2"><p className="text-xs lg:text-sm text-[#666666] truncate">{rider.phone_number || '—'}</p></div>
+                    <div className="col-span-3"><p className="text-xs lg:text-sm text-[#666666] truncate">{rider.email || '—'}</p></div>
+                    <div className="col-span-3"><p className="text-xs lg:text-sm text-[#666666] truncate">{rider.vehicle_type || '—'} {rider.plate_number ? `• ${rider.plate_number}` : ''}</p></div>
+                    <div className="col-span-2 flex items-center justify-center">
+                      <button onClick={() => handleViewRider(rider)} className="px-2 lg:px-3 py-1 bg-[#4DAF7C] text-white text-xs rounded-lg hover:bg-[#6BBF9A] transition-colors duration-200">View</button>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          ) : (
+            <div className="text-center py-8">
+              <svg className="mx-auto h-12 w-12 text-[#999999]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+              <h3 className="mt-2 text-sm font-medium text-[#666666]">No pending riders</h3>
+              <p className="mt-1 text-sm text-[#999999]">All rider applications have been reviewed</p>
+            </div>
+          )
+        ) : (
+          <div className="text-center py-8">
+            <svg className="mx-auto h-12 w-12 text-[#999999]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2" /></svg>
+            <h3 className="mt-2 text-sm font-medium text-[#666666]">Section under construction</h3>
+            <p className="mt-1 text-sm text-[#999999]">We will add full rider listings here.</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  const renderRiderDetailsModal = () => {
+    if (!isRiderModalOpen || !selectedRider) return null;
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-hidden">
+          <div className="flex items-center justify-between p-6 border-b border-[#D5E8D4]">
+            <div>
+              <h2 className="text-2xl font-bold text-[#2C7A5D]">{selectedRider.first_name} {selectedRider.last_name}</h2>
+              <p className="text-sm text-[#666666]">Pending Rider Application</p>
+            </div>
+            <button onClick={handleCloseRiderModal} className="p-2 hover:bg-[#D5E8D4] rounded-lg transition-colors duration-200">
+              <svg className="h-6 w-6 text-[#666666]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+          </div>
+          <div className="p-6 overflow-y-auto max-h-[calc(90vh-200px)]">
+            {riderModalLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="animate-spin mx-auto h-12 w-12 border-4 border-[#4DAF7C] border-t-transparent rounded-full"></div>
+              </div>
+            ) : riderModalError ? (
+              <div className="text-center py-8 text-red-600">{riderModalError}</div>
+            ) : detailedRiderData ? (
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div><label className="block text-sm text-[#666666] mb-1">Date of Birth</label><p className="text-[#2C7A5D] font-semibold">{detailedRiderData.date_of_birth || '—'}</p></div>
+                  <div><label className="block text-sm text-[#666666] mb-1">Gender</label><p className="text-[#2C7A5D] font-semibold capitalize">{detailedRiderData.gender || '—'}</p></div>
+                  <div><label className="block text-sm text-[#666666] mb-1">Vehicle</label><p className="text-[#2C7A5D] font-semibold">{detailedRiderData.vehicle_type || '—'} {detailedRiderData.vehicle_brand ? `• ${detailedRiderData.vehicle_brand}` : ''}</p></div>
+                  <div><label className="block text-sm text-[#666666] mb-1">Plate / Color</label><p className="text-[#2C7A5D] font-semibold">{detailedRiderData.plate_number || '—'} {detailedRiderData.vehicle_color ? `• ${detailedRiderData.vehicle_color}` : ''}</p></div>
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-[#2C7A5D] mb-2">Driver's License</h3>
+                  {detailedRiderData.documents && detailedRiderData.documents.length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {detailedRiderData.documents.map((doc) => (
+                        <div key={doc.id} className="bg-white rounded-lg p-4 border border-[#D5E8D4]">
+                          <div className="w-full h-48 bg-gray-100 rounded-lg mb-3 overflow-hidden flex items-center justify-center">
+                            {doc.id ? (
+                              <img src={`http://127.0.0.1:8000/api/document/${doc.id}/`} alt="Driver License" className="w-full h-full object-cover cursor-pointer hover:opacity-80 transition-opacity duration-200" onClick={() => window.open(`http://127.0.0.1:8000/api/document/${doc.id}/`, '_blank')} />
+                            ) : (
+                              <span className="text-[#999999] text-sm">No preview</span>
+                            )}
+                          </div>
+                          <p className="text-xs text-[#666666]">Status: <span className="font-medium capitalize">{doc.status || 'pending'}</span></p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-[#666666]">No documents uploaded</p>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <div className="animate-spin mx-auto h-8 w-8 border-4 border-[#4DAF7C] border-t-transparent rounded-full"></div>
+                <p className="mt-2 text-sm text-[#666666]">Loading rider details...</p>
+              </div>
+            )}
+          </div>
+          <div className="flex items-center justify-between p-6 border-t border-[#D5E8D4] bg-[#F8F9FA]">
+            <div className="text-sm text-[#666666]">Rider ID: {selectedRider?.id}</div>
+            <div className="flex space-x-3">
+              <button onClick={handleCloseRiderModal} className="px-6 py-2 border border-[#D5E8D4] text-[#666666] rounded-lg hover:bg-[#D5E8D4] transition-colors duration-200">Close</button>
+              <button onClick={handleApproveRider} disabled={riderModalLoading} className="px-6 py-2 bg-[#4DAF7C] text-white rounded-lg hover:bg-[#6BBF9A] transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed">{riderModalLoading ? 'Approving...' : 'Approve Rider'}</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderRiderSuccessModal = () => {
+    if (!isRiderSuccessOpen || !riderSuccessData) return null;
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full">
+          <div className="flex items-center justify-between p-6 border-b border-[#D5E8D4]">
+            <div className="flex items-center space-x-3">
+              <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-green-600 rounded-xl flex items-center justify-center text-white">
+                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-[#2C7A5D]">Rider Approved!</h2>
+                <p className="text-sm text-[#666666]">Notification prepared</p>
+              </div>
+            </div>
+            <button onClick={handleCloseRiderSuccess} className="p-2 hover:bg-[#D5E8D4] rounded-lg transition-colors duration-200">
+              <svg className="h-6 w-6 text-[#666666]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+          </div>
+          <div className="p-6">
+            <div className="text-center">
+              <h3 className="text-lg font-semibold text-[#2C7A5D] mb-2">✅ {riderSuccessData.riderName} Approved!</h3>
+              <p className="text-sm text-[#666666] mb-4">The rider has been approved and can be activated.</p>
+            </div>
+          </div>
+          <div className="flex items-center justify-end p-6 border-t border-[#D5E8D4] bg-[#F8F9FA]">
+            <button onClick={handleCloseRiderSuccess} className="px-6 py-2 bg-[#4DAF7C] text-white rounded-lg hover:bg-[#6BBF9A] transition-colors duration-200">Got it!</button>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   // Mock data for demonstration
   const mockData = {
@@ -1363,6 +1743,7 @@ const AdminDashboard = () => {
         <div className="flex-1 bg-white rounded-2xl border border-[#D5E8D4] p-8 overflow-y-auto">
           {activeNav === 'Dashboard' && renderDashboard()}
           {activeNav === 'Manage Pharmacies' && renderManagePharmacies()}
+          {activeNav === 'Manage Riders' && renderManageRiders()}
           {activeNav !== 'Dashboard' && activeNav !== 'Manage Pharmacies' && (
             <div className="flex items-center justify-center h-full">
               <div className="text-center">
@@ -1376,9 +1757,13 @@ const AdminDashboard = () => {
       
       {/* Pharmacy Details Modal */}
       {renderPharmacyDetailsModal()}
+      {/* Rider Details Modal */}
+      {renderRiderDetailsModal()}
       
       {/* Success Modal */}
       {renderSuccessModal()}
+      {/* Rider Success Modal */}
+      {renderRiderSuccessModal()}
     </div>
   );
 };
