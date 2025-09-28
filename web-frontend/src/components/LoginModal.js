@@ -30,17 +30,29 @@ const LoginModal = ({ isOpen, onClose }) => {
         username: formData.username,
         password: formData.password
       });
-      
-      if (response.data.success) {
-        // Store pharmacy and user info in localStorage
-        localStorage.setItem('pharmacy_user', JSON.stringify(response.data.user));
-        localStorage.setItem('pharmacy_info', JSON.stringify(response.data.pharmacy));
-        
+
+      const data = response?.data || {};
+      const isSuccess = Boolean(
+        data.success || (response.status === 200 && data.tokens && data.user)
+      );
+
+      if (isSuccess) {
+        // Persist auth/session details expected by the app
+        if (data.user) {
+          localStorage.setItem('pharmacy_user', JSON.stringify(data.user));
+        }
+        if (data.pharmacy) {
+          localStorage.setItem('pharmacy_info', JSON.stringify(data.pharmacy));
+        }
+        if (data.tokens) {
+          localStorage.setItem('pharmacy_tokens', JSON.stringify(data.tokens));
+        }
+
         // Close modal and redirect to pharmacy dashboard
         onClose();
         navigate('/pharmacy-dashboard');
       } else {
-        setError(response.data.message || 'Login failed');
+        setError(data.message || data.error || 'Login failed');
       }
     } catch (err) {
       console.error('Login error:', err);

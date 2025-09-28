@@ -24,3 +24,4 @@ drf-spectacular==0.27.0                # OpenAPI/Swagger documentation
 openpyxl==3.1.2                        # Excel export/import support
 redis==5.0.1                           # Redis Python client
 django-cacheops==7.2                   # Advanced caching operations
+watchdog==4.0.2                        # Reliable file watching on Windows

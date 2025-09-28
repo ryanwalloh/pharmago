@@ -470,3 +470,21 @@ If you encounter issues:
 ---
 
 **Happy Coding! 🚀**
+
+## 🧑‍💻 Developer Experience Tips (Windows)
+
+- Reliable file watching is enabled via `watchdog` (already in `backend/requirements.txt`). Django will auto-use it. If reloads seem flaky:
+  - Verify install: `pip show watchdog`
+  - Run the server from `backend/` to avoid watching large trees (e.g., `node_modules`, `mobileapp`).
+- Use PowerShell for quick HTTP checks. In CMD, either use `curl` or prefix with `powershell -Command`.
+- For profiling/long sessions, use `--noreload`:
+  ```powershell
+  python manage.py runserver 0.0.0.0:8000 --noreload
+  ```
+- If you cannot change `.env`, set AWS creds per-session before starting the server:
+  ```powershell
+  $env:AWS_ACCESS_KEY_ID = "<key>"
+  $env:AWS_SECRET_ACCESS_KEY = "<secret>"
+  $env:AWS_STORAGE_BUCKET_NAME = "pharmago-user-uploads"
+  $env:AWS_S3_REGION_NAME = "ap-southeast-2"
+  ```

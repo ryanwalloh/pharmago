@@ -55,10 +55,7 @@ router.register(r'medicine-categories', MedicineCategoryViewSet, basename='medic
 router.register(r'medicine-catalog', MedicineCatalogViewSet, basename='medicine-catalog')
 router.register(r'pharmacy-inventory', PharmacyInventoryViewSet, basename='pharmacy-inventory')
 
-# Order management
-router.register(r'orders', OrderViewSet, basename='order')
-router.register(r'order-lines', OrderLineViewSet, basename='order-line')
-router.register(r'prescription-verifications', PrescriptionVerificationViewSet, basename='prescription-verification')
+# Order management (moved to api.orders.urls to avoid duplication)
 
 # Enhanced order management with delivery and payment integration
 router.register(r'enhanced-orders', EnhancedOrderViewSet, basename='enhanced-order')
@@ -96,17 +93,8 @@ urlpatterns = [
         # Main API endpoints
         path('', include(router.urls)),
         
-        # Authentication endpoints
-        path('auth/', include([
-            path('token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
-            path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
-            path('token/verify/', TokenVerifyView.as_view(), name='token_verify'),
-            # Custom JWT endpoints with enhanced security
-            path('jwt/login/', jwt_login, name='jwt_login'),
-            path('jwt/refresh/', jwt_refresh, name='jwt_refresh'),
-            path('jwt/logout/', jwt_logout, name='jwt_logout'),
-            path('jwt/verify/', jwt_verify, name='jwt_verify'),
-        ])),
+        # Users and auth (delegated)
+        path('', include('api.users.urls')),
         
         # User-specific endpoints
         path('users/', include([
@@ -121,22 +109,11 @@ urlpatterns = [
             path('reset-password-confirm/', UserViewSet.as_view({'post': 'reset_password_confirm'}), name='user-reset-password-confirm'),
         ])),
         
-        # Customer-specific endpoints
-        path('customers/', include([
-            path('my-profile/', CustomerViewSet.as_view({'get': 'my_profile'}), name='customer-my-profile'),
-        ])),
+        # Locations (delegated)
+        path('', include('api.locations.urls')),
         
-        # Pharmacy-specific endpoints
-        path('pharmacies/', include([
-            path('my-pharmacy/', PharmacyViewSet.as_view({'get': 'my_pharmacy'}), name='pharmacy-my-pharmacy'),
-            path('verified/', PharmacyViewSet.as_view({'get': 'verified'}), name='pharmacy-verified'),
-            path('pending-verification/', PharmacyViewSet.as_view({'get': 'pending_verification'}), name='pharmacy-pending-verification'),
-            path('statistics/', PharmacyViewSet.as_view({'get': 'statistics'}), name='pharmacy-statistics'),
-            path('statistics-simple/', pharmacy_statistics, name='pharmacy-statistics-simple'),
-            path('statistics-basic/', simple_pharmacy_statistics, name='pharmacy-statistics-basic'),
-            path('search/', PharmacyViewSet.as_view({'get': 'search'}), name='pharmacy-search'),
-            path('nearby/', PharmacyViewSet.as_view({'get': 'nearby'}), name='pharmacy-nearby'),
-        ])),
+        # Pharmacies (delegated)
+        path('', include('api.pharmacies.urls')),
         
         # Address-specific endpoints
         path('addresses/', include([
@@ -155,50 +132,12 @@ urlpatterns = [
             path('pending-verification/', PharmacyViewSetV2.as_view({'get': 'pending_verification'}), name='pharmacy-profile-pending-verification'),
         ])),
         
-        # Inventory endpoints
-        path('inventory/', include([
-            path('categories/', include([
-                path('root/', MedicineCategoryViewSet.as_view({'get': 'root_categories'}), name='inventory-category-root'),
-                path('tree/', MedicineCategoryViewSet.as_view({'get': 'tree'}), name='inventory-category-tree'),
-            ])),
-            path('catalog/', include([
-                path('featured/', MedicineCatalogViewSet.as_view({'get': 'featured'}), name='inventory-catalog-featured'),
-                path('by-form/', MedicineCatalogViewSet.as_view({'get': 'by_form'}), name='inventory-catalog-by-form'),
-                path('prescription-required/', MedicineCatalogViewSet.as_view({'get': 'prescription_required'}), name='inventory-catalog-prescription-required'),
-                path('controlled-substances/', MedicineCatalogViewSet.as_view({'get': 'controlled_substances'}), name='inventory-catalog-controlled-substances'),
-            ])),
-            path('pharmacy-inventory/', include([
-                path('my-inventory/', PharmacyInventoryViewSet.as_view({'get': 'my_inventory'}), name='inventory-my-inventory'),
-                path('available/', PharmacyInventoryViewSet.as_view({'get': 'available'}), name='inventory-available'),
-                path('featured/', PharmacyInventoryViewSet.as_view({'get': 'featured'}), name='inventory-featured'),
-                path('on-sale/', PharmacyInventoryViewSet.as_view({'get': 'on_sale'}), name='inventory-on-sale'),
-                path('low-stock/', PharmacyInventoryViewSet.as_view({'get': 'low_stock'}), name='inventory-low-stock'),
-                path('out-of-stock/', PharmacyInventoryViewSet.as_view({'get': 'out_of_stock'}), name='inventory-out-of-stock'),
-                path('expiring-soon/', PharmacyInventoryViewSet.as_view({'get': 'expiring_soon'}), name='inventory-expiring-soon'),
-                path('search/', PharmacyInventoryViewSet.as_view({'get': 'search'}), name='inventory-search'),
-                path('stats/', PharmacyInventoryViewSet.as_view({'get': 'stats'}), name='inventory-stats'),
-                path('export/', PharmacyInventoryViewSet.as_view({'get': 'export'}), name='inventory-export'),
-                path('bulk-update/', PharmacyInventoryViewSet.as_view({'post': 'bulk_update'}), name='inventory-bulk-update'),
-            ])),
-        ])),
+        # Inventory (delegated to per-app urls; existing top-level router names preserved)
+        path('inventory/', include(('api.inventory.urls', 'inventory'), namespace='inventory')),
         
-        # Order endpoints
-        path('orders/', include([
-            path('my-orders/', OrderViewSet.as_view({'get': 'my_orders'}), name='order-my-orders'),
-            path('pharmacy-orders/', OrderViewSet.as_view({'get': 'pharmacy_orders'}), name='order-pharmacy-orders'),
-            path('rider-orders/', OrderViewSet.as_view({'get': 'rider_orders'}), name='order-rider-orders'),
-            path('pending/', OrderViewSet.as_view({'get': 'pending'}), name='order-pending'),
-            path('preparing/', OrderViewSet.as_view({'get': 'preparing'}), name='order-preparing'),
-            path('ready-for-pickup/', OrderViewSet.as_view({'get': 'ready_for_pickup'}), name='order-ready-for-pickup'),
-            path('in-delivery/', OrderViewSet.as_view({'get': 'in_delivery'}), name='order-in-delivery'),
-            path('completed/', OrderViewSet.as_view({'get': 'completed'}), name='order-completed'),
-            path('cancelled/', OrderViewSet.as_view({'get': 'cancelled'}), name='order-cancelled'),
-            path('search/', OrderViewSet.as_view({'get': 'search'}), name='order-search'),
-            path('stats/', OrderViewSet.as_view({'get': 'stats'}), name='order-stats'),
-            path('analytics/', OrderViewSet.as_view({'get': 'analytics'}), name='order-analytics'),
-            path('export/', OrderViewSet.as_view({'get': 'export'}), name='order-export'),
-        ])),
-        
+        # Orders (router + custom endpoints consolidated in api.orders.urls)
+        path('', include('api.orders.urls')),
+
         # Individual order delivery and payment endpoints
         path('orders/<int:pk>/', include([
             path('assign-rider/', EnhancedOrderViewSet.as_view({'post': 'assign_rider'}), name='order-assign-rider'),
@@ -207,17 +146,7 @@ urlpatterns = [
             path('delivery-tracking/', EnhancedOrderViewSet.as_view({'get': 'delivery_tracking'}), name='order-delivery-tracking'),
             path('payment-history/', EnhancedOrderViewSet.as_view({'get': 'payment_history'}), name='order-payment-history'),
         ])),
-        
-        # Order line endpoints
-        path('order-lines/', include([
-            path('verify-prescription/', OrderLineViewSet.as_view({'post': 'verify_prescription'}), name='orderline-verify-prescription'),
-        ])),
-        
-        # Prescription verification endpoints
-        path('prescriptions/', include([
-            path('pending/', PrescriptionVerificationViewSet.as_view({'get': 'pending'}), name='prescription-pending'),
-            path('bulk-verify/', PrescriptionVerificationViewSet.as_view({'post': 'bulk_verify'}), name='prescription-bulk-verify'),
-        ])),
+
         
         # Enhanced order endpoints with delivery and payment integration
         path('enhanced-orders/', include([
@@ -276,154 +205,17 @@ urlpatterns = [
             path('mark-delivered/', OrderRiderAssignmentViewSet.as_view({'post': 'mark_delivered'}), name='order-rider-mark-delivered'),
         ])),
         
-        # Payment endpoints
-        path('payments/', include([
-            path('my-payments/', PaymentViewSet.as_view({'get': 'my_payments'}), name='payment-my'),
-            path('pending/', PaymentViewSet.as_view({'get': 'pending'}), name='payment-pending'),
-            path('processing/', PaymentViewSet.as_view({'get': 'processing'}), name='payment-processing'),
-            path('paid/', PaymentViewSet.as_view({'get': 'paid'}), name='payment-paid'),
-            path('failed/', PaymentViewSet.as_view({'get': 'failed'}), name='payment-failed'),
-            path('refunded/', PaymentViewSet.as_view({'get': 'refunded'}), name='payment-refunded'),
-            path('by-method/', PaymentViewSet.as_view({'get': 'by_method'}), name='payment-by-method'),
-            path('by-order/', PaymentViewSet.as_view({'get': 'by_order'}), name='payment-by-order'),
-            path('search/', PaymentViewSet.as_view({'post': 'search'}), name='payment-search'),
-            path('analytics/', PaymentViewSet.as_view({'get': 'analytics'}), name='payment-analytics'),
-            path('available-methods/', PaymentViewSet.as_view({'get': 'available_methods'}), name='payment-methods'),
-            path('verify/', PaymentViewSet.as_view({'post': 'verify'}), name='payment-verify'),
-            path('export/', PaymentViewSet.as_view({'get': 'export'}), name='payment-export'),
-        ])),
+        # Payments (delegated to per-app urls)
+        path('', include('api.payments.urls')),
         
-        # Individual payment endpoints
-        path('payments/<int:pk>/', include([
-            path('process/', PaymentViewSet.as_view({'post': 'process_payment'}), name='payment-process'),
-            path('complete/', PaymentViewSet.as_view({'post': 'complete_payment'}), name='payment-complete'),
-            path('fail/', PaymentViewSet.as_view({'post': 'fail_payment'}), name='payment-fail'),
-            path('refund/', PaymentViewSet.as_view({'post': 'refund'}), name='payment-refund'),
-            path('cancel/', PaymentViewSet.as_view({'post': 'cancel_payment'}), name='payment-cancel'),
-            path('receipt/', PaymentViewSet.as_view({'get': 'receipt'}), name='payment-receipt'),
-        ])),
+        # Notifications (delegated)
+        path('', include('api.notifications.urls')),
         
-        # Notification endpoints
-        path('notifications/', include([
-            path('unread/', NotificationViewSet.as_view({'get': 'unread'}), name='notification-unread'),
-            path('urgent/', NotificationViewSet.as_view({'get': 'urgent'}), name='notification-urgent'),
-            path('scheduled/', NotificationViewSet.as_view({'get': 'scheduled'}), name='notification-scheduled'),
-            path('expired/', NotificationViewSet.as_view({'get': 'expired'}), name='notification-expired'),
-            path('by-type/', NotificationViewSet.as_view({'get': 'by_type'}), name='notification-by-type'),
-            path('by-priority/', NotificationViewSet.as_view({'get': 'by_priority'}), name='notification-by-priority'),
-            path('stats/', NotificationViewSet.as_view({'get': 'stats'}), name='notification-stats'),
-            path('filter/', NotificationViewSet.as_view({'post': 'filter'}), name='notification-filter'),
-            path('bulk-update/', NotificationViewSet.as_view({'post': 'bulk_update'}), name='notification-bulk-update'),
-            path('mark-all-read/', NotificationViewSet.as_view({'post': 'mark_all_read'}), name='notification-mark-all-read'),
-            path('create-system/', NotificationViewSet.as_view({'post': 'create_system_notification'}), name='notification-create-system'),
-            path('create-order/', NotificationViewSet.as_view({'post': 'create_order_notification'}), name='notification-create-order'),
-            path('create-payment/', NotificationViewSet.as_view({'post': 'create_payment_notification'}), name='notification-create-payment'),
-        ])),
+        # Chat (delegated)
+        path('', include('api.chat.urls')),
         
-        # Individual notification endpoints
-        path('notifications/<int:pk>/', include([
-            path('mark-read/', NotificationViewSet.as_view({'post': 'mark_as_read'}), name='notification-mark-read'),
-            path('mark-unread/', NotificationViewSet.as_view({'post': 'mark_as_unread'}), name='notification-mark-unread'),
-            path('send-now/', NotificationViewSet.as_view({'post': 'send_now'}), name='notification-send-now'),
-            path('schedule/', NotificationViewSet.as_view({'post': 'schedule'}), name='notification-schedule'),
-            path('cancel-schedule/', NotificationViewSet.as_view({'post': 'cancel_schedule'}), name='notification-cancel-schedule'),
-            path('extend-expiration/', NotificationViewSet.as_view({'post': 'extend_expiration'}), name='notification-extend-expiration'),
-        ])),
-        
-        # Chat room endpoints
-        path('chat-rooms/', include([
-            path('my-rooms/', ChatRoomViewSet.as_view({'get': 'my_rooms'}), name='chat-room-my-rooms'),
-            path('active/', ChatRoomViewSet.as_view({'get': 'active'}), name='chat-room-active'),
-            path('create-with-participants/', ChatRoomViewSet.as_view({'post': 'create_with_participants'}), name='chat-room-create-with-participants'),
-            path('get-or-create-by-order/', ChatRoomViewSet.as_view({'post': 'get_or_create_by_order'}), name='chat-room-get-or-create-by-order'),
-        ])),
-        
-        # Individual chat room endpoints
-        path('chat-rooms/<int:pk>/', include([
-            path('close/', ChatRoomViewSet.as_view({'post': 'close_room'}), name='chat-room-close'),
-            path('archive/', ChatRoomViewSet.as_view({'post': 'archive_room'}), name='chat-room-archive'),
-            path('participants/', ChatRoomViewSet.as_view({'get': 'participants'}), name='chat-room-participants'),
-            path('messages/', ChatRoomViewSet.as_view({'get': 'messages'}), name='chat-room-messages'),
-            path('send/', ChatRoomViewSet.as_view({'post': 'send'}), name='chat-room-send'),
-            path('mark-read/', ChatRoomViewSet.as_view({'post': 'mark_read_room'}), name='chat-room-mark-read'),
-            path('typing/', ChatRoomViewSet.as_view({'post': 'set_typing'}), name='chat-room-typing'),
-            path('typing-status/', ChatRoomViewSet.as_view({'get': 'typing_status'}), name='chat-room-typing-status'),
-            path('stats/', ChatRoomViewSet.as_view({'get': 'stats'}), name='chat-room-stats'),
-        ])),
-        
-        # Chat participant endpoints
-        path('chat-participants/<int:pk>/', include([
-            path('leave-room/', ChatParticipantViewSet.as_view({'post': 'leave_room'}), name='chat-participant-leave'),
-            path('mute/', ChatParticipantViewSet.as_view({'post': 'mute'}), name='chat-participant-mute'),
-            path('unmute/', ChatParticipantViewSet.as_view({'post': 'unmute'}), name='chat-participant-unmute'),
-            path('block/', ChatParticipantViewSet.as_view({'post': 'block'}), name='chat-participant-block'),
-            path('unblock/', ChatParticipantViewSet.as_view({'post': 'unblock'}), name='chat-participant-unblock'),
-        ])),
-        
-        # Chat message endpoints
-        path('chat-messages/', include([
-            path('search/', ChatMessageViewSet.as_view({'post': 'search'}), name='chat-message-search'),
-            path('my-messages/', ChatMessageViewSet.as_view({'get': 'my_messages'}), name='chat-message-my-messages'),
-            path('unread/', ChatMessageViewSet.as_view({'get': 'unread'}), name='chat-message-unread'),
-            path('mark-all-read/', ChatMessageViewSet.as_view({'post': 'mark_all_read'}), name='chat-message-mark-all-read'),
-        ])),
-        
-        # Individual chat message endpoints
-        path('chat-messages/<int:pk>/', include([
-            path('reply/', ChatMessageViewSet.as_view({'post': 'reply'}), name='chat-message-reply'),
-            path('mark-read/', ChatMessageViewSet.as_view({'post': 'mark_as_read'}), name='chat-message-mark-read'),
-            path('edit/', ChatMessageViewSet.as_view({'post': 'edit'}), name='chat-message-edit'),
-            path('delete/', ChatMessageViewSet.as_view({'post': 'delete'}), name='chat-message-delete'),
-        ])),
-        
-        # Global API Infrastructure endpoints
-        path('system-health/', include([
-            path('overall-status/', SystemHealthViewSet.as_view({'get': 'overall_status'}), name='system-health-overall'),
-            path('component-status/', SystemHealthViewSet.as_view({'get': 'component_status'}), name='system-health-component'),
-            path('check-health/', SystemHealthViewSet.as_view({'post': 'check_health'}), name='system-health-check'),
-        ])),
-        
-        path('api-usage/', include([
-            path('stats/', ApiUsageViewSet.as_view({'get': 'stats'}), name='api-usage-stats'),
-            path('my-usage/', ApiUsageViewSet.as_view({'get': 'my_usage'}), name='api-usage-my-usage'),
-        ])),
-        
-        path('global-search/', include([
-            path('searchable-models/', GlobalSearchViewSet.as_view({'get': 'searchable_models'}), name='global-search-models'),
-        ])),
-        
-        path('bulk-operations/', include([
-            path('bulk-create/', BulkOperationsViewSet.as_view({'post': 'bulk_create'}), name='bulk-operations-create'),
-            path('bulk-update/', BulkOperationsViewSet.as_view({'post': 'bulk_update'}), name='bulk-operations-update'),
-            path('bulk-delete/', BulkOperationsViewSet.as_view({'post': 'bulk_delete'}), name='bulk-operations-delete'),
-        ])),
-        
-        path('export-import/', include([
-            path('export-data/', ExportImportViewSet.as_view({'post': 'export_data'}), name='export-import-export'),
-            path('import-data/', ExportImportViewSet.as_view({'post': 'import_data'}), name='export-import-import'),
-        ])),
-        
-        path('global-statistics/', include([
-            path('overview/', GlobalStatisticsViewSet.as_view({'get': 'overview'}), name='global-statistics-overview'),
-            path('model-stats/', GlobalStatisticsViewSet.as_view({'get': 'model_stats'}), name='global-statistics-model'),
-            path('performance/', GlobalStatisticsViewSet.as_view({'get': 'performance'}), name='global-statistics-performance'),
-        ])),
-        
-        path('bulk-operation-logs/<int:pk>/', include([
-            path('cancel/', BulkOperationLogViewSet.as_view({'post': 'cancel'}), name='bulk-operation-log-cancel'),
-        ])),
-        
-        path('bulk-operation-logs/', include([
-            path('my-operations/', BulkOperationLogViewSet.as_view({'get': 'my_operations'}), name='bulk-operation-log-my-operations'),
-        ])),
-        
-        # Admin login endpoints
-        path('pharmago-admin/', include([
-            path('login/', admin_login, name='admin-login'),
-            path('logout/', admin_logout, name='admin-logout'),
-            path('verify/', admin_verify, name='admin-verify'),
-            path('debug/', admin_debug, name='admin-debug'),
-        ])),
+        # Global API (delegated)
+        path('', include('api.global_api.urls')),
     ])),
     
     # Root redirect to API
