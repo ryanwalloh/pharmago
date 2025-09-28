@@ -154,9 +154,9 @@ const PharmacyDashboard = () => {
         
         if (data.success) {
           setOrders({
-            pending: data.orders.pending || [],
-            preparing: data.orders.preparing || [],
-            ready: data.orders.ready || []
+            pending: Array.isArray(data.orders?.pending) ? data.orders.pending : [],
+            preparing: Array.isArray(data.orders?.preparing) ? data.orders.preparing : [],
+            ready: Array.isArray(data.orders?.ready) ? data.orders.ready : []
           });
           setStats(prev => ({
             ...prev,
@@ -194,7 +194,12 @@ const PharmacyDashboard = () => {
       if (!pid) return;
       try {
         const resp = await fetch(`http://127.0.0.1:8000/api/cache-version/?key=${encodeURIComponent(`orders:version:pharmacy:${pid}`)}`);
-        if (!resp.ok) return;
+        if (!resp.ok) {
+          if (intervalId) {
+            clearInterval(intervalId);
+          }
+          return;
+        }
         const json = await resp.json();
         const ver = json?.value || null;
         if (ver && ver !== lastVersion) {
@@ -247,7 +252,14 @@ const PharmacyDashboard = () => {
   };
 
   const handleViewOrder = (order) => {
-    setSelectedOrder(order);
+    const safeOrder = {
+      ...order,
+      items: Array.isArray(order?.items) ? order.items : [],
+      orderNumber: order?.orderNumber || order?.order_number || order?.id,
+      prescriptionNotes: order?.prescriptionNotes || '',
+      prescriptionImageUrl: order?.prescriptionImageUrl || '',
+    };
+    setSelectedOrder(safeOrder);
     // Ensure inventory is loaded for review search
     if (!inventoryData.categories || inventoryData.categories.length === 0) {
       fetchPharmacyInventory();
@@ -2251,8 +2263,13 @@ const PharmacyDashboard = () => {
                                   setIsPrescriptionImagePreviewOpen(true);
                                 }}
                                 onError={(e) => {
-                                  e.target.style.display = 'none';
-                                  e.target.nextSibling.style.display = 'block';
+                                  if (e?.target) {
+                                    e.target.style.display = 'none';
+                                    const fallback = e.target.nextSibling;
+                                    if (fallback && fallback.style) {
+                                      fallback.style.display = 'block';
+                                    }
+                                  }
                                 }}
                               />
                             ) : (
@@ -2545,7 +2562,7 @@ const PharmacyDashboard = () => {
                             </button>
                             <button
                               onClick={async () => {
-                                try {
+                                  try {
                                   setChatError('');
                                   setChatLoading(true);
                                   const storedPharmacyInfo = localStorage.getItem('pharmacy_info');
@@ -2565,10 +2582,12 @@ const PharmacyDashboard = () => {
                                     setChatError(data.error || 'Failed to open chat.');
                                     return;
                                   }
-                                  setChatRoom(data.room);
+                                  const roomId = data.room_id || data.room?.id;
+                                  const roomKey = data.room_key || data.room?.room_id;
+                                  setChatRoom({ id: roomId, room_id: roomKey });
                                   setShowChatPanel(true);
                                   // Immediately fetch messages and start polling
-                                  await fetchChatMessages(data.room.id);
+                                  await fetchChatMessages(roomId);
                                   // Try to include quoted total in message
                                   let quotedTotal = null;
                                   try {
@@ -2581,14 +2600,14 @@ const PharmacyDashboard = () => {
                                   } catch (_) {}
                                   if (chatPollRef.current) clearInterval(chatPollRef.current);
                                   chatPollRef.current = setInterval(() => {
-                                    fetchChatMessages(data.room.id, { silent: true });
+                                    fetchChatMessages(roomId, { silent: true });
                                   }, 12000);
                                   // Start typing status polling
                                   if (chatTypingPollRef.current) clearInterval(chatTypingPollRef.current);
                                   chatTypingPollRef.current = setInterval(() => {
-                                    pollTypingStatus(data.room.id);
+                                    pollTypingStatus(roomId);
                                   }, 4000);
-                                  // Persist service & delivery fees first so the breakdown is accurate
+                                  // Persist/refresh totals first so the breakdown is accurate
                                   try {
                                     await fetch('http://127.0.0.1:8000/api/prepare-price-quote/', {
                                       method: 'POST',
@@ -2601,6 +2620,12 @@ const PharmacyDashboard = () => {
                                     // Fetch latest breakdown for invoice-like message
                                     let subtotal = null, delivery = null, serviceFee = null, total = quotedTotal, itemLines = [];
                                     try {
+                                      // Force totals refresh, then read status
+                                      await fetch('http://127.0.0.1:8000/api/prepare-price-quote/', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ order_id: selectedOrder.id })
+                                      });
                                       const statusResp2 = await fetch(`http://127.0.0.1:8000/api/order-status/${selectedOrder.id}/`);
                                       const statusJson2 = await statusResp2.json();
                                       const p = statusJson2?.data || statusJson2;
@@ -2610,8 +2635,8 @@ const PharmacyDashboard = () => {
                                       if (typeof p?.total_amount === 'number') total = p.total_amount;
                                       if (Array.isArray(p?.items)) {
                                         itemLines = p.items.map((it) => {
-                                          const nm = String((it && it.name) || 'Item');
-                                          const rawUnit = it && it.unit_price;
+                                          const nm = String((it && (it.name || it.product || it.display_name)) || 'Item');
+                                          const rawUnit = it && (it.unit_price != null ? it.unit_price : it.price);
                                           const unit = typeof rawUnit === 'number' ? rawUnit : (rawUnit ? Number(rawUnit) : null);
                                           const priceStr = unit != null && !Number.isNaN(unit) ? `₱${Number(unit).toFixed(2)}` : '₱0.00';
                                           return `- ${nm} — ${priceStr}`;
@@ -2652,15 +2677,15 @@ const PharmacyDashboard = () => {
                                     const sendResp = await fetch('http://127.0.0.1:8000/api/order-chat-send/', {
                                       method: 'POST',
                                       headers: { 'Content-Type': 'application/json' },
-                                      body: JSON.stringify({ room_id: data.room.id, pharmacy_id: pharmacy?.id, content: msgContent })
+                                      body: JSON.stringify({ room_id: roomId, pharmacy_id: pharmacy?.id, content: msgContent })
                                     });
                                     const sendJson = await sendResp.json();
                                     if (!sendResp.ok || !sendJson.success) {
                                       // Mark failure subtly or refetch
-                                      await fetchChatMessages(data.room.id, { silent: true });
+                                      await fetchChatMessages(roomId, { silent: true });
                                     } else {
                                       // Reconcile list (refetch replaces optimistic with real message)
-                                      await fetchChatMessages(data.room.id, { silent: true });
+                                      await fetchChatMessages(roomId, { silent: true });
                                     }
                                   } catch (_) {}
                                   // Also nudge the customer's app to show pricing approval sheet by updating totals/state (client already polls)
@@ -2787,10 +2812,10 @@ const PharmacyDashboard = () => {
                     </div>
                     <div className="text-center">
                       <h3 className="text-sm lg:text-lg font-medium">
-                        {order.isPrescriptionOrder ? 'Prescription Order' : `₱${order.totalAmount.toFixed(2)}`}
+                        {order.isPrescriptionOrder ? 'Prescription Order' : `₱${(order.totalAmount||0).toFixed(2)}`}
                       </h3>
                       <p className="text-gray-600 text-xs lg:text-sm">
-                        {order.isPrescriptionOrder ? "Waiting for customer's approval of the pricing" : 'Paid'}
+                        {order.isPrescriptionOrder ? 'Needs review for pricing' : 'Paid'}
                       </p>
                     </div>
                     <div className="text-center">
@@ -2839,10 +2864,10 @@ const PharmacyDashboard = () => {
                   </div>
                   <div className="text-center">
                     <h3 className="text-sm lg:text-lg font-medium">
-                      {order.isPrescriptionOrder ? 'Prescription Order' : `₱${order.totalAmount.toFixed(2)}`}
+                      {order.isPrescriptionOrder ? 'Prescription Order' : `₱${(order.totalAmount||0).toFixed(2)}`}
                     </h3>
                     <p className="text-gray-600 text-xs lg:text-sm">
-                      {order.isPrescriptionOrder ? "Waiting for customer's approval of the pricing" : 'Paid'}
+                      {order.isPrescriptionOrder ? 'Needs review for pricing' : 'Paid'}
                     </p>
                   </div>
                   <div className="text-center">
@@ -2884,10 +2909,10 @@ const PharmacyDashboard = () => {
                   </div>
                   <div className="text-center">
                     <h3 className="text-sm lg:text-lg font-medium">
-                      {order.isPrescriptionOrder ? 'Prescription Order' : `₱${order.totalAmount.toFixed(2)}`}
+                      {order.isPrescriptionOrder ? 'Prescription Order' : `₱${(order.totalAmount||0).toFixed(2)}`}
                     </h3>
                     <p className="text-gray-600 text-xs lg:text-sm">
-                      {order.isPrescriptionOrder ? 'Review Required' : 'Paid'}
+                      {order.isPrescriptionOrder ? 'Needs review for pricing' : 'Paid'}
                     </p>
                   </div>
                   <div className="text-center">

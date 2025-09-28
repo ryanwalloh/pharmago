@@ -299,14 +299,30 @@ class Order(models.Model):
             total=Sum(F('unit_price') * F('quantity'))
         )['total'] or 0
         
-        # Calculate tax (example: 12% VAT)
-        tax_rate = 0.12  # This could be configurable
-        tax_amount = subtotal * tax_rate
+        # Service fee: prefer existing tax_amount if set (>0), otherwise default to 19.00 in dev
+        try:
+            existing_tax = float(self.tax_amount)
+        except Exception:
+            existing_tax = 0.0
+        if existing_tax and existing_tax > 0:
+            tax_amount = self.tax_amount
+        else:
+            from decimal import Decimal
+            tax_amount = Decimal('19.00')
         
         # Apply discount
         discount_amount = self.discount_amount
         
         # Calculate total
+        # Delivery fee: prefer existing delivery_fee if set (>0), otherwise default to 29.00 in dev
+        try:
+            existing_delivery = float(self.delivery_fee)
+        except Exception:
+            existing_delivery = 0.0
+        if not existing_delivery or existing_delivery <= 0:
+            from decimal import Decimal
+            self.delivery_fee = Decimal('29.00')
+
         total = subtotal + tax_amount + self.delivery_fee - discount_amount
         
         # Update fields
