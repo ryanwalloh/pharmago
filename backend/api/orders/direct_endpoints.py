@@ -151,6 +151,7 @@ def direct_prescription_order_creation(request):
                 )
             
             # Create prescription order
+            from decimal import Decimal
             order = Order.objects.create(
                 customer=customer,
                 delivery_address=delivery_address,
@@ -158,8 +159,8 @@ def direct_prescription_order_creation(request):
                 payment_status=Order.PaymentStatus.UNPAID,
                 delivery_type=Order.DeliveryType.STANDARD,
                 subtotal=0.00,  # Will be calculated when pharmacist adds items
-                tax_amount=0.00,
-                delivery_fee=0.00,
+                tax_amount=Decimal('19.00'),  # Dev default service fee
+                delivery_fee=Decimal('29.00'),  # Dev default delivery fee
                 discount_amount=0.00,
                 total_amount=0.00,  # Will be calculated when pharmacist adds items
                 source='mobile',

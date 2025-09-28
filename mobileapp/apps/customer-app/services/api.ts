@@ -535,14 +535,19 @@ class ApiService {
       const roomObj = (secure.data as any) || {};
       return { success: true, data: { room: roomObj } };
     }
-    // Fallback to dev route
-    return this.makeDirectRequest('/order-chat-room/', {
+    // Fallback to dev route and normalize response shape to { room: { id, room_id } }
+    const direct = await this.makeDirectRequest('/order-chat-room/', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ order_id: orderId, pharmacy_id: pharmacyId })
     });
+    if (direct && (direct as any).data && ((direct as any).data as any).room_id) {
+      const d: any = (direct as any).data;
+      return { success: true, data: { room: { id: d.room_id, room_id: d.room_key } } };
+    }
+    return direct;
   }
 
   async getOrderChatMessages(roomId: number, limit: number = 100): Promise<ApiResponse<any>> {

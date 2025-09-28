@@ -35,6 +35,14 @@ SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-your-secret-key-here')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DEBUG', 'True').lower() == 'true'
 
+# Dev performance toggles (safe defaults for development only)
+ENABLE_API_USAGE_MW = os.getenv('ENABLE_API_USAGE_MW', '0') == '1'
+ENABLE_SYSTEM_HEALTH_MW = os.getenv('ENABLE_SYSTEM_HEALTH_MW', '0') == '1'
+DISABLE_THROTTLE = os.getenv('DISABLE_THROTTLE', '1') == '1'
+LIGHT_LOGGING = os.getenv('LIGHT_LOGGING', '1') == '1'
+DISABLE_FILE_LOG = os.getenv('DISABLE_FILE_LOG', '1') == '1'
+EMAIL_CONSOLE = os.getenv('EMAIL_CONSOLE', '1') == '1'
+
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '').split(',') if os.getenv('ALLOWED_HOSTS') else [
     'localhost', '127.0.0.1', '0.0.0.0', 'testserver'
 ]
@@ -84,9 +92,13 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'api.global_api.middleware.ApiUsageTrackingMiddleware',
-    'api.global_api.middleware.SystemHealthMiddleware',
 ]
+
+# Add heavier middlewares only in production by default, or opt-in via env in dev
+if (not DEBUG) or ENABLE_API_USAGE_MW:
+    MIDDLEWARE.append('api.global_api.middleware.ApiUsageTrackingMiddleware')
+if (not DEBUG) or ENABLE_SYSTEM_HEALTH_MW:
+    MIDDLEWARE.append('api.global_api.middleware.SystemHealthMiddleware')
 
 ROOT_URLCONF = 'pharmago.urls'
 
@@ -220,6 +232,11 @@ REST_FRAMEWORK = {
     },
 }
 
+# In development, disable throttling to reduce cache/Redis work unless explicitly enabled
+if DEBUG and DISABLE_THROTTLE:
+    REST_FRAMEWORK['DEFAULT_THROTTLE_CLASSES'] = []
+    REST_FRAMEWORK['DEFAULT_THROTTLE_RATES'] = {}
+
 # JWT Settings
 from datetime import timedelta
 SIMPLE_JWT = {
@@ -322,6 +339,24 @@ LOGGING = {
 # Create logs directory if it doesn't exist
 os.makedirs(os.path.join(BASE_DIR, 'logs'), exist_ok=True)
 
+# Lighter logging and no file logging in development by default
+if DEBUG and LIGHT_LOGGING:
+    try:
+        LOGGING['loggers']['api']['level'] = 'INFO'
+    except Exception:
+        pass
+    try:
+        LOGGING['root']['level'] = 'WARNING'
+    except Exception:
+        pass
+
+if DEBUG and DISABLE_FILE_LOG:
+    LOGGING['handlers'].pop('file', None)
+    if 'django' in LOGGING.get('loggers', {}):
+        LOGGING['loggers']['django']['handlers'] = ['console']
+    if 'api' in LOGGING.get('loggers', {}):
+        LOGGING['loggers']['api']['handlers'] = ['console']
+
 # AWS S3 Settings
 AWS_ACCESS_KEY_ID = os.getenv('AWS_ACCESS_KEY_ID')
 AWS_SECRET_ACCESS_KEY = os.getenv('AWS_SECRET_ACCESS_KEY')
@@ -337,6 +372,10 @@ EMAIL_HOST_USER = 'sotidelivery@gmail.com'
 EMAIL_HOST_PASSWORD = 'lbhl lwyt kjlc cxby'
 DEFAULT_FROM_EMAIL = 'PharmaGo Admin <sotidelivery@gmail.com>'
 FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:3000')
+
+# In development, avoid SMTP latency by default
+if DEBUG and EMAIL_CONSOLE:
+    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 
 # Session settings
 SESSION_COOKIE_AGE = 3600  # 1 hour
