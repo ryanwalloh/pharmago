@@ -39,6 +39,9 @@ const AdminDashboard = () => {
     pendingRidersData: []
   });
   const [pendingRiders, setPendingRiders] = useState([]);
+  const [activeRiders, setActiveRiders] = useState([]);
+  const [suspendedRiders, setSuspendedRiders] = useState([]);
+  const [allRiders, setAllRiders] = useState([]);
   const [loadingPendingRiders, setLoadingPendingRiders] = useState(false);
   const [riderActiveTile, setRiderActiveTile] = useState('pending');
   const [riderSearchTerm, setRiderSearchTerm] = useState('');
@@ -114,12 +117,15 @@ const AdminDashboard = () => {
     try {
       setLoading(true);
       setError(null);
+      console.log('Fetching rider statistics (no auth required)...');
       const response = await axios.get('http://127.0.0.1:8000/api/rider-stats/');
+      console.log('Rider stats API response:', response.data);
       setRiderStats(response.data);
       if (response.data.pendingRidersData) {
         setPendingRiders(response.data.pendingRidersData);
       }
     } catch (err) {
+      console.error('Error fetching rider statistics:', err?.response?.status, err?.message, err?.response?.data);
       // Fallback to empty counts if API not ready
       setRiderStats({ totalRiders: 0, pendingApprovals: 0, activeRiders: 0, suspendedRiders: 0, pendingRidersData: [] });
       setPendingRiders([]);
@@ -184,14 +190,68 @@ const AdminDashboard = () => {
     try {
       setLoadingPendingRiders(true);
       setError(null);
+      console.log('Fetching pending riders...');
       const response = await axios.get('http://127.0.0.1:8000/api/rider-stats/');
+      console.log('Pending riders API response:', response.data);
       if (response.data.pendingRidersData) {
         setPendingRiders(response.data.pendingRidersData);
       } else {
         setPendingRiders([]);
       }
     } catch (err) {
+      console.error('Error fetching pending riders:', err?.response?.status, err?.message, err?.response?.data);
       setPendingRiders([]);
+    } finally {
+      setLoadingPendingRiders(false);
+    }
+  };
+
+  // Riders: fetch active list
+  const fetchActiveRiders = async () => {
+    try {
+      setLoadingPendingRiders(true);
+      setError(null);
+      console.log('Fetching active riders...');
+      const response = await axios.get('http://127.0.0.1:8000/api/rider-stats/');
+      console.log('Active riders from stats API:', response.data?.activeRidersData);
+      setActiveRiders(Array.isArray(response.data?.activeRidersData) ? response.data.activeRidersData : []);
+    } catch (err) {
+      console.error('Error fetching active riders:', err?.response?.status, err?.message, err?.response?.data);
+      setActiveRiders([]);
+    } finally {
+      setLoadingPendingRiders(false);
+    }
+  };
+
+  // Riders: fetch suspended list
+  const fetchSuspendedRiders = async () => {
+    try {
+      setLoadingPendingRiders(true);
+      setError(null);
+      console.log('Fetching suspended riders...');
+      const response = await axios.get('http://127.0.0.1:8000/api/rider-stats/');
+      console.log('Suspended riders from stats API:', response.data?.suspendedRidersData);
+      setSuspendedRiders(Array.isArray(response.data?.suspendedRidersData) ? response.data.suspendedRidersData : []);
+    } catch (err) {
+      console.error('Error fetching suspended riders:', err?.response?.status, err?.message, err?.response?.data);
+      setSuspendedRiders([]);
+    } finally {
+      setLoadingPendingRiders(false);
+    }
+  };
+
+  // Riders: fetch all list
+  const fetchAllRiders = async () => {
+    try {
+      setLoadingPendingRiders(true);
+      setError(null);
+      console.log('Fetching all riders...');
+      const response = await axios.get('http://127.0.0.1:8000/api/rider-stats/');
+      console.log('All riders from stats API:', response.data?.allRidersData);
+      setAllRiders(Array.isArray(response.data?.allRidersData) ? response.data.allRidersData : []);
+    } catch (err) {
+      console.error('Error fetching all riders:', err?.response?.status, err?.message, err?.response?.data);
+      setAllRiders([]);
     } finally {
       setLoadingPendingRiders(false);
     }
@@ -209,6 +269,12 @@ const AdminDashboard = () => {
     setRiderActiveTile(tileType);
     if (tileType === 'pending') {
       fetchPendingRiders();
+    } else if (tileType === 'active') {
+      fetchActiveRiders();
+    } else if (tileType === 'suspended') {
+      fetchSuspendedRiders();
+    } else if (tileType === 'total') {
+      fetchAllRiders();
     }
   };
 
@@ -372,6 +438,16 @@ const AdminDashboard = () => {
     checkAuthAndFetchData();
   }, [navigate]);
 
+  // When navigating to Manage Riders, refresh rider stats (and pending list if needed)
+  useEffect(() => {
+    if (activeNav === 'Manage Riders') {
+      fetchRiderStats();
+      if (riderActiveTile === 'pending') {
+        fetchPendingRiders();
+      }
+    }
+  }, [activeNav, riderActiveTile]);
+
   const navItems = [
     { id: 'Dashboard', label: 'Dashboard', icon: 'M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z' },
     { id: 'Manage Pharmacies', label: 'Manage Pharmacies', icon: 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4' },
@@ -526,12 +602,117 @@ const AdminDashboard = () => {
               <p className="mt-1 text-sm text-[#999999]">All rider applications have been reviewed</p>
             </div>
           )
+        ) : riderActiveTile === 'active' ? (
+          loadingPendingRiders ? (
+            <div className="text-center py-8">
+              <div className="animate-spin mx-auto h-8 w-8 border-4 border-[#4DAF7C] border-t-transparent rounded-full"></div>
+              <p className="mt-2 text-sm text-[#666666]">Loading active riders...</p>
+            </div>
+          ) : activeRiders.length > 0 ? (
+            <div className="space-y-3">
+              <div className="grid grid-cols-12 gap-2 lg:gap-4 p-3 lg:p-4 bg-[#D5E8D4] rounded-xl border border-[#6BBF9A] font-semibold text-[#2C7A5D] text-xs lg:text-sm">
+                <div className="col-span-2">Name</div>
+                <div className="col-span-2">Phone</div>
+                <div className="col-span-3">Email</div>
+                <div className="col-span-3">Vehicle</div>
+                <div className="col-span-2 flex items-center justify-center"><span className="text-xs">Action</span></div>
+              </div>
+              {activeRiders
+                .filter(r => `${r.first_name} ${r.last_name}`.toLowerCase().includes(riderSearchTerm.toLowerCase()) || (r.phone_number || '').includes(riderSearchTerm))
+                .map(rider => (
+                  <div key={rider.id} className="grid grid-cols-12 gap-2 lg:gap-4 p-3 lg:p-4 rounded-xl hover:bg-[#D5E8D4] transition-colors duration-200 border border-transparent hover:border-[#6BBF9A] items-center">
+                    <div className="col-span-2">
+                      <h3 className="font-semibold text-[#2C7A5D] text-xs lg:text-sm truncate">{rider.first_name} {rider.last_name}</h3>
+                    </div>
+                    <div className="col-span-2"><p className="text-xs lg:text-sm text-[#666666] truncate">{rider.phone_number || '—'}</p></div>
+                    <div className="col-span-3"><p className="text-xs lg:text-sm text-[#666666] truncate">{rider.email || '—'}</p></div>
+                    <div className="col-span-3"><p className="text-xs lg:text-sm text-[#666666] truncate">{rider.vehicle_type || '—'} {rider.plate_number ? `• ${rider.plate_number}` : ''}</p></div>
+                    <div className="col-span-2 flex items-center justify-center">
+                      <button onClick={() => handleViewRider(rider)} className="px-2 lg:px-3 py-1 bg-[#4DAF7C] text-white text-xs rounded-lg hover:bg-[#6BBF9A] transition-colors duration-200">View</button>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          ) : (
+            <div className="text-center py-8">
+              <svg className="mx-auto h-12 w-12 text-[#999999]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2" /></svg>
+              <h3 className="mt-2 text-sm font-medium text-[#666666]">No active riders</h3>
+            </div>
+          )
+        ) : riderActiveTile === 'suspended' ? (
+          loadingPendingRiders ? (
+            <div className="text-center py-8">
+              <div className="animate-spin mx-auto h-8 w-8 border-4 border-[#4DAF7C] border-t-transparent rounded-full"></div>
+              <p className="mt-2 text-sm text-[#666666]">Loading suspended riders...</p>
+            </div>
+          ) : suspendedRiders.length > 0 ? (
+            <div className="space-y-3">
+              <div className="grid grid-cols-12 gap-2 lg:gap-4 p-3 lg:p-4 bg-[#D5E8D4] rounded-xl border border-[#6BBF9A] font-semibold text-[#2C7A5D] text-xs lg:text-sm">
+                <div className="col-span-2">Name</div>
+                <div className="col-span-2">Phone</div>
+                <div className="col-span-3">Email</div>
+                <div className="col-span-3">Vehicle</div>
+                <div className="col-span-2 flex items-center justify-center"><span className="text-xs">Action</span></div>
+              </div>
+              {suspendedRiders
+                .filter(r => `${r.first_name} ${r.last_name}`.toLowerCase().includes(riderSearchTerm.toLowerCase()) || (r.phone_number || '').includes(riderSearchTerm))
+                .map(rider => (
+                  <div key={rider.id} className="grid grid-cols-12 gap-2 lg:gap-4 p-3 lg:p-4 rounded-xl hover:bg-[#D5E8D4] transition-colors duration-200 border border-transparent hover:border-[#6BBF9A] items-center">
+                    <div className="col-span-2">
+                      <h3 className="font-semibold text-[#2C7A5D] text-xs lg:text-sm truncate">{rider.first_name} {rider.last_name}</h3>
+                    </div>
+                    <div className="col-span-2"><p className="text-xs lg:text-sm text-[#666666] truncate">{rider.phone_number || '—'}</p></div>
+                    <div className="col-span-3"><p className="text-xs lg:text-sm text-[#666666] truncate">{rider.email || '—'}</p></div>
+                    <div className="col-span-3"><p className="text-xs lg:text-sm text-[#666666] truncate">{rider.vehicle_type || '—'} {rider.plate_number ? `• ${rider.plate_number}` : ''}</p></div>
+                    <div className="col-span-2 flex items-center justify-center">
+                      <button onClick={() => handleViewRider(rider)} className="px-2 lg:px-3 py-1 bg-[#4DAF7C] text-white text-xs rounded-lg hover:bg-[#6BBF9A] transition-colors duration-200">View</button>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          ) : (
+            <div className="text-center py-8">
+              <svg className="mx-auto h-12 w-12 text-[#999999]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2" /></svg>
+              <h3 className="mt-2 text-sm font-medium text-[#666666]">No suspended riders</h3>
+            </div>
+          )
         ) : (
-          <div className="text-center py-8">
-            <svg className="mx-auto h-12 w-12 text-[#999999]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2" /></svg>
-            <h3 className="mt-2 text-sm font-medium text-[#666666]">Section under construction</h3>
-            <p className="mt-1 text-sm text-[#999999]">We will add full rider listings here.</p>
-          </div>
+          loadingPendingRiders ? (
+            <div className="text-center py-8">
+              <div className="animate-spin mx-auto h-8 w-8 border-4 border-[#4DAF7C] border-t-transparent rounded-full"></div>
+              <p className="mt-2 text-sm text-[#666666]">Loading riders...</p>
+            </div>
+          ) : allRiders.length > 0 ? (
+            <div className="space-y-3">
+              <div className="grid grid-cols-12 gap-2 lg:gap-4 p-3 lg:p-4 bg-[#D5E8D4] rounded-xl border border-[#6BBF9A] font-semibold text-[#2C7A5D] text-xs lg:text-sm">
+                <div className="col-span-2">Name</div>
+                <div className="col-span-2">Phone</div>
+                <div className="col-span-3">Email</div>
+                <div className="col-span-3">Vehicle</div>
+                <div className="col-span-2 flex items-center justify-center"><span className="text-xs">Action</span></div>
+              </div>
+              {allRiders
+                .filter(r => `${r.first_name} ${r.last_name}`.toLowerCase().includes(riderSearchTerm.toLowerCase()) || (r.phone_number || '').includes(riderSearchTerm))
+                .map(rider => (
+                  <div key={rider.id} className="grid grid-cols-12 gap-2 lg:gap-4 p-3 lg:p-4 rounded-xl hover:bg-[#D5E8D4] transition-colors duration-200 border border-transparent hover:border-[#6BBF9A] items-center">
+                    <div className="col-span-2">
+                      <h3 className="font-semibold text-[#2C7A5D] text-xs lg:text-sm truncate">{rider.first_name} {rider.last_name}</h3>
+                    </div>
+                    <div className="col-span-2"><p className="text-xs lg:text-sm text-[#666666] truncate">{rider.phone_number || '—'}</p></div>
+                    <div className="col-span-3"><p className="text-xs lg:text-sm text-[#666666] truncate">{rider.email || '—'}</p></div>
+                    <div className="col-span-3"><p className="text-xs lg:text-sm text-[#666666] truncate">{rider.vehicle_type || '—'} {rider.plate_number ? `• ${rider.plate_number}` : ''}</p></div>
+                    <div className="col-span-2 flex items-center justify-center">
+                      <button onClick={() => handleViewRider(rider)} className="px-2 lg:px-3 py-1 bg-[#4DAF7C] text-white text-xs rounded-lg hover:bg-[#6BBF9A] transition-colors duration-200">View</button>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          ) : (
+            <div className="text-center py-8">
+              <svg className="mx-auto h-12 w-12 text-[#999999]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2" /></svg>
+              <h3 className="mt-2 text-sm font-medium text-[#666666]">No riders found</h3>
+            </div>
+          )
         )}
       </div>
     </div>
