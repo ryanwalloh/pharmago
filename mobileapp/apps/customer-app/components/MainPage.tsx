@@ -10,6 +10,7 @@ import {
   ScrollView,
   FlatList,
 } from 'react-native';
+import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../contexts/AuthContext';
 import { apiService } from '../services/api';
@@ -398,7 +399,7 @@ export default function MainPage() {
           <AddPrescriptionIcon size={24} color="#FFFFFF" />
         </TouchableOpacity>
         
-        <TouchableOpacity style={styles.bottomNavItem}>
+        <TouchableOpacity style={styles.bottomNavItem} onPress={() => router.push('/profile' as any)}>
           <ProfileIcon size={24} color="#FFFFFF" />
         </TouchableOpacity>
       </View>

@@ -502,28 +502,36 @@ class PharmacyRegistrationSerializer(serializers.Serializer):
         
         for file_type, file_obj in file_data.items():
             if file_obj:
-                file_url = None
+                file_url: str | None = None
                 try:
-                    file_url = self.upload_file_to_s3(file_obj, file_type.replace('_file', ''), user.id)
+                    upload_res = self.upload_file_to_s3(file_obj, file_type.replace('_file', ''), user.id)
+                    # Normalize upload result to a URL string
+                    if isinstance(upload_res, dict):
+                        if upload_res.get('success'):
+                            file_url = upload_res.get('url')
+                        else:
+                            file_url = None
+                    else:
+                        file_url = str(upload_res) if upload_res else None
                     uploaded_files[file_type] = file_url
-                    logger.info(f"Uploaded {file_type} to S3 for user {user.id}")
+                    logger.info(f"Uploaded {file_type} for user {user.id} → URL: {file_url}")
                 except Exception as e:
                     logger.error(f"Failed to upload {file_type} for user {user.id}: {str(e)}")
                     # Continue with registration even if file upload fails
                 
-                # Create UserDocument record regardless of S3 upload success/failure
+                # Create UserDocument record regardless
                 document_name, expiry_date = document_mapping[file_type]
                 try:
                     valid_id = ValidID.objects.get(name=document_name)
                     UserDocument.objects.create(
                         user=user,
                         id_type=valid_id,
-                        document_file=file_obj.name,  # Store original filename
-                        file_url=file_url,  # Will be None if S3 upload failed
+                        document_file=getattr(file_obj, 'name', '') or document_name,
+                        file_url=file_url,
                         expiry_date=expiry_date,
                         status=UserDocument.DocumentStatus.PENDING
                     )
-                    logger.info(f"Created UserDocument for {document_name} for user {user.id} (File: {file_obj.name}, URL: {file_url})")
+                    logger.info(f"Created UserDocument for {document_name} for user {user.id} (URL: {file_url})")
                 except ValidID.DoesNotExist:
                     logger.error(f"ValidID '{document_name}' not found for user {user.id}")
                 except Exception as e:
