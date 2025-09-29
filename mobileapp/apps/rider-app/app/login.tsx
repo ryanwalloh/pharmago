@@ -1,13 +1,17 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Image, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Image, ActivityIndicator, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { apiService } from '../../customer-app/services/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function RiderLoginScreen() {
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<string | null>(null);
+  const [identifier, setIdentifier] = useState('');
+  const [password, setPassword] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   const handleTestBackend = async () => {
     try {
@@ -25,13 +29,59 @@ export default function RiderLoginScreen() {
       setTesting(false);
     }
   };
+  const handleLogin = async () => {
+    if (!identifier.trim() || !password.trim()) {
+      Alert.alert('Missing credentials', 'Please enter your phone/email and password.');
+      return;
+    }
+    try {
+      setSubmitting(true);
+      // Backend login uses username+password; we map identifier to username
+      const res = await apiService.loginUser(identifier.trim(), password);
+      if (!res.success) {
+        Alert.alert('Login failed', res.error || 'Invalid credentials');
+        setSubmitting(false);
+        return;
+      }
+      // Verify role == rider and redirect to rider home
+      const user = (res.data as any)?.user || res.data;
+      if (!user || user.role !== 'rider') {
+        Alert.alert('Access denied', 'This account is not a rider.');
+        setSubmitting(false);
+        return;
+      }
+      try {
+        // Persist minimal rider user info for home screen display
+        await AsyncStorage.setItem('rider_user', JSON.stringify(user));
+      } catch {}
+      // Store token if backend returned one (optional in current backend)
+      try {
+        const accessToken = (res.data as any)?.tokens?.access;
+        apiService.setAuthToken(accessToken || null);
+      } catch {}
+      // Navigate to rider home page
+      router.replace('/home');
+    } catch (e) {
+      Alert.alert('Network error', 'Please check your connection and try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <View style={styles.container}>
       <Image source={require('../assets/logo.png')} style={styles.logo} resizeMode="contain" />
       <Text style={styles.title}>Rider Login</Text>
       <View style={styles.form}>
         <Text style={styles.label}>Phone or Email</Text>
-        <TextInput style={styles.input} placeholder="e.g. 0917 123 4567" placeholderTextColor="#9E9E9E" />
+        <TextInput
+          style={styles.input}
+          placeholder="e.g. 0917 123 4567 or you@example.com"
+          placeholderTextColor="#9E9E9E"
+          value={identifier}
+          onChangeText={setIdentifier}
+          autoCapitalize="none"
+        />
         <Text style={[styles.label, { marginTop: 14 }]}>Password</Text>
         <View style={styles.passwordRow}>
           <TextInput
@@ -39,6 +89,8 @@ export default function RiderLoginScreen() {
             placeholder="••••••••"
             secureTextEntry={!showPassword}
             placeholderTextColor="#9E9E9E"
+            value={password}
+            onChangeText={setPassword}
           />
           <TouchableOpacity style={styles.eyeButton} onPress={() => setShowPassword(!showPassword)}>
             <Image
@@ -48,8 +100,8 @@ export default function RiderLoginScreen() {
             />
           </TouchableOpacity>
         </View>
-        <TouchableOpacity style={styles.loginButton} activeOpacity={0.8}>
-          <Text style={styles.loginText}>Login</Text>
+        <TouchableOpacity style={styles.loginButton} activeOpacity={0.8} onPress={handleLogin} disabled={submitting}>
+          {submitting ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.loginText}>Login</Text>}
         </TouchableOpacity>
         <TouchableOpacity style={styles.googleButton} activeOpacity={0.8}>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>

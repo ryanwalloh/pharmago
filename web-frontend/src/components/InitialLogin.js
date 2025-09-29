@@ -122,7 +122,27 @@ const InitialLogin = () => {
         setSuccess(true);
         // Store user info in localStorage for future use
         localStorage.setItem('pharmacy_user', JSON.stringify(response.data.user));
-        localStorage.setItem('pharmacy_info', JSON.stringify(response.data.pharmacy));
+        // Normalize pharmacy object for dashboard expectations
+        const p = response.data.pharmacy || null;
+        const normalized = p ? { ...p, name: p.name || p.pharmacy_name || '' } : null;
+        localStorage.setItem('pharmacy_info', JSON.stringify(normalized));
+
+        // Attempt to log in immediately to obtain a token for subsequent API calls
+        try {
+          const loginPayload = {
+            email: formData.email || undefined,
+            username: formData.username || undefined,
+            password: formData.password,
+          };
+          const loginResp = await axios.post(`http://127.0.0.1:8000/api/pharmacy-login/`, loginPayload);
+          const accessToken = loginResp?.data?.tokens?.access;
+          if (accessToken) {
+            // Reuse existing interceptor key expected by api.js
+            localStorage.setItem('pharmago_admin_token', accessToken);
+          }
+        } catch (e) {
+          console.warn('Post-setup login failed (continuing without token):', e?.response?.data || e?.message);
+        }
       } else {
         setError(response.data.message || 'Setup failed. Please try again.');
       }

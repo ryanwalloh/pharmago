@@ -5,7 +5,7 @@ import os
 import boto3
 from botocore.exceptions import ClientError, NoCredentialsError
 from django.conf import settings
-from django.core.files.storage import Storage
+from django.core.files.storage import Storage, default_storage
 from django.utils import timezone
 import logging
 from typing import Optional, Dict, Any
@@ -54,10 +54,23 @@ class S3Storage:
             Dict containing upload result with 'success', 'url', 'error' keys
         """
         if not self.s3_client:
-            return {
-                'success': False,
-                'error': 'S3 client not initialized. Check AWS credentials.'
-            }
+            try:
+                # Fallback to default Django storage (local or configured backend)
+                saved_path = default_storage.save(object_key, file_obj)
+                file_url = default_storage.url(saved_path)
+                logger.warning("S3 client not initialized; saved file to default storage.")
+                return {
+                    'success': True,
+                    'url': file_url,
+                    'bucket': None,
+                    'key': saved_path,
+                }
+            except Exception as e:
+                logger.error(f"Default storage upload failed: {str(e)}")
+                return {
+                    'success': False,
+                    'error': f'Default storage upload failed: {str(e)}'
+                }
         
         try:
             # Prepare upload parameters
@@ -91,16 +104,50 @@ class S3Storage:
             error_code = e.response['Error']['Code']
             error_message = e.response['Error']['Message']
             logger.error(f"S3 upload failed: {error_code} - {error_message}")
-            return {
-                'success': False,
-                'error': f"S3 upload failed: {error_message}"
-            }
+            # Fallback to default storage on S3 failure
+            try:
+                try:
+                    file_obj.seek(0)
+                except Exception:
+                    pass
+                saved_path = default_storage.save(object_key, file_obj)
+                file_url = default_storage.url(saved_path)
+                logger.warning("S3 upload failed; saved file to default storage.")
+                return {
+                    'success': True,
+                    'url': file_url,
+                    'bucket': None,
+                    'key': saved_path,
+                }
+            except Exception as fe:
+                logger.error(f"Default storage upload fallback failed: {str(fe)}")
+                return {
+                    'success': False,
+                    'error': f"S3 upload failed and fallback failed: {error_message} / {str(fe)}"
+                }
         except Exception as e:
             logger.error(f"Unexpected error during S3 upload: {str(e)}")
-            return {
-                'success': False,
-                'error': f"Upload failed: {str(e)}"
-            }
+            # Fallback to default storage on unexpected failure
+            try:
+                try:
+                    file_obj.seek(0)
+                except Exception:
+                    pass
+                saved_path = default_storage.save(object_key, file_obj)
+                file_url = default_storage.url(saved_path)
+                logger.warning("S3 upload exception; saved file to default storage.")
+                return {
+                    'success': True,
+                    'url': file_url,
+                    'bucket': None,
+                    'key': saved_path,
+                }
+            except Exception as fe:
+                logger.error(f"Default storage upload fallback failed: {str(fe)}")
+                return {
+                    'success': False,
+                    'error': f"Upload failed and fallback failed: {str(e)} / {str(fe)}"
+                }
     
     def delete_file(self, bucket_name: str, object_key: str) -> Dict[str, Any]:
         """

@@ -1374,7 +1374,10 @@ const PharmacyDashboard = () => {
                 <img className="w-3/5 lg:w-4/5" src="/images/productArt.png" alt="Waiting" />
               </div>
               <button
-                onClick={() => setShowAddProductModal(true)}
+                onClick={() => {
+                  if (activeView !== 'orders') setActiveView('orders');
+                  setShowAddProductModal(true);
+                }}
                 className="p-3 lg:p-5 flex justify-center items-center w-full bg-black text-white rounded-2xl border-none text-base lg:text-xl cursor-pointer"
               >
                 <span className="mr-2 lg:mr-3">+</span> Add Product
@@ -1452,7 +1455,10 @@ const PharmacyDashboard = () => {
                       </p>
                       {!searchQuery && (
                         <button
-                          onClick={() => setShowAddProductModal(true)}
+                          onClick={() => {
+                            if (activeView !== 'orders') setActiveView('orders');
+                            setShowAddProductModal(true);
+                          }}
                           className="bg-[#2c786c] text-white px-6 py-3 rounded-lg font-semibold hover:bg-[#1e5a52] transition-colors"
                         >
                           Add Products
@@ -1593,7 +1599,11 @@ const PharmacyDashboard = () => {
                         {/* Quick Add Button */}
                         <button 
                           className="w-full p-6 bg-gradient-to-r from-[#2c786c] to-[#3a9b8e] text-white rounded-xl hover:from-[#1e5a52] hover:to-[#2c786c] transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-1"
-                          onClick={handleQuickAdd}
+                          onClick={() => {
+                            // ensure modal is visible and list preloads immediately
+                            if (!showAddProductModal) setShowAddProductModal(true);
+                            handleQuickAdd();
+                          }}
                         >
                           <div className="flex items-center space-x-4">
                             <div className="w-14 h-14 bg-white bg-opacity-20 rounded-full flex items-center justify-center flex-shrink-0">
@@ -1614,6 +1624,7 @@ const PharmacyDashboard = () => {
                         <button 
                           className="w-full p-6 bg-gradient-to-r from-[#f59e0b] to-[#f97316] text-white rounded-xl hover:from-[#d97706] hover:to-[#ea580c] transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-1"
                           onClick={() => {
+                            if (!showAddProductModal) setShowAddProductModal(true);
                             fetchMedicineCategories();
                             setShowCustomAdd(true);
                           }}
@@ -2190,7 +2201,7 @@ const PharmacyDashboard = () => {
                       <div className="max-h-32 overflow-y-auto space-y-1">
                         {successData.addedProducts.map((product, index) => (
                           <div key={index} className="text-xs text-gray-600 bg-green-50 px-2 py-1 rounded">
-                            • {product.name} - ₱{product.price.toFixed(2)}
+                            • {product.name} - ₱{(typeof product.price === 'number' ? product.price : parseFloat(product.price || 0)).toFixed(2)}
                             {successModalType === 'quick' && product.generic_name && (
                               <span className="text-gray-500 ml-1">({product.generic_name})</span>
                             )}

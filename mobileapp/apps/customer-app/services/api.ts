@@ -230,73 +230,12 @@ class ApiService {
   }
 
   async registerUser(userData: UserRegistrationData): Promise<ApiResponse<any>> {
-    // Use the direct registration endpoint that bypasses CSRF
-    const directUrl = this.baseURL.replace('/api/v1', '') + '/api/user-register/';
-    
-    try {
-      console.log('🚀 Direct API Request:', {
-        url: directUrl,
-        method: 'POST',
-        body: userData,
-        timestamp: new Date().toISOString(),
-      });
-
-      const response = await fetch(directUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(userData),
-      });
-
-      console.log('📡 Direct API Response Status:', {
-        status: response.status,
-        statusText: response.statusText,
-        ok: response.ok,
-        url: response.url,
-        timestamp: new Date().toISOString(),
-      });
-
-      const data = await response.json();
-      console.log('📄 Direct API Response Data:', {
-        data,
-        timestamp: new Date().toISOString(),
-      });
-
-      if (response.ok) {
-        console.log('✅ Direct API Request Successful:', {
-          message: data.message || 'Success',
-          success: true,
-          timestamp: new Date().toISOString(),
-        });
-        return {
-          success: true,
-          data,
-          message: data.message || 'Registration successful',
-        };
-      } else {
-        console.log('❌ Direct API Request Failed:', {
-          error: data.error || data.details || 'Unknown error',
-          success: false,
-          timestamp: new Date().toISOString(),
-        });
-        return {
-          success: false,
-          error: data.error || data.details || 'Registration failed',
-          data,
-        };
-      }
-    } catch (error) {
-      console.log('💥 Direct API Network Error:', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        stack: error instanceof Error ? error.stack : undefined,
-        timestamp: new Date().toISOString(),
-      });
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Network request failed',
-      };
-    }
+    // Use versioned registration endpoint per URL refactor
+    return this.makeRequest('/users/register/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(userData),
+    });
   }
 
   async loginUser(email: string, password: string): Promise<ApiResponse<any>> {
