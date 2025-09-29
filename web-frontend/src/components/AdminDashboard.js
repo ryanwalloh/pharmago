@@ -18,6 +18,8 @@ const AdminDashboard = () => {
   const [activeTile, setActiveTile] = useState('total'); // 'total', 'pending', 'active', 'suspended'
   const [pendingPharmacies, setPendingPharmacies] = useState([]);
   const [loadingPendingPharmacies, setLoadingPendingPharmacies] = useState(false);
+  const [pharmacyList, setPharmacyList] = useState([]);
+  const [loadingPharmacyList, setLoadingPharmacyList] = useState(false);
   
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -75,7 +77,8 @@ const AdminDashboard = () => {
       console.log('Fetching pharmacy statistics (no auth required)...');
       
       // Try the new direct endpoint (bypasses all authentication)
-      const response = await axios.get('http://127.0.0.1:8000/api/pharmacy-stats/');
+      const base = (process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
+      const response = await axios.get(`${base}/api/pharmacy-stats/`);
       console.log('API Response:', response.data);
       
       setPharmacyStats(response.data);
@@ -143,7 +146,8 @@ const AdminDashboard = () => {
       console.log('Fetching pending pharmacies...');
       
       // Use the pharmacy stats endpoint which now includes pending pharmacies data
-      const response = await axios.get('http://127.0.0.1:8000/api/pharmacy-stats/');
+      const base = (process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
+      const response = await axios.get(`${base}/api/pharmacy-stats/`);
       console.log('Pending Pharmacies API Response:', response.data);
       
       if (response.data.pendingPharmaciesData) {
@@ -182,6 +186,29 @@ const AdminDashboard = () => {
       ]);
     } finally {
       setLoadingPendingPharmacies(false);
+    }
+  };
+
+  // Fetch active pharmacies for Manage Pharmacies list (direct endpoint, no auth)
+  const fetchActivePharmacies = async () => {
+    try {
+      setLoadingPharmacyList(true);
+      const base = (process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
+      const resp = await axios.get(`${base}/api/active-pharmacies/`);
+      const arr = Array.isArray(resp.data) ? resp.data : [];
+      const mapped = arr.map(p => ({
+        id: p.id,
+        name: p.pharmacy_name || '',
+        address: [p.street_address, p.barangay, p.city, p.province].filter(Boolean).join(', '),
+        business_phone: p.business_phone || '',
+        business_email: p.business_email || '',
+      }));
+      setPharmacyList(mapped);
+    } catch (err) {
+      console.error('Error fetching active pharmacies:', err?.response?.status, err?.message, err?.response?.data);
+      setPharmacyList([]);
+    } finally {
+      setLoadingPharmacyList(false);
     }
   };
 
@@ -289,7 +316,8 @@ const AdminDashboard = () => {
     
     try {
       console.log('Fetching detailed pharmacy data for ID:', pharmacy.id);
-      const response = await axios.get(`http://127.0.0.1:8000/api/pharmacy-details/${pharmacy.id}/`);
+      const base = (process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
+      const response = await axios.get(`${base}/api/pharmacy-details/${pharmacy.id}/`);
       console.log('Detailed pharmacy data received:', response.data);
       
       setDetailedPharmacyData(response.data);
@@ -317,7 +345,8 @@ const AdminDashboard = () => {
     setRiderModalError(null);
     setDetailedRiderData(null);
     try {
-      const response = await axios.get(`http://127.0.0.1:8000/api/rider-details/${rider.id}/`);
+      const base = (process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
+      const response = await axios.get(`${base}/api/rider-details/${rider.id}/`);
       setDetailedRiderData(response.data);
       setRiderModalLoading(false);
     } catch (err) {
@@ -338,7 +367,8 @@ const AdminDashboard = () => {
     if (!selectedRider) return;
     try {
       setRiderModalLoading(true);
-      const response = await axios.post(`http://127.0.0.1:8000/api/approve-rider/${selectedRider.id}/`);
+      const base = (process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
+      const response = await axios.post(`${base}/api/approve-rider/${selectedRider.id}/`);
       if (response.data.success) {
         setRiderSuccessData({
           riderName: `${selectedRider.first_name} ${selectedRider.last_name}`,
@@ -376,7 +406,8 @@ const AdminDashboard = () => {
       setModalLoading(true);
       console.log('Approving pharmacy:', selectedPharmacy);
       
-      const response = await axios.post(`http://127.0.0.1:8000/api/approve-pharmacy/${selectedPharmacy.id}/`);
+      const base = (process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
+      const response = await axios.post(`${base}/api/approve-pharmacy/${selectedPharmacy.id}/`);
       console.log('Approval response:', response.data);
       
       if (response.data.success) {
@@ -419,22 +450,14 @@ const AdminDashboard = () => {
   useEffect(() => {
     const checkAuthAndFetchData = () => {
       const token = localStorage.getItem('pharmago_admin_token');
-      
       if (!token) {
-        console.log('No token found in AdminDashboard, redirecting to login');
         navigate('/pharmago-admin');
         return;
       }
-      
-      console.log('Token found in AdminDashboard:', token.substring(0, 20) + '...');
-      console.log('Full token in AdminDashboard:', token);
-      
-      // Fetch pharmacy statistics
       fetchPharmacyStats();
-      // Fetch rider statistics
+      fetchActivePharmacies();
       fetchRiderStats();
     };
-    
     checkAuthAndFetchData();
   }, [navigate]);
 
@@ -447,6 +470,17 @@ const AdminDashboard = () => {
       }
     }
   }, [activeNav, riderActiveTile]);
+
+  // When navigating to Manage Pharmacies, refresh stats and active list
+  useEffect(() => {
+    if (activeNav === 'Manage Pharmacies') {
+      fetchPharmacyStats();
+      fetchActivePharmacies();
+      if (activeTile === 'pending') {
+        fetchPendingPharmacies();
+      }
+    }
+  }, [activeNav, activeTile]);
 
   const navItems = [
     { id: 'Dashboard', label: 'Dashboard', icon: 'M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z' },
@@ -755,7 +789,7 @@ const AdminDashboard = () => {
                         <div key={doc.id} className="bg-white rounded-lg p-4 border border-[#D5E8D4]">
                           <div className="w-full h-48 bg-gray-100 rounded-lg mb-3 overflow-hidden flex items-center justify-center">
                             {doc.id ? (
-                              <img src={`http://127.0.0.1:8000/api/document/${doc.id}/`} alt="Driver License" className="w-full h-full object-cover cursor-pointer hover:opacity-80 transition-opacity duration-200" onClick={() => window.open(`http://127.0.0.1:8000/api/document/${doc.id}/`, '_blank')} />
+                              <img src={`${(process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '')}/api/document/${doc.id}/`} alt="Driver License" className="w-full h-full object-cover cursor-pointer hover:opacity-80 transition-opacity duration-200" onClick={() => window.open(`${(process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '')}/api/document/${doc.id}/`, '_blank')} />
                             ) : (
                               <span className="text-[#999999] text-sm">No preview</span>
                             )}
@@ -839,81 +873,12 @@ const AdminDashboard = () => {
     { name: 'Express Med Store', email: 'orders@expressmed.ph', sales: 856, avatar: 'EM' }
   ];
 
-  // Mock data for pharmacy management (fallback data) - used in fetchPharmacyStats error handling
-
-  const pharmacyList = [
-    {
-      id: 1,
-      name: 'ABC Pharmacy',
-      address: '123 Main Street, Quezon City, Metro Manila',
-      ownerName: 'Dr. Maria Santos',
-      contactNumber: '+63 912 345 6789',
-      profilePicture: '/images/pharmacy-placeholder.png'
-    },
-    {
-      id: 2,
-      name: 'BestCare Drugstore',
-      address: '456 Oak Avenue, Makati City, Metro Manila',
-      ownerName: 'Dr. Juan Dela Cruz',
-      contactNumber: '+63 917 234 5678',
-      profilePicture: '/images/pharmacy-placeholder.png'
-    },
-    {
-      id: 3,
-      name: 'CityMed Pharmacy',
-      address: '789 Pine Street, Taguig City, Metro Manila',
-      ownerName: 'Dr. Ana Rodriguez',
-      contactNumber: '+63 918 345 6789',
-      profilePicture: '/images/pharmacy-placeholder.png'
-    },
-    {
-      id: 4,
-      name: 'Family Health Pharmacy',
-      address: '321 Elm Road, Pasig City, Metro Manila',
-      ownerName: 'Dr. Carlos Mendoza',
-      contactNumber: '+63 919 456 7890',
-      profilePicture: '/images/pharmacy-placeholder.png'
-    },
-    {
-      id: 5,
-      name: 'Green Cross Pharmacy',
-      address: '654 Maple Drive, Mandaluyong City, Metro Manila',
-      ownerName: 'Dr. Sofia Garcia',
-      contactNumber: '+63 920 567 8901',
-      profilePicture: '/images/pharmacy-placeholder.png'
-    },
-    {
-      id: 6,
-      name: 'HealthFirst Drugstore',
-      address: '987 Cedar Lane, San Juan City, Metro Manila',
-      ownerName: 'Dr. Miguel Torres',
-      contactNumber: '+63 921 678 9012',
-      profilePicture: '/images/pharmacy-placeholder.png'
-    },
-    {
-      id: 7,
-      name: 'MediCare Express',
-      address: '147 Birch Street, Marikina City, Metro Manila',
-      ownerName: 'Dr. Elena Villanueva',
-      contactNumber: '+63 922 789 0123',
-      profilePicture: '/images/pharmacy-placeholder.png'
-    },
-    {
-      id: 8,
-      name: 'QuickMed Solutions',
-      address: '258 Spruce Avenue, Las Piñas City, Metro Manila',
-      ownerName: 'Dr. Roberto Silva',
-      contactNumber: '+63 923 890 1234',
-      profilePicture: '/images/pharmacy-placeholder.png'
-    }
-  ].sort((a, b) => a.name.localeCompare(b.name));
-
   // Filter pharmacies based on search term
   const filteredPharmacies = pharmacyList.filter(pharmacy =>
-    pharmacy.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    pharmacy.address.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    pharmacy.ownerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    pharmacy.contactNumber.includes(searchTerm)
+    (pharmacy.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (pharmacy.address || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (pharmacy.business_phone || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (pharmacy.business_email || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const renderDashboard = () => (
@@ -1332,8 +1297,7 @@ const AdminDashboard = () => {
             ) : (
               <div className="text-center py-8">
                 <svg className="mx-auto h-12 w-12 text-[#999999]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                 <h3 className="mt-2 text-sm font-medium text-[#666666]">No pending pharmacies</h3>
                 <p className="mt-1 text-sm text-[#999999]">All pharmacies have been reviewed</p>
               </div>
@@ -1348,18 +1312,18 @@ const AdminDashboard = () => {
               >
                 {/* Pharmacy Profile Picture */}
                 <div className="w-12 h-12 bg-gradient-to-br from-[#4DAF7C] to-[#6BBF9A] rounded-xl flex items-center justify-center text-white font-bold text-sm mr-4">
-                  {pharmacy.name.split(' ').map(word => word[0]).join('').substring(0, 2)}
+                  {(pharmacy.name || '').split(' ').map(word => word[0]).join('').substring(0, 2)}
                 </div>
                 
                 {/* Pharmacy Details */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
                     <div className="flex-1">
-                      <h3 className="font-semibold text-[#2C7A5D] text-lg">{pharmacy.name}</h3>
-                      <p className="text-sm text-[#666666] mb-1">{pharmacy.address}</p>
+                      <h3 className="font-semibold text-[#2C7A5D] text-lg">{pharmacy.name || 'Unnamed Pharmacy'}</h3>
+                      <p className="text-sm text-[#666666] mb-1">{pharmacy.address || 'No address'}</p>
                       <div className="flex items-center space-x-4 text-sm text-[#999999]">
-                        <span>Owner: {pharmacy.ownerName}</span>
-                        <span>Contact: {pharmacy.contactNumber}</span>
+                        <span>Phone: {pharmacy.business_phone || 'N/A'}</span>
+                        <span>Email: {pharmacy.business_email || 'N/A'}</span>
                       </div>
                     </div>
                     
@@ -1597,10 +1561,10 @@ const AdminDashboard = () => {
                                 <>
                                   {isImage ? (
                                     <img
-                                      src={`http://127.0.0.1:8000/api/document/${document.id}/`}
+                                      src={`${(process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '')}/api/document/${document.id}/`}
                                       alt={document.document_type}
                                       className="w-full h-full object-cover cursor-pointer hover:opacity-80 transition-opacity duration-200"
-                                      onClick={() => window.open(`http://127.0.0.1:8000/api/document/${document.id}/`, '_blank')}
+                                      onClick={() => window.open(`${(process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '')}/api/document/${document.id}/`, '_blank')}
                                       onError={(e) => {
                                         e.target.style.display = 'none';
                                         e.target.nextSibling.style.display = 'flex';
@@ -1608,7 +1572,7 @@ const AdminDashboard = () => {
                                     />
                                   ) : isPdf ? (
                                     <div className="w-full h-full flex flex-col items-center justify-center bg-red-50 cursor-pointer hover:bg-red-100 transition-colors duration-200"
-                                         onClick={() => window.open(`http://127.0.0.1:8000/api/document/${document.id}/`, '_blank')}>
+                                         onClick={() => window.open(`${(process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '')}/api/document/${document.id}/`, '_blank')}>
                                       <svg className="h-12 w-12 text-red-500 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
                                       </svg>
@@ -1616,7 +1580,7 @@ const AdminDashboard = () => {
                                     </div>
                                   ) : (
                                     <div className="w-full h-full flex flex-col items-center justify-center bg-gray-50 cursor-pointer hover:bg-gray-100 transition-colors duration-200"
-                                         onClick={() => window.open(`http://127.0.0.1:8000/api/document/${document.id}/`, '_blank')}>
+                                         onClick={() => window.open(`${(process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '')}/api/document/${document.id}/`, '_blank')}>
                                       <svg className="h-12 w-12 text-gray-500 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                       </svg>
@@ -1665,7 +1629,7 @@ const AdminDashboard = () => {
                               {document.file_url && (
                                 <div className="mt-2 space-y-1">
                                   <button
-                                    onClick={() => window.open(`http://127.0.0.1:8000/api/document/${document.id}/`, '_blank')}
+                                    onClick={() => window.open(`${(process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '')}/api/document/${document.id}/`, '_blank')}
                                     className="w-full px-3 py-1 bg-[#4DAF7C] text-white text-xs rounded hover:bg-[#6BBF9A] transition-colors duration-200"
                                   >
                                     {isImage ? 'View Full Size' : isPdf ? 'Open PDF' : 'View Document'}
@@ -1744,8 +1708,7 @@ const AdminDashboard = () => {
             <div className="flex items-center space-x-3">
               <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-green-600 rounded-xl flex items-center justify-center text-white">
                 <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
               </div>
               <div>
                 <h2 className="text-xl font-bold text-[#2C7A5D]">Pharmacy Approved!</h2>

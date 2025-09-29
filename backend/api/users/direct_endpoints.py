@@ -1,5 +1,8 @@
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
+from django.contrib.auth import get_user_model
+from django.utils import timezone
+from django.http import JsonResponse
 
 
 @csrf_exempt
@@ -441,3 +444,159 @@ def pharmacy_login(request):
         return JsonResponse({'error': 'Login failed', 'message': str(e)}, status=500)
 
 
+
+@csrf_exempt
+def complete_user_setup(request, token):
+    """Complete initial user setup (set username/password) using a valid login token.
+
+    POST body: { "username": str, "password": str }
+    """
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed', 'message': 'Only POST requests are allowed'}, status=405)
+
+    try:
+        import json
+        payload = json.loads(request.body or '{}')
+        desired_username = (payload.get('username') or '').strip()
+        new_password = (payload.get('password') or '').strip()
+
+        if not desired_username or not new_password:
+            return JsonResponse({'success': False, 'message': 'username and password are required'}, status=400)
+
+        from api.users.models import TemporaryLoginToken, User, Pharmacy
+        from .security import PasswordValidator
+
+        # Locate token and validate
+        try:
+            login_token = TemporaryLoginToken.objects.get(token=token)
+        except TemporaryLoginToken.DoesNotExist:
+            return JsonResponse({'success': False, 'message': 'Invalid or expired token'}, status=404)
+
+        if not login_token.is_valid():
+            return JsonResponse({'success': False, 'message': 'Invalid or expired token'}, status=400)
+
+        user = login_token.user
+
+        # Ensure user is a pharmacy account
+        if user.role != User.UserRole.PHARMACY:
+            return JsonResponse({'success': False, 'message': 'This setup link is only for pharmacy accounts'}, status=403)
+
+        # Validate password strength
+        PasswordValidator().validate(new_password, user=user)
+
+        # Ensure username uniqueness if provided
+        if desired_username:
+            existing = User.objects.filter(username=desired_username).exclude(id=user.id).exists()
+            if existing:
+                return JsonResponse({'success': False, 'message': 'Username is already taken'}, status=400)
+
+        # Apply username/password and activate account
+        if desired_username:
+            user.username = desired_username
+        user.set_password(new_password)
+        user.status = User.UserStatus.ACTIVE
+        user.is_email_verified = True if user.email else user.is_email_verified
+        user.save()
+
+        # Mark token used
+        login_token.mark_as_used()
+
+        # Bring basic pharmacy context
+        ph = None
+        try:
+            ph = Pharmacy.objects.get(user=user)
+        except Pharmacy.DoesNotExist:
+            ph = None
+
+        return JsonResponse({
+            'success': True,
+            'message': 'Account setup complete',
+            'user': {
+                'id': user.id,
+                'email': user.email,
+                'username': user.username,
+                'role': user.role,
+                'status': user.status,
+            },
+            'pharmacy': ({
+                'id': ph.id,
+                'pharmacy_name': getattr(ph, 'pharmacy_name', ''),
+                'name': getattr(ph, 'pharmacy_name', ''),
+                'business_email': getattr(ph, 'business_email', ''),
+                'business_phone': getattr(ph, 'business_phone', ''),
+                'city': getattr(ph, 'city', ''),
+                'province': getattr(ph, 'province', ''),
+            } if ph else None)
+        })
+    except ValidationError as ve:  # from PasswordValidator
+        try:
+            messages = ve.messages if hasattr(ve, 'messages') else [str(ve)]
+        except Exception:
+            messages = [str(ve)]
+        return JsonResponse({'success': False, 'message': messages[0]}, status=400)
+    except Exception as e:
+        return JsonResponse({'success': False, 'message': 'Setup failed. Please try again.'}, status=500)
+
+
+@csrf_exempt
+def pharmacy_register(request):
+    """Direct endpoint to register a pharmacy without authentication (multipart form).
+
+    Accepts multipart/form-data with fields aligned to PharmacyRegistrationSerializer
+    including optional file uploads (e.g., pharmacy_license_file, business_permit_file,
+    owner_primary_id_file, storefront_image_file). JSON fields such as operating_hours,
+    services_offered, and payment_methods_accepted may be provided as JSON strings.
+    """
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed', 'message': 'Only POST requests are allowed'}, status=405)
+
+    try:
+        from .serializers import PharmacyRegistrationSerializer
+        import json
+
+        # Build data dict from POST with conversions
+        raw = request.POST.copy()
+
+        # Coerce JSON fields if provided as strings
+        json_fields = ['operating_hours', 'services_offered', 'payment_methods_accepted']
+        data = {}
+        for k, v in raw.items():
+            if k in json_fields:
+                try:
+                    data[k] = json.loads(v) if isinstance(v, str) else v
+                except Exception:
+                    # Leave as-is; serializer will raise friendly error
+                    data[k] = v
+            elif k.endswith('_uploaded'):
+                lv = str(v).strip().lower()
+                data[k] = True if lv in ('1', 'true', 'yes', 'on') else False
+            else:
+                data[k] = v
+
+        # Attach file objects if present
+        file_field_names = [
+            'pharmacy_license_file',
+            'business_permit_file',
+            'owner_primary_id_file',
+            'storefront_image_file',
+        ]
+        for fname in file_field_names:
+            f = request.FILES.get(fname)
+            if f is not None:
+                data[fname] = f
+
+        serializer = PharmacyRegistrationSerializer(data=data)
+        if not serializer.is_valid():
+            return JsonResponse({
+                'error': 'Validation failed',
+                'validation_errors': serializer.errors,
+            }, status=400)
+
+        pharmacy = serializer.save()
+        return JsonResponse({
+            'success': True,
+            'message': 'Pharmacy registration submitted successfully',
+            'pharmacy_id': pharmacy.id,
+        }, status=201)
+    except Exception as e:
+        return JsonResponse({'error': 'Registration failed', 'message': str(e)}, status=500)

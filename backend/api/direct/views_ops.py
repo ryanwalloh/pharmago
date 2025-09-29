@@ -184,9 +184,20 @@ def add_medicines_to_inventory(request):
                         updated = True
                     if updated:
                         inv.save()
-                added.append(inv.id)
+                added.append({
+                    'id': inv.id,
+                    'name': inv.name,
+                    'generic_name': getattr(mc, 'generic_name', None),
+                    'form': inv.form,
+                    'dosage': inv.dosage,
+                    'price': _safe_float(inv.price, 0),
+                })
             except Exception as e:
-                skipped.append({'id': mid, 'error': str(e)})
+                skipped.append({
+                    'id': mid,
+                    'name': (m.get('name') if isinstance(m, dict) else None) or f"ID {mid}",
+                    'reason': str(e),
+                })
 
         return JsonResponse({
             'success': True,
@@ -220,9 +231,25 @@ def add_custom_products_to_inventory(request):
         skipped = []
         for p in products:
             try:
-                cat_name = p.get('category') or 'Custom Products'
-                from api.inventory.models import MedicineForm as _MF  # not used, keep for future
-                cat, _ = MedicineCategory.objects.get_or_create(name=cat_name)
+                # Resolve category by id or name (accept both)
+                cat_input = p.get('category')
+                cat = None
+                if isinstance(cat_input, int):
+                    try:
+                        cat = MedicineCategory.objects.get(id=cat_input)
+                    except MedicineCategory.DoesNotExist:
+                        cat = None
+                elif isinstance(cat_input, str) and cat_input.strip():
+                    # If numeric string, try ID first; else treat as name
+                    if cat_input.isdigit():
+                        try:
+                            cat = MedicineCategory.objects.get(id=int(cat_input))
+                        except MedicineCategory.DoesNotExist:
+                            cat = None
+                    if cat is None:
+                        cat, _ = MedicineCategory.objects.get_or_create(name=cat_input.strip())
+                if cat is None:
+                    cat, _ = MedicineCategory.objects.get_or_create(name='Custom Products')
                 inv = PharmacyInventory.objects.create(
                     pharmacy=pharmacy,
                     medicine=None,
@@ -236,9 +263,18 @@ def add_custom_products_to_inventory(request):
                     original_price=_safe_float(p.get('original_price', p.get('price', 0))),
                     cost_price=_safe_float(p.get('cost_price', 0)),
                 )
-                added.append(inv.id)
+                added.append({
+                    'id': inv.id,
+                    'name': inv.name,
+                    'form': inv.form,
+                    'dosage': inv.dosage,
+                    'price': _safe_float(inv.price, 0),
+                })
             except Exception as e:
-                skipped.append({'name': p.get('name'), 'error': str(e)})
+                skipped.append({
+                    'name': p.get('name') or 'Custom Product',
+                    'reason': str(e),
+                })
 
         return JsonResponse({
             'success': True,
