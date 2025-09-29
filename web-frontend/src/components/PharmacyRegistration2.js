@@ -63,69 +63,83 @@ const PharmacyRegistration2 = () => {
         fullscreenControl: false
       });
 
-      const markerInstance = new window.google.maps.Marker({
-        position: { lat: defaultLat, lng: defaultLng },
-        map: mapInstance,
-        draggable: true,
-        title: 'Drag to set pharmacy location'
-      });
-
-      // Handle marker drag events
-      markerInstance.addListener('dragend', () => {
-        const position = markerInstance.getPosition();
-        const lat = position.lat();
-        const lng = position.lng();
-        
-        // Update coordinates
-        setFormData(prev => ({
-          ...prev,
-          coordinates: `${lat}, ${lng}`
-        }));
-
-        // Reverse geocode to get address
-        const geocoder = new window.google.maps.Geocoder();
-        geocoder.geocode({ location: { lat, lng } }, (results, status) => {
-          if (status === 'OK' && results[0]) {
-            setFormData(prev => ({
-              ...prev,
-              address: results[0].formatted_address
-            }));
-          }
+      // Prefer AdvancedMarkerElement when available to avoid deprecation warnings
+      let markerInstance;
+      if (window.google?.maps?.marker?.AdvancedMarkerElement) {
+        markerInstance = new window.google.maps.marker.AdvancedMarkerElement({
+          position: { lat: defaultLat, lng: defaultLng },
+          map: mapInstance,
+          gmpDraggable: true,
+          title: 'Drag to set pharmacy location'
         });
-      });
-
-      // Handle map click events
-      mapInstance.addListener('click', (event) => {
-        const lat = event.latLng.lat();
-        const lng = event.latLng.lng();
-        
-        // Move marker to clicked location
-        markerInstance.setPosition({ lat, lng });
-        
-        // Update coordinates
-        setFormData(prev => ({
-          ...prev,
-          coordinates: `${lat}, ${lng}`
-        }));
-
-        // Reverse geocode to get address
-        const geocoder = new window.google.maps.Geocoder();
-        geocoder.geocode({ location: { lat, lng } }, (results, status) => {
-          if (status === 'OK' && results[0]) {
-            setFormData(prev => ({
-              ...prev,
-              address: results[0].formatted_address
-            }));
-          }
+        // Shim dragend handling for AdvancedMarkerElement
+        markerInstance.addListener('dragend', (ev) => {
+          const pos = markerInstance.position;
+          const lat = pos.lat();
+          const lng = pos.lng();
+          setFormData(prev => ({ ...prev, coordinates: `${lat}, ${lng}` }));
+          const geocoder = new window.google.maps.Geocoder();
+          geocoder.geocode({ location: { lat, lng } }, (results, status) => {
+            if ((status === 'OK' || status === window.google.maps.GeocoderStatus.OK) && results && results[0]) {
+              setFormData(prev => ({ ...prev, address: results[0].formatted_address }));
+            }
+          });
         });
-      });
+        mapInstance.addListener('click', (event) => {
+          const lat = event.latLng.lat();
+          const lng = event.latLng.lng();
+          markerInstance.position = { lat, lng };
+          setFormData(prev => ({ ...prev, coordinates: `${lat}, ${lng}` }));
+          const geocoder = new window.google.maps.Geocoder();
+          geocoder.geocode({ location: { lat, lng } }, (results, status) => {
+            if ((status === 'OK' || status === window.google.maps.GeocoderStatus.OK) && results && results[0]) {
+              setFormData(prev => ({ ...prev, address: results[0].formatted_address }));
+            }
+          });
+        });
+      } else {
+        markerInstance = new window.google.maps.Marker({
+          position: { lat: defaultLat, lng: defaultLng },
+          map: mapInstance,
+          draggable: true,
+          title: 'Drag to set pharmacy location'
+        });
+
+        // Handle marker drag events
+        markerInstance.addListener('dragend', () => {
+          const position = markerInstance.getPosition();
+          const lat = position.lat();
+          const lng = position.lng();
+          setFormData(prev => ({ ...prev, coordinates: `${lat}, ${lng}` }));
+          const geocoder = new window.google.maps.Geocoder();
+          geocoder.geocode({ location: { lat, lng } }, (results, status) => {
+            if ((status === 'OK' || status === window.google.maps.GeocoderStatus.OK) && results && results[0]) {
+              setFormData(prev => ({ ...prev, address: results[0].formatted_address }));
+            }
+          });
+        });
+
+        // Handle map click events
+        mapInstance.addListener('click', (event) => {
+          const lat = event.latLng.lat();
+          const lng = event.latLng.lng();
+          markerInstance.setPosition({ lat, lng });
+          setFormData(prev => ({ ...prev, coordinates: `${lat}, ${lng}` }));
+          const geocoder = new window.google.maps.Geocoder();
+          geocoder.geocode({ location: { lat, lng } }, (results, status) => {
+            if ((status === 'OK' || status === window.google.maps.GeocoderStatus.OK) && results && results[0]) {
+              setFormData(prev => ({ ...prev, address: results[0].formatted_address }));
+            }
+          });
+        });
+      }
 
       setMap(mapInstance);
       setMarker(markerInstance);
     };
 
-    // Load Google Maps script if not already loaded
-    if (!window.google) {
+    // Load Google Maps script if not already loaded (single-flight guard)
+    if (!(window.google && window.google.maps)) {
       const apiKey = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
       
       // Debug: Log the API key status
@@ -140,15 +154,28 @@ const PharmacyRegistration2 = () => {
         return;
       }
       
-      const script = document.createElement('script');
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;
-      script.async = true;
-      script.defer = true;
-      script.onload = initMap;
-      script.onerror = () => {
-        console.error('Failed to load Google Maps script. Please check your API key.');
-      };
-      document.head.appendChild(script);
+      // Prevent duplicate loads across re-mounts
+      if (!window.__gmapsLoading) {
+        window.__gmapsLoading = new Promise((resolve, reject) => {
+          const existingScript = document.querySelector('script[data-purpose="gmaps"]');
+          if (existingScript) {
+            existingScript.addEventListener('load', resolve, { once: true });
+            existingScript.addEventListener('error', reject, { once: true });
+            return;
+          }
+          const script = document.createElement('script');
+          script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&v=weekly`;
+          script.async = true;
+          script.defer = true;
+          script.setAttribute('data-purpose', 'gmaps');
+          script.onload = () => resolve();
+          script.onerror = () => reject(new Error('Failed to load Google Maps script'));
+          document.head.appendChild(script);
+        });
+      }
+      window.__gmapsLoading.then(() => initMap()).catch((err) => {
+        console.error('Google Maps load error:', err);
+      });
     } else {
       initMap();
     }

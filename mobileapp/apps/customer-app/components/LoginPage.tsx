@@ -12,7 +12,7 @@ import ForgotPasswordPage from './ForgotPasswordPage';
 import CreateAccountPage from './CreateAccountPage';
 import Onboarding from './Onboarding';
 import MainPage from './MainPage';
-import { AuthProvider, useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../contexts/AuthContext';
 import { apiService } from '../services/api';
 import { Alert, ActivityIndicator } from 'react-native';
 
@@ -259,11 +259,7 @@ function LoginPageContent() {
 }
 
 export default function LoginPage() {
-  return (
-    <AuthProvider>
-      <LoginPageContent />
-    </AuthProvider>
-  );
+  return <LoginPageContent />;
 }
 
 const styles = StyleSheet.create({

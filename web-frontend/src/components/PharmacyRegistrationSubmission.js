@@ -12,11 +12,13 @@ const PharmacyRegistrationSubmission = () => {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submissionError, setSubmissionError] = useState(null);
+  const [validationErrors, setValidationErrors] = useState(null);
 
   // Handle final submission
   const handleFinalSubmission = async () => {
     setIsSubmitting(true);
     setSubmissionError(null);
+    setValidationErrors(null);
 
     try {
       // Prepare all collected data
@@ -61,41 +63,52 @@ const PharmacyRegistrationSubmission = () => {
       console.log('pharmacy_license_expiry:', submissionData.pharmacy_license_expiry);
       console.log('================================');
       
-      // Submit to API
-      const response = await fetch('http://localhost:8000/api/v1/users/register_pharmacy/', {
+      // Submit to API: try secure endpoint first, fallback to direct unauth path
+      const base = (process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1').replace(/\/$/, '');
+      let response = await fetch(`${base}/users/register-pharmacy/`, {
         method: 'POST',
         body: formData,
         // Don't set Content-Type header - let browser set it with boundary for multipart/form-data
       });
+      if (response.status === 401 || response.status === 403) {
+        // Fallback to direct unauthenticated endpoint under /api
+        const directBase = base.replace('/api/v1', '/api');
+        response = await fetch(`${directBase}/pharmacy-register/`, {
+          method: 'POST',
+          body: formData,
+        });
+      }
       
       if (!response.ok) {
-        const errorData = await response.json();
+        let errorData = null;
+        try {
+          errorData = await response.json();
+        } catch {}
+
         console.error('=== REGISTRATION ERROR RESPONSE ===');
-        console.error('Full Error Data:', JSON.stringify(errorData, null, 2));
-        console.error('Validation Errors:', errorData.validation_errors);
-        console.error('Error Message:', errorData.error);
-        console.error('Details:', errorData.details);
-        console.error('===============================');
-        
-        // Show detailed validation errors if available
-        if (errorData.validation_errors && Object.keys(errorData.validation_errors).length > 0) {
-          const validationErrors = Object.entries(errorData.validation_errors)
-            .map(([field, errors]) => `${field}: ${Array.isArray(errors) ? errors.join(', ') : errors}`)
-            .join('\n');
-          throw new Error(`Validation failed:\n${validationErrors}`);
+        console.error('Full Error Data:', errorData ? JSON.stringify(errorData, null, 2) : 'non-JSON response');
+        const serverValidation = errorData && errorData.validation_errors ? errorData.validation_errors : null;
+        const serverMessage = errorData && (errorData.error || errorData.details || errorData.message);
+
+        if (serverValidation && Object.keys(serverValidation).length > 0) {
+          setValidationErrors(serverValidation);
+          setSubmissionError('Please fix the highlighted fields below and try again.');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          setIsSubmitting(false);
+          return;
         }
-        
-        // If no validation errors but there's an error message
-        if (errorData.error) {
-          throw new Error(errorData.error);
+
+        if (serverMessage) {
+          setSubmissionError(serverMessage);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          setIsSubmitting(false);
+          return;
         }
-        
-        // If there are details
-        if (errorData.details) {
-          throw new Error(errorData.details);
-        }
-        
-        throw new Error('Registration failed - no specific error details available');
+
+        setSubmissionError('Registration failed. Please review your information and try again.');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        setIsSubmitting(false);
+        return;
       }
       
       const result = await response.json();
@@ -173,6 +186,22 @@ const PharmacyRegistrationSubmission = () => {
                 Please review all your information before submitting. You can go back to make changes if needed.
               </p>
 
+              {/* Server error summary */}
+              {submissionError && (
+                <div className="w-[22vw] mb-4 p-4 border border-red-200 bg-red-50 rounded-lg text-left">
+                  <p className="text-red-700 text-sm font-semibold mb-2">{submissionError}</p>
+                  {validationErrors && (
+                    <ul className="list-disc pl-5 space-y-1 text-sm text-red-700">
+                      {Object.entries(validationErrors).map(([field, errors]) => (
+                        <li key={field}>
+                          <span className="font-medium">{friendlyFieldLabel(field)}:</span> {Array.isArray(errors) ? errors.join(', ') : errors}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+
               {/* Review Section */}
               <div className="w-[22vw] h-[55vh] pb-5 pt-2.5 flex flex-col text-[#2c2c2c] space-y-4">
                 
@@ -223,10 +252,17 @@ const PharmacyRegistrationSubmission = () => {
                   </div>
                 </div>
 
-                {/* Error Display */}
-                {submissionError && (
+                {/* Inline validation list (duplicate for visibility below review) */}
+                {validationErrors && (
                   <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                    <p className="text-red-600 text-sm">{submissionError}</p>
+                    <p className="text-red-700 text-sm font-semibold mb-2">Please address the following:</p>
+                    <ul className="list-disc pl-5 space-y-1 text-sm text-red-700">
+                      {Object.entries(validationErrors).map(([field, errors]) => (
+                        <li key={field}>
+                          <span className="font-medium">{friendlyFieldLabel(field)}:</span> {Array.isArray(errors) ? errors.join(', ') : errors}
+                        </li>
+                      ))}
+                    </ul>
                   </div>
                 )}
 
@@ -270,3 +306,44 @@ const PharmacyRegistrationSubmission = () => {
 };
 
 export default PharmacyRegistrationSubmission;
+
+// Map backend field keys to human-friendly labels
+function friendlyFieldLabel(key) {
+  const map = {
+    email: 'Email',
+    first_name: 'First Name',
+    last_name: 'Last Name',
+    middle_name: 'Middle Name',
+    phone: 'Phone Number',
+    date_of_birth: 'Date of Birth',
+    gender: 'Gender',
+    pharmacy_name: 'Pharmacy Name',
+    business_permit_number: 'Business Permit Number',
+    business_permit_expiry: 'Business Permit Expiry',
+    pharmacy_license_number: 'Pharmacy License Number',
+    pharmacy_license_expiry: 'Pharmacy License Expiry',
+    business_phone: 'Business Phone',
+    business_email: 'Business Email',
+    street_address: 'Street Address',
+    barangay: 'Barangay',
+    city: 'City',
+    province: 'Province',
+    postal_code: 'Postal Code',
+    latitude: 'Latitude',
+    longitude: 'Longitude',
+    operating_hours: 'Operating Hours',
+    services_offered: 'Services Offered',
+    payment_methods_accepted: 'Payment Methods',
+    owner_primary_id_uploaded: 'Owner Primary ID Uploaded',
+    business_permit_uploaded: 'Business Permit Uploaded',
+    pharmacy_license_uploaded: 'Pharmacy License Uploaded',
+    storefront_image_uploaded: 'Storefront Image Uploaded',
+    pharmacy_license_file: 'Pharmacy License File',
+    business_permit_file: 'Business Permit File',
+    owner_primary_id_file: 'Owner Primary ID File',
+    storefront_image_file: 'Storefront Image File',
+    non_field_errors: 'General',
+    detail: 'Detail',
+  };
+  return map[key] || key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}

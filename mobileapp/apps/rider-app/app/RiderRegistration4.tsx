@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Image } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { apiService } from '../../customer-app/services/api';
@@ -12,6 +12,9 @@ export default function RiderRegistration4() {
   const [password, setPassword] = useState('');
   const [phone_number, setPhoneNumber] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [emailError, setEmailError] = useState<string>('');
+  const [phoneError, setPhoneError] = useState<string>('');
 
   const savePartial = async (patch: any) => {
     try {
@@ -63,40 +66,64 @@ export default function RiderRegistration4() {
             value={email}
             onChangeText={(t) => {
               setEmail(t);
+              setEmailError('');
               savePartial({ email: t });
+            }}
+            onBlur={() => {
+              const valid = /\S+@\S+\.\S+/.test(email.trim());
+              if (!valid) setEmailError('Please enter a valid email address');
             }}
             placeholder="you@example.com"
             placeholderTextColor="#9E9E9E"
-            style={styles.input}
+            style={[styles.input, emailError ? styles.inputError : null]}
             keyboardType="email-address"
             autoCapitalize="none"
           />
+          {!!emailError && <Text style={styles.errorText}>{emailError}</Text>}
 
           <Text style={[styles.label, styles.spacing]}>Password</Text>
-          <TextInput
-            value={password}
-            onChangeText={(t) => {
-              setPassword(t);
-              savePartial({ password: t });
-            }}
-            placeholder="Create a password"
-            placeholderTextColor="#9E9E9E"
-            style={styles.input}
-            secureTextEntry
-          />
+          <View style={styles.passwordWrapper}>
+            <TextInput
+              value={password}
+              onChangeText={(t) => {
+                setPassword(t);
+                savePartial({ password: t });
+              }}
+              placeholder="Create a password"
+              placeholderTextColor="#9E9E9E"
+              style={[styles.input, styles.passwordInput]}
+              secureTextEntry={!showPassword}
+            />
+            <TouchableOpacity style={styles.passwordToggle} onPress={() => setShowPassword((s) => !s)}>
+              <Image
+                source={showPassword ? require('../../customer-app/assets/hide.png') : require('../../customer-app/assets/eye.png')}
+                style={styles.passwordToggleIcon}
+                resizeMode="contain"
+              />
+            </TouchableOpacity>
+          </View>
 
           <Text style={[styles.label, styles.spacing]}>Phone Number</Text>
           <TextInput
             value={phone_number}
             onChangeText={(t) => {
-              setPhoneNumber(t);
-              savePartial({ phone_number: t });
+              // Keep digits only and limit to 11 characters
+              const digits = t.replace(/\D/g, '').slice(0, 11);
+              setPhoneNumber(digits);
+              setPhoneError('');
+              savePartial({ phone_number: digits });
+            }}
+            onBlur={() => {
+              const valid = /^09\d{9}$/.test(phone_number);
+              if (!valid) setPhoneError('Enter a valid PH mobile number (09XXXXXXXXX)');
             }}
             placeholder="e.g., 09XXXXXXXXX"
             placeholderTextColor="#9E9E9E"
-            style={styles.input}
+            style={[styles.input, phoneError ? styles.inputError : null]}
             keyboardType="phone-pad"
+            maxLength={11}
           />
+          {!!phoneError && <Text style={styles.errorText}>{phoneError}</Text>}
         </View>
       </ScrollView>
 
@@ -109,6 +136,17 @@ export default function RiderRegistration4() {
           onPress={async () => {
             if (!username || !email || !password || !phone_number) {
               Alert.alert('Missing Information', 'Please complete all fields before submitting.');
+              return;
+            }
+            // Validate email and phone before submit
+            if (!/\S+@\S+\.\S+/.test(email.trim())) {
+              setEmailError('Please enter a valid email address');
+              Alert.alert('Invalid Email', 'Please enter a valid email address.');
+              return;
+            }
+            if (!/^09\d{9}$/.test(phone_number)) {
+              setPhoneError('Enter a valid PH mobile number (09XXXXXXXXX)');
+              Alert.alert('Invalid Phone Number', 'Enter a valid PH mobile number (09XXXXXXXXX).');
               return;
             }
             await savePartial({ username, email, password, phone_number, saved_at: Date.now() });
@@ -277,6 +315,36 @@ const styles = StyleSheet.create({
   },
   backText: {
     color: '#333333',
+  },
+  // Added for password toggle inside input
+  passwordWrapper: {
+    position: 'relative',
+  },
+  passwordInput: {
+    paddingRight: 44,
+  },
+  passwordToggle: {
+    position: 'absolute',
+    right: 10,
+    top: 0,
+    bottom: 0,
+    width: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  passwordToggleIcon: {
+    width: 20,
+    height: 20,
+    tintColor: '#999999',
+  },
+  inputError: {
+    borderColor: '#FF4444',
+  },
+  errorText: {
+    color: '#FF4444',
+    fontSize: 12,
+    marginTop: 5,
+    marginLeft: 4,
   },
 });
 

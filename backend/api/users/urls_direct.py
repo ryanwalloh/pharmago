@@ -9,7 +9,9 @@ urlpatterns = [
     path('approve-pharmacy/<int:pharmacy_id>/', views.approve_pharmacy),
     path('generate-login-token/<int:pharmacy_id>/', views.generate_login_token),
     path('validate-login-token/<str:token>/', views.validate_login_token),
+    path('complete-user-setup/<str:token>/', views.complete_user_setup),
     path('pharmacy-login/', views.pharmacy_login),
+    path('pharmacy-register/', views.pharmacy_register),
 ]
 
 
