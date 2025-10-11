@@ -315,35 +315,42 @@ def get_order_status(request, order_id):
                     ).first()
                 
                 if storefront_doc and storefront_doc.file_url:
-                    # Prefer presigned S3 URL for mobile compatibility; fallback to backend proxy
-                    try:
-                        from botocore.config import Config
-                        bucket_name = os.getenv('AWS_STORAGE_BUCKET_NAME', 'pharmago-user-uploads')
-                        region = os.getenv('AWS_S3_REGION_NAME', 'ap-southeast-2')
-                        parsed = urlparse(storefront_doc.file_url)
-                        key = parsed.path.lstrip('/')
-                        if key.startswith(f"{bucket_name}/"):
-                            key = key[len(bucket_name) + 1:]
-                        s3_client = boto3.client(
-                            's3',
-                            aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
-                            aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY'),
-                            region_name=region,
-                            endpoint_url=f"https://s3.{region}.amazonaws.com",
-                            config=Config(signature_version='s3v4')
-                        )
-                        pharmacy_storefront_image_url = s3_client.generate_presigned_url(
-                            'get_object',
-                            Params={'Bucket': bucket_name, 'Key': key},
-                            ExpiresIn=3600
-                        )
-                    except Exception:
-                        # Prefer dedicated storefront proxy endpoint; fallback to generic document endpoint
+                    # Check if it's a Cloudinary URL - use it directly
+                    if 'cloudinary.com' in storefront_doc.file_url or storefront_doc.file_url.startswith('http'):
+                        pharmacy_storefront_image_url = storefront_doc.file_url
+                        logger.info(f"Using Cloudinary URL for pharmacy {pharmacy.id} storefront: {pharmacy_storefront_image_url}")
+                    else:
+                        # Legacy S3 URL - generate presigned URL or use backend proxy
                         try:
-                            pharmacy_storefront_image_url = request.build_absolute_uri(f"/api/pharmacy-storefront/{pharmacy.id}/")
-                        except Exception:
-                            pharmacy_storefront_image_url = request.build_absolute_uri(f"/api/document/{storefront_doc.id}/")
-                    logger.info(f"Found storefront image for pharmacy {pharmacy.id}: {pharmacy_storefront_image_url}")
+                            from botocore.config import Config
+                            bucket_name = os.getenv('AWS_STORAGE_BUCKET_NAME', 'pharmago-user-uploads')
+                            region = os.getenv('AWS_S3_REGION_NAME', 'ap-southeast-2')
+                            parsed = urlparse(storefront_doc.file_url)
+                            key = parsed.path.lstrip('/')
+                            if key.startswith(f"{bucket_name}/"):
+                                key = key[len(bucket_name) + 1:]
+                            s3_client = boto3.client(
+                                's3',
+                                aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
+                                aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY'),
+                                region_name=region,
+                                endpoint_url=f"https://s3.{region}.amazonaws.com",
+                                config=Config(signature_version='s3v4')
+                            )
+                            pharmacy_storefront_image_url = s3_client.generate_presigned_url(
+                                'get_object',
+                                Params={'Bucket': bucket_name, 'Key': key},
+                                ExpiresIn=3600
+                            )
+                            logger.info(f"Generated S3 presigned URL for pharmacy {pharmacy.id}: {pharmacy_storefront_image_url}")
+                        except Exception as e:
+                            # Prefer dedicated storefront proxy endpoint; fallback to generic document endpoint
+                            logger.warning(f"Failed to generate S3 presigned URL: {e}")
+                            try:
+                                pharmacy_storefront_image_url = request.build_absolute_uri(f"/api/pharmacy-storefront/{pharmacy.id}/")
+                            except Exception:
+                                pharmacy_storefront_image_url = request.build_absolute_uri(f"/api/document/{storefront_doc.id}/")
+                            logger.info(f"Using backend proxy URL for pharmacy {pharmacy.id}: {pharmacy_storefront_image_url}")
                 else:
                     logger.info(f"No storefront image found for pharmacy {pharmacy.id}")
                         

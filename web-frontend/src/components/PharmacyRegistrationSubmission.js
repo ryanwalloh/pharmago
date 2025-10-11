@@ -29,53 +29,35 @@ const PharmacyRegistrationSubmission = () => {
       console.log('Prepared Submission Data:', submissionData);
       console.log('================================');
 
-      // Create FormData for file uploads
-      const formData = new FormData();
-      
-      // Add all form fields (now flattened)
-      Object.keys(submissionData).forEach(key => {
-        if (submissionData[key] !== null && submissionData[key] !== undefined && submissionData[key] !== '') {
-          // Handle different data types
-          if (submissionData[key] instanceof File) {
-            formData.append(key, submissionData[key]);
-          } else if (typeof submissionData[key] === 'object' && submissionData[key] !== null) {
-            // Skip empty objects (like empty file objects), but include arrays even if empty
-            if (Array.isArray(submissionData[key]) || Object.keys(submissionData[key]).length > 0) {
-              // Convert objects/arrays to JSON strings
-              formData.append(key, JSON.stringify(submissionData[key]));
-            }
-          } else {
-            formData.append(key, submissionData[key]);
-          }
-        }
-      });
-      
-      // Log FormData contents for debugging
-      console.log('=== FORMDATA CONTENTS DEBUG ===');
-      console.log('FormData entries:');
-      for (let [key, value] of formData.entries()) {
-        console.log(`${key}:`, value, `(type: ${typeof value})`);
-      }
-      
-      // Also log the original submission data for comparison
-      console.log('Original submission data:');
-      console.log('business_permit_expiry:', submissionData.business_permit_expiry);
-      console.log('pharmacy_license_expiry:', submissionData.pharmacy_license_expiry);
-      console.log('================================');
+      // Since we're using Cloudinary URLs instead of files, we can send JSON
+      // No need for FormData anymore
+      console.log('=== SUBMISSION DATA DEBUG ===');
+      console.log('Submission Data:', JSON.stringify(submissionData, null, 2));
+      console.log('Document URLs:');
+      console.log('- Pharmacy License:', submissionData.pharmacy_license_url);
+      console.log('- Business Permit:', submissionData.business_permit_url);
+      console.log('- Owner Primary ID:', submissionData.owner_primary_id_url);
+      console.log('- Storefront Image:', submissionData.storefront_image_url);
+      console.log('=============================');
       
       // Submit to API: try secure endpoint first, fallback to direct unauth path
       const base = (process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1').replace(/\/$/, '');
       let response = await fetch(`${base}/users/register-pharmacy/`, {
         method: 'POST',
-        body: formData,
-        // Don't set Content-Type header - let browser set it with boundary for multipart/form-data
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(submissionData),
       });
       if (response.status === 401 || response.status === 403) {
         // Fallback to direct unauthenticated endpoint under /api
         const directBase = base.replace('/api/v1', '/api');
         response = await fetch(`${directBase}/pharmacy-register/`, {
           method: 'POST',
-          body: formData,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(submissionData),
         });
       }
       
@@ -246,9 +228,10 @@ const PharmacyRegistrationSubmission = () => {
                 <div className="border-2 border-[#D5E8D4] rounded-lg p-4">
                   <h3 className="text-lg font-semibold text-[#4DAF7C] mb-3">Documents</h3>
                   <div className="space-y-2 text-sm">
-                    <p><span className="font-medium">Pharmacy License:</span> {allData.documents.pharmacy_license?.file ? '✓ Uploaded' : '✗ Missing'}</p>
-                    <p><span className="font-medium">Business Permit:</span> {allData.documents.business_permit?.file ? '✓ Uploaded' : '✗ Missing'}</p>
-                    <p><span className="font-medium">Owner Primary ID:</span> {allData.documents.owner_primary_id?.file ? '✓ Uploaded' : '✗ Missing'}</p>
+                    <p><span className="font-medium">Pharmacy License:</span> {allData.documents.pharmacy_license?.file_url ? '✓ Uploaded to cloud' : '✗ Missing'}</p>
+                    <p><span className="font-medium">Business Permit:</span> {allData.documents.business_permit?.file_url ? '✓ Uploaded to cloud' : '✗ Missing'}</p>
+                    <p><span className="font-medium">Owner Primary ID:</span> {allData.documents.owner_primary_id?.file_url ? '✓ Uploaded to cloud' : '✗ Missing'}</p>
+                    <p><span className="font-medium">Storefront Image:</span> {allData.documents.storefront_image?.file_url ? '✓ Uploaded to cloud' : '✗ Missing'}</p>
                   </div>
                 </div>
 

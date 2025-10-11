@@ -230,6 +230,12 @@ class PharmacyRegistrationSerializer(serializers.Serializer):
     owner_primary_id_file = serializers.FileField(required=False, write_only=True)
     storefront_image_file = serializers.ImageField(required=False, write_only=True)
     
+    # Cloudinary URLs (alternative to file uploads)
+    pharmacy_license_url = serializers.URLField(required=False, write_only=True)
+    business_permit_url = serializers.URLField(required=False, write_only=True)
+    owner_primary_id_url = serializers.URLField(required=False, write_only=True)
+    storefront_image_url = serializers.URLField(required=False, write_only=True)
+    
     
     def validate(self, attrs):
         # Debug logging
@@ -419,12 +425,20 @@ class PharmacyRegistrationSerializer(serializers.Serializer):
         logger.info(f"business_permit_expiry in validated_data: '{validated_data.get('business_permit_expiry')}' (type: {type(validated_data.get('business_permit_expiry'))})")
         logger.info(f"pharmacy_license_expiry in validated_data: '{validated_data.get('pharmacy_license_expiry')}' (type: {type(validated_data.get('pharmacy_license_expiry'))})")
         
-        # Extract file data before creating user
+        # Extract file data and URL data before creating user
         file_data = {
             'pharmacy_license_file': validated_data.pop('pharmacy_license_file', None),
             'business_permit_file': validated_data.pop('business_permit_file', None),
             'owner_primary_id_file': validated_data.pop('owner_primary_id_file', None),
             'storefront_image_file': validated_data.pop('storefront_image_file', None),
+        }
+        
+        # Extract Cloudinary URLs (if provided instead of files)
+        url_data = {
+            'pharmacy_license_url': validated_data.pop('pharmacy_license_url', None),
+            'business_permit_url': validated_data.pop('business_permit_url', None),
+            'owner_primary_id_url': validated_data.pop('owner_primary_id_url', None),
+            'storefront_image_url': validated_data.pop('storefront_image_url', None),
         }
         
         logger.info(f"After pop file data - business_permit_expiry: '{validated_data.get('business_permit_expiry')}' (type: {type(validated_data.get('business_permit_expiry'))})")
@@ -491,20 +505,34 @@ class PharmacyRegistrationSerializer(serializers.Serializer):
             user.delete()
             raise serializers.ValidationError(f"Failed to create customer profile: {str(e)}")
         
-        # Upload files to S3 and create UserDocument records
+        # Handle document files/URLs and create UserDocument records
         uploaded_files = {}
         document_mapping = {
-            'pharmacy_license_file': ('Pharmacy License', validated_data['pharmacy_license_expiry']),
-            'business_permit_file': ('Business Permit', validated_data['business_permit_expiry']),
-            'owner_primary_id_file': ('Owner Primary ID', None),  # No expiry for ID
-            'storefront_image_file': ('Storefront Image', None),  # No expiry for image
+            'pharmacy_license': ('Pharmacy License', validated_data['pharmacy_license_expiry']),
+            'business_permit': ('Business Permit', validated_data['business_permit_expiry']),
+            'owner_primary_id': ('Owner Primary ID', None),  # No expiry for ID
+            'storefront_image': ('Storefront Image', None),  # No expiry for image
         }
         
-        for file_type, file_obj in file_data.items():
-            if file_obj:
-                file_url: str | None = None
+        for doc_type, (document_name, expiry_date) in document_mapping.items():
+            file_key = f'{doc_type}_file'
+            url_key = f'{doc_type}_url'
+            
+            file_obj = file_data.get(file_key)
+            cloudinary_url = url_data.get(url_key)
+            
+            file_url: str | None = None
+            
+            # Priority: Use Cloudinary URL if provided, otherwise upload file to S3
+            if cloudinary_url:
+                # Use Cloudinary URL directly
+                file_url = cloudinary_url
+                uploaded_files[file_key] = file_url
+                logger.info(f"Using Cloudinary URL for {doc_type} for user {user.id} → URL: {file_url}")
+            elif file_obj:
+                # Upload file to S3
                 try:
-                    upload_res = self.upload_file_to_s3(file_obj, file_type.replace('_file', ''), user.id)
+                    upload_res = self.upload_file_to_s3(file_obj, doc_type, user.id)
                     # Normalize upload result to a URL string
                     if isinstance(upload_res, dict):
                         if upload_res.get('success'):
@@ -513,20 +541,20 @@ class PharmacyRegistrationSerializer(serializers.Serializer):
                             file_url = None
                     else:
                         file_url = str(upload_res) if upload_res else None
-                    uploaded_files[file_type] = file_url
-                    logger.info(f"Uploaded {file_type} for user {user.id} → URL: {file_url}")
+                    uploaded_files[file_key] = file_url
+                    logger.info(f"Uploaded {doc_type} to S3 for user {user.id} → URL: {file_url}")
                 except Exception as e:
-                    logger.error(f"Failed to upload {file_type} for user {user.id}: {str(e)}")
+                    logger.error(f"Failed to upload {doc_type} for user {user.id}: {str(e)}")
                     # Continue with registration even if file upload fails
-                
-                # Create UserDocument record regardless
-                document_name, expiry_date = document_mapping[file_type]
+            
+            # Create UserDocument record if we have a URL (from either Cloudinary or S3)
+            if file_url:
                 try:
                     valid_id = ValidID.objects.get(name=document_name)
                     UserDocument.objects.create(
                         user=user,
                         id_type=valid_id,
-                        document_file=getattr(file_obj, 'name', '') or document_name,
+                        document_file=getattr(file_obj, 'name', '') if file_obj else document_name,
                         file_url=file_url,
                         expiry_date=expiry_date,
                         status=UserDocument.DocumentStatus.PENDING
@@ -567,10 +595,10 @@ class PharmacyRegistrationSerializer(serializers.Serializer):
             'operating_hours': validated_data['operating_hours'],
             'services_offered': validated_data['services_offered'],
             'payment_methods_accepted': validated_data['payment_methods_accepted'],
-            'owner_primary_id_uploaded': bool(file_data['owner_primary_id_file']),
-            'business_permit_uploaded': bool(file_data['business_permit_file']),
-            'pharmacy_license_uploaded': bool(file_data['pharmacy_license_file']),
-            'storefront_image_uploaded': bool(file_data['storefront_image_file']),
+            'owner_primary_id_uploaded': bool(file_data['owner_primary_id_file'] or url_data['owner_primary_id_url']),
+            'business_permit_uploaded': bool(file_data['business_permit_file'] or url_data['business_permit_url']),
+            'pharmacy_license_uploaded': bool(file_data['pharmacy_license_file'] or url_data['pharmacy_license_url']),
+            'storefront_image_uploaded': bool(file_data['storefront_image_file'] or url_data['storefront_image_url']),
             'status': Pharmacy.PharmacyStatus.PENDING
         }
         
