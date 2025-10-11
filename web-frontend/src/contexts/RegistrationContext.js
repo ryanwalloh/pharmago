@@ -401,11 +401,11 @@ export const RegistrationProvider = ({ children }) => {
       pharmacy_license_uploaded: state.documents.pharmacy_license?.uploaded || false,
       storefront_image_uploaded: state.documents.storefront_image?.uploaded || false,
       
-      // Document files (for upload) - only include if they exist
-      ...(state.documents.pharmacy_license?.file && { pharmacy_license_file: state.documents.pharmacy_license.file }),
-      ...(state.documents.business_permit?.file && { business_permit_file: state.documents.business_permit.file }),
-      ...(state.documents.owner_primary_id?.file && { owner_primary_id_file: state.documents.owner_primary_id.file }),
-      ...(state.documents.storefront_image?.file && { storefront_image_file: state.documents.storefront_image.file })
+      // Document URLs from Cloudinary (instead of file uploads)
+      ...(state.documents.pharmacy_license?.file_url && { pharmacy_license_url: state.documents.pharmacy_license.file_url }),
+      ...(state.documents.business_permit?.file_url && { business_permit_url: state.documents.business_permit.file_url }),
+      ...(state.documents.owner_primary_id?.file_url && { owner_primary_id_url: state.documents.owner_primary_id.file_url }),
+      ...(state.documents.storefront_image?.file_url && { storefront_image_url: state.documents.storefront_image.file_url })
     };
     
     console.log('=== FINAL SUBMISSION DATA PREPARED ===');

@@ -18,6 +18,8 @@ import { apiService } from '../services/api';
 import { fontFamily } from '../utils/fonts';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Modal } from 'react-native';
+import Constants from 'expo-constants';
+import { NativeModules } from 'react-native';
 
 interface OrderData {
   order_id: number;
@@ -45,6 +47,38 @@ interface OrderData {
   actual_delivery: string | null;
   notes: string;
 }
+
+// Helper function to get backend URL (same logic as apiService)
+const getBackendBaseUrl = (): string => {
+  // Web (localhost)
+  if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
+    return 'http://localhost:8000';
+  }
+
+  // Optional: EXPO_PUBLIC_API_BASE override
+  const envBase: string | undefined = process.env.EXPO_PUBLIC_API_BASE as string | undefined;
+  if (envBase) {
+    return envBase.endsWith('/') ? envBase.slice(0, -1) : envBase;
+  }
+
+  // Try to derive host from Expo packager/SourceCode script URL
+  try {
+    const expHostUri: string | undefined = (Constants as any)?.expoConfig?.hostUri
+      || (Constants as any)?.manifest?.debuggerHost
+      || (NativeModules as any)?.SourceCode?.scriptURL;
+
+    if (expHostUri) {
+      const withoutScheme = expHostUri.replace(/^\w+:\/\//, '');
+      const host = withoutScheme.split(':')[0].split('/')[0];
+      if (host && /^(\d{1,3}\.){3}\d{1,3}$/.test(host)) {
+        return `http://${host}:8000`;
+      }
+    }
+  } catch {}
+
+  // Fallback
+  return 'http://192.168.254.103:8000';
+};
 
 const OrderTrackingScreen: React.FC = () => {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -78,19 +112,25 @@ const OrderTrackingScreen: React.FC = () => {
   const [showPriceApprove, setShowPriceApprove] = useState(false);
   const [approving, setApproving] = useState(false);
   const [dismissedPricingPrompt, setDismissedPricingPrompt] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const unreadPollRef = useRef<any>(null);
+  const [autoOpenedChat, setAutoOpenedChat] = useState(false);
 
-  const fetchChatMessages = useCallback(async () => {
+  // Fetch chat messages - can optionally take roomId parameter
+  const fetchChatMessages = useCallback(async (roomId?: number) => {
     try {
-      if (!chatRoom?.id) return;
+      const targetRoomId = roomId || chatRoom?.id;
+      if (!targetRoomId) return;
       if (chatFetchInFlightRef.current) return;
       chatFetchInFlightRef.current = true;
-      const msgs = await apiService.getOrderChatMessages(chatRoom.id, 100);
+      const msgs = await apiService.getOrderChatMessages(targetRoomId, 100);
       if (msgs.success && (msgs.data as any)?.messages) {
         if (!isMountedRef.current) return;
         setChatMessages((msgs.data as any).messages);
         // After fetching, mark others' messages as read (customer context)
         try {
-          await apiService.markOrderChatRead(chatRoom.id);
+          await apiService.markOrderChatRead(targetRoomId);
+          setUnreadCount(0); // Clear unread count after marking as read
         } catch {}
       } else if (!msgs.success) {
         if (!isMountedRef.current) return;
@@ -103,6 +143,48 @@ const OrderTrackingScreen: React.FC = () => {
       chatFetchInFlightRef.current = false;
     }
   }, [chatRoom?.id]);
+
+  // Poll for unread messages in the background
+  const checkUnreadMessages = useCallback(async () => {
+    try {
+      if (!orderData?.order_id || !orderData?.pharmacy_id || showChatModal) return;
+      
+      // Get or check chat room
+      const roomRes = await apiService.getOrCreateOrderChatRoom(orderData.order_id, orderData.pharmacy_id);
+      if (!roomRes.success || !roomRes.data?.room) return;
+      
+      const room = roomRes.data.room;
+      
+      // Get unread count
+      const msgs = await apiService.getOrderChatMessages(room.id, 100);
+      if (msgs.success && (msgs.data as any)?.messages) {
+        const messages = (msgs.data as any).messages;
+        // Count unread messages from pharmacy
+        const unreadPharmacyMessages = messages.filter((m: any) => {
+          const roleRaw = String(m.sender_role_code ?? m.sender_role ?? '').toLowerCase();
+          const isPharmacy = roleRaw.includes('pharmacy');
+          return isPharmacy && !m.read_at;
+        });
+        
+        const newUnreadCount = unreadPharmacyMessages.length;
+        
+        // Auto-open chat if new message arrives and not already auto-opened
+        if (newUnreadCount > 0 && newUnreadCount > unreadCount && !autoOpenedChat && !showChatModal) {
+          console.log('🔔 New pharmacy message detected! Auto-opening chat...');
+          setUnreadCount(newUnreadCount);
+          setChatRoom(room);
+          setShowChatModal(true);
+          setAutoOpenedChat(true);
+          // Fetch messages with the room ID
+          await fetchChatMessages(room.id);
+        } else {
+          setUnreadCount(newUnreadCount);
+        }
+      }
+    } catch (error) {
+      console.log('Error checking unread messages:', error);
+    }
+  }, [orderData?.order_id, orderData?.pharmacy_id, showChatModal, unreadCount, autoOpenedChat, fetchChatMessages]);
 
   const getCustomerLocation = async () => {
     try {
@@ -300,6 +382,34 @@ const OrderTrackingScreen: React.FC = () => {
     }
   }, [orderData]);
 
+  // Background polling for unread messages
+  useEffect(() => {
+    if (!orderData?.order_id || !orderData?.pharmacy_id) return;
+    
+    // Initial check
+    checkUnreadMessages();
+    
+    // Start polling every 10 seconds
+    if (unreadPollRef.current) clearInterval(unreadPollRef.current);
+    unreadPollRef.current = setInterval(() => {
+      checkUnreadMessages();
+    }, 10000); // Check every 10 seconds
+    
+    return () => {
+      if (unreadPollRef.current) {
+        clearInterval(unreadPollRef.current);
+        unreadPollRef.current = null;
+      }
+    };
+  }, [orderData?.order_id, orderData?.pharmacy_id, checkUnreadMessages]);
+
+  // Reset auto-open flag when chat is manually closed
+  useEffect(() => {
+    if (!showChatModal) {
+      setAutoOpenedChat(false);
+    }
+  }, [showChatModal]);
+
   // Start/stop typing polling with modal
   useEffect(() => {
     isMountedRef.current = true;
@@ -449,11 +559,26 @@ const OrderTrackingScreen: React.FC = () => {
               <View style={styles.pharmacyImageContainer}>
                 {orderData.pharmacy_storefront_image_url && !storefrontImageError ? (
                   <Image 
-                    source={{ uri: orderData.pharmacy_storefront_image_url }} 
+                    source={{ 
+                      uri: (() => {
+                        const url = orderData.pharmacy_storefront_image_url;
+                        // Check if it's a Cloudinary URL or already a full URL
+                        if (url.includes('cloudinary.com') || url.startsWith('http://') || url.startsWith('https://')) {
+                          console.log('Using Cloudinary/full URL for storefront:', url);
+                          return url;
+                        }
+                        // Otherwise, it's a relative path - prepend backend URL
+                        const backendUrl = getBackendBaseUrl();
+                        const fullUrl = url.startsWith('/') ? `${backendUrl}${url}` : `${backendUrl}/${url}`;
+                        console.log('Using backend proxy URL for storefront:', fullUrl);
+                        return fullUrl;
+                      })()
+                    }} 
                     style={styles.pharmacyImage}
                     resizeMode="cover"
-                    onError={() => {
-                      console.log('Failed to load pharmacy storefront image');
+                    onError={(e) => {
+                      console.log('Failed to load pharmacy storefront image:', orderData.pharmacy_storefront_image_url);
+                      console.log('Error details:', e.nativeEvent);
                       setStorefrontImageError(true);
                     }}
                   />
@@ -486,12 +611,14 @@ const OrderTrackingScreen: React.FC = () => {
                       setChatLoading(false);
                       return;
                     }
-                    setChatRoom(roomRes.data.room);
-                    await fetchChatMessages();
+                    const room = roomRes.data.room;
+                    setChatRoom(room);
+                    // Pass room ID directly to fetchChatMessages to fix timing issue
+                    await fetchChatMessages(room.id);
                     // start polling
                     if (chatPollRef.current) clearInterval(chatPollRef.current);
                     chatPollRef.current = setInterval(() => {
-                      fetchChatMessages();
+                      fetchChatMessages(room.id);
                     }, 12000);
                     setShowChatModal(true);
                   } catch (_e) {
@@ -503,6 +630,14 @@ const OrderTrackingScreen: React.FC = () => {
                 }}
               >
                 <Ionicons name="chatbubble-outline" size={24} color="#00bf63" />
+                {/* Unread badge */}
+                {unreadCount > 0 && (
+                  <View style={styles.badge}>
+                    <Text style={styles.badgeText}>
+                      {unreadCount > 9 ? '9+' : unreadCount}
+                    </Text>
+                  </View>
+                )}
               </TouchableOpacity>
               <TouchableOpacity style={styles.actionIcon}>
                 <Ionicons name="call-outline" size={24} color="#00bf63" />
@@ -682,8 +817,35 @@ const OrderTrackingScreen: React.FC = () => {
                             onPress={async () => {
                               try {
                                 setApproving(true);
+                                
+                                // Step 1: Approve the pricing
                                 const res = await apiService.approvePricing(orderData.order_id, true);
                                 if (res.success) {
+                                  // Step 2: Fetch updated order data to get the actual total amount
+                                  const updatedOrderRes = await apiService.getOrderStatus(String(orderData.order_id));
+                                  let actualTotal = orderData.total_amount;
+                                  
+                                  if (updatedOrderRes.success && updatedOrderRes.data) {
+                                    const updatedOrder: any = updatedOrderRes.data?.data || updatedOrderRes.data;
+                                    actualTotal = updatedOrder.total_amount || orderData.total_amount;
+                                    console.log('💰 Updated order total:', actualTotal);
+                                  }
+                                  
+                                  // Step 3: Send automatic confirmation message to pharmacy
+                                  if (chatRoom?.id && actualTotal > 0) {
+                                    try {
+                                      const confirmationMessage = `✅ I've approved the price quote of ₱${actualTotal.toFixed(2)}. Thank you! Please proceed with preparing my order.`;
+                                      await apiService.sendOrderChatMessage(chatRoom.id, confirmationMessage);
+                                      console.log('✅ Sent approval confirmation message to pharmacy');
+                                      // Refresh messages to show the new message
+                                      await fetchChatMessages(chatRoom.id);
+                                    } catch (msgError) {
+                                      console.log('⚠️ Failed to send confirmation message:', msgError);
+                                      // Continue anyway - approval already succeeded
+                                    }
+                                  }
+                                  
+                                  // Step 4: Refresh order data and close
                                   await fetchOrderData();
                                   setDismissedPricingPrompt(true);
                                   setShowChatModal(false);
@@ -951,6 +1113,27 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8F9FA',
     justifyContent: 'center',
     alignItems: 'center',
+    position: 'relative',
+  },
+  badge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: '#F44336',
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  badgeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: 'bold',
+    fontFamily: fontFamily.heavy,
   },
   // Status Panel Styles
   statusPanel: {

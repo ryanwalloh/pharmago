@@ -317,35 +317,40 @@ def direct_active_pharmacies(request):
                     ).first()
                 if storefront_doc:
                     storefront_document_id = storefront_doc.id
-                    try:
-                        import boto3
-                        from urllib.parse import urlparse
-                        from botocore.config import Config
-                        bucket_name = os.getenv('AWS_STORAGE_BUCKET_NAME', 'pharmago-user-uploads')
-                        region = os.getenv('AWS_S3_REGION_NAME', 'ap-southeast-2')
-                        parsed = urlparse(storefront_doc.file_url)
-                        key = parsed.path.lstrip('/')
-                        if key.startswith(f"{bucket_name}/"):
-                            key = key[len(bucket_name) + 1:]
-                        s3_client = boto3.client(
-                            's3',
-                            aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
-                            aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY'),
-                            region_name=region,
-                            endpoint_url=f"https://s3.{region}.amazonaws.com",
-                            config=Config(signature_version='s3v4'),
-                        )
-                        presigned = s3_client.generate_presigned_url(
-                            'get_object',
-                            Params={'Bucket': bucket_name, 'Key': key},
-                            ExpiresIn=3600,
-                        )
-                        storefront_image_url = presigned
-                    except Exception:
+                    # Check if it's a Cloudinary URL - use it directly
+                    if storefront_doc.file_url and ('cloudinary.com' in storefront_doc.file_url or storefront_doc.file_url.startswith('http')):
+                        storefront_image_url = storefront_doc.file_url
+                    else:
+                        # Legacy S3 URL - generate presigned URL or use backend proxy
                         try:
-                            storefront_image_url = request.build_absolute_uri(f"/api/pharmacy-storefront/{p.id}/")
+                            import boto3
+                            from urllib.parse import urlparse
+                            from botocore.config import Config
+                            bucket_name = os.getenv('AWS_STORAGE_BUCKET_NAME', 'pharmago-user-uploads')
+                            region = os.getenv('AWS_S3_REGION_NAME', 'ap-southeast-2')
+                            parsed = urlparse(storefront_doc.file_url)
+                            key = parsed.path.lstrip('/')
+                            if key.startswith(f"{bucket_name}/"):
+                                key = key[len(bucket_name) + 1:]
+                            s3_client = boto3.client(
+                                's3',
+                                aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
+                                aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY'),
+                                region_name=region,
+                                endpoint_url=f"https://s3.{region}.amazonaws.com",
+                                config=Config(signature_version='s3v4'),
+                            )
+                            presigned = s3_client.generate_presigned_url(
+                                'get_object',
+                                Params={'Bucket': bucket_name, 'Key': key},
+                                ExpiresIn=3600,
+                            )
+                            storefront_image_url = presigned
                         except Exception:
-                            storefront_image_url = request.build_absolute_uri(f"/api/document/{storefront_doc.id}/")
+                            try:
+                                storefront_image_url = request.build_absolute_uri(f"/api/pharmacy-storefront/{p.id}/")
+                            except Exception:
+                                storefront_image_url = request.build_absolute_uri(f"/api/document/{storefront_doc.id}/")
             except Exception as e:
                 print(f"Error fetching storefront image for pharmacy {p.id}: {e}")
 
