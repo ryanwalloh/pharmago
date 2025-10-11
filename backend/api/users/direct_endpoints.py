@@ -416,8 +416,29 @@ def pharmacy_login(request):
         tokens = token_manager.create_tokens(user)
         # Resolve pharmacy info for this user
         pharmacy_obj = None
+        storefront_image_url = None
+        
         try:
             pharmacy_obj = Pharmacy.objects.get(user=user)
+            
+            # Get storefront image from UserDocument
+            from api.users.models import UserDocument
+            try:
+                storefront_doc = UserDocument.objects.filter(
+                    user=user,
+                    id_type__name__icontains='Storefront'
+                ).first()
+                
+                if storefront_doc and storefront_doc.file_url:
+                    # Check if it's a Cloudinary URL - use it directly
+                    if 'cloudinary.com' in storefront_doc.file_url or storefront_doc.file_url.startswith('http'):
+                        storefront_image_url = storefront_doc.file_url
+                    else:
+                        # Legacy S3 URL - use backend proxy endpoint
+                        storefront_image_url = f"/api/pharmacy-storefront/{pharmacy_obj.id}/"
+            except Exception as e:
+                print(f"Error fetching storefront image: {e}")
+                
         except Pharmacy.DoesNotExist:
             pharmacy_obj = None
         user.last_login = __import__('django.utils').utils.timezone.now()
@@ -437,6 +458,7 @@ def pharmacy_login(request):
                 'id': pharmacy_obj.id,
                 'name': getattr(pharmacy_obj, 'pharmacy_name', ''),
                 'pharmacy_name': getattr(pharmacy_obj, 'pharmacy_name', ''),
+                'profile_picture': storefront_image_url,
             } if pharmacy_obj else None),
             'tokens': tokens,
         })
@@ -540,12 +562,16 @@ def complete_user_setup(request, token):
 
 @csrf_exempt
 def pharmacy_register(request):
-    """Direct endpoint to register a pharmacy without authentication (multipart form).
+    """Direct endpoint to register a pharmacy without authentication.
 
-    Accepts multipart/form-data with fields aligned to PharmacyRegistrationSerializer
-    including optional file uploads (e.g., pharmacy_license_file, business_permit_file,
-    owner_primary_id_file, storefront_image_file). JSON fields such as operating_hours,
-    services_offered, and payment_methods_accepted may be provided as JSON strings.
+    Accepts both:
+    1. application/json with Cloudinary URLs (pharmacy_license_url, business_permit_url, 
+       owner_primary_id_url, storefront_image_url) - Recommended for new implementations
+    2. multipart/form-data with file uploads (pharmacy_license_file, business_permit_file,
+       owner_primary_id_file, storefront_image_file) - Legacy support
+    
+    JSON fields such as operating_hours, services_offered, and payment_methods_accepted 
+    may be provided as JSON strings (multipart) or as objects (JSON payload).
     """
     if request.method != 'POST':
         return JsonResponse({'error': 'Method not allowed', 'message': 'Only POST requests are allowed'}, status=405)
@@ -554,36 +580,50 @@ def pharmacy_register(request):
         from .serializers import PharmacyRegistrationSerializer
         import json
 
-        # Build data dict from POST with conversions
-        raw = request.POST.copy()
-
-        # Coerce JSON fields if provided as strings
-        json_fields = ['operating_hours', 'services_offered', 'payment_methods_accepted']
         data = {}
-        for k, v in raw.items():
-            if k in json_fields:
-                try:
-                    data[k] = json.loads(v) if isinstance(v, str) else v
-                except Exception:
-                    # Leave as-is; serializer will raise friendly error
-                    data[k] = v
-            elif k.endswith('_uploaded'):
-                lv = str(v).strip().lower()
-                data[k] = True if lv in ('1', 'true', 'yes', 'on') else False
-            else:
-                data[k] = v
+        content_type = request.content_type or ''
+        
+        # Handle JSON payload (from Cloudinary implementation)
+        if 'application/json' in content_type:
+            try:
+                data = json.loads(request.body)
+            except json.JSONDecodeError as e:
+                return JsonResponse({
+                    'error': 'Invalid JSON',
+                    'message': f'Failed to parse JSON: {str(e)}'
+                }, status=400)
+        
+        # Handle multipart/form-data (legacy file upload implementation)
+        else:
+            # Build data dict from POST with conversions
+            raw = request.POST.copy()
 
-        # Attach file objects if present
-        file_field_names = [
-            'pharmacy_license_file',
-            'business_permit_file',
-            'owner_primary_id_file',
-            'storefront_image_file',
-        ]
-        for fname in file_field_names:
-            f = request.FILES.get(fname)
-            if f is not None:
-                data[fname] = f
+            # Coerce JSON fields if provided as strings
+            json_fields = ['operating_hours', 'services_offered', 'payment_methods_accepted']
+            for k, v in raw.items():
+                if k in json_fields:
+                    try:
+                        data[k] = json.loads(v) if isinstance(v, str) else v
+                    except Exception:
+                        # Leave as-is; serializer will raise friendly error
+                        data[k] = v
+                elif k.endswith('_uploaded'):
+                    lv = str(v).strip().lower()
+                    data[k] = True if lv in ('1', 'true', 'yes', 'on') else False
+                else:
+                    data[k] = v
+
+            # Attach file objects if present
+            file_field_names = [
+                'pharmacy_license_file',
+                'business_permit_file',
+                'owner_primary_id_file',
+                'storefront_image_file',
+            ]
+            for fname in file_field_names:
+                f = request.FILES.get(fname)
+                if f is not None:
+                    data[fname] = f
 
         serializer = PharmacyRegistrationSerializer(data=data)
         if not serializer.is_valid():

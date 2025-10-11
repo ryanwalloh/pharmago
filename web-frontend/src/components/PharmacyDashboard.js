@@ -1245,9 +1245,18 @@ const PharmacyDashboard = () => {
       <header className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-8 lg:mb-12 space-y-4 lg:space-y-0">
         <div className="flex items-center">
           <img 
-            className="w-12 h-12 rounded-full mr-3" 
-            src={pharmacyInfo?.profile_picture || "/images/pharmacie.png"} 
+            className="w-12 h-12 rounded-full mr-3 object-cover" 
+            src={
+              pharmacyInfo?.profile_picture 
+                ? (pharmacyInfo.profile_picture.includes('cloudinary.com') || pharmacyInfo.profile_picture.startsWith('http')
+                    ? pharmacyInfo.profile_picture
+                    : `${(process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '')}${pharmacyInfo.profile_picture}`)
+                : "/images/pharmacie.png"
+            } 
             alt="Pharmacy Profile"
+            onError={(e) => {
+              e.target.src = "/images/pharmacie.png";
+            }}
           />
           <h1 className="text-lg lg:text-xl font-raleway text-[#2c786c]">
             {pharmacyInfo?.name || 'Pharmacy Name'}
