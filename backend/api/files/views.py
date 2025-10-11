@@ -235,6 +235,11 @@ def serve_prescription_image(request, order_id):
 
 @csrf_exempt
 def upload_prescription_image(request):
+    """
+    Upload prescription image endpoint that supports both:
+    1. JSON payload with Cloudinary URL (prescription_url) - Recommended for new implementations
+    2. multipart/form-data with file upload (file/image) - Legacy support
+    """
     if request.method != 'POST':
         return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
     try:
@@ -243,21 +248,46 @@ def upload_prescription_image(request):
         from api.orders.models import Order
         import uuid
         import os
+        import json
 
-        file_obj = request.FILES.get('file') or request.FILES.get('image')
-        if not file_obj:
-            return JsonResponse({'success': False, 'error': 'No file uploaded. Use form-data key "file" or "image".'}, status=400)
+        file_url = None
+        order_id = None
+        content_type = request.content_type or ''
 
-        today_path = timezone.now().strftime('%Y/%m/%d')
-        _, ext = os.path.splitext(file_obj.name or '')
-        if not ext:
-            ext = '.jpg'
-        filename = f"prescriptions/{today_path}/{uuid.uuid4().hex}{ext}"
+        # Check if this is a JSON payload with Cloudinary URL
+        if 'application/json' in content_type:
+            try:
+                data = json.loads(request.body)
+                file_url = data.get('prescription_url')
+                order_id = data.get('order_id')
+                
+                if not file_url:
+                    return JsonResponse({'success': False, 'error': 'No prescription_url provided in JSON payload'}, status=400)
+                
+                print(f"📥 Received Cloudinary prescription URL: {file_url}")
+                
+            except json.JSONDecodeError as e:
+                return JsonResponse({'success': False, 'error': 'Invalid JSON', 'message': str(e)}, status=400)
+        
+        # Handle multipart/form-data (legacy file upload)
+        else:
+            file_obj = request.FILES.get('file') or request.FILES.get('image')
+            if not file_obj:
+                return JsonResponse({'success': False, 'error': 'No file uploaded. Use form-data key "file" or "image", or send JSON with "prescription_url".'}, status=400)
 
-        saved_path = default_storage.save(filename, file_obj)
-        file_url = default_storage.url(saved_path)
+            today_path = timezone.now().strftime('%Y/%m/%d')
+            _, ext = os.path.splitext(file_obj.name or '')
+            if not ext:
+                ext = '.jpg'
+            filename = f"prescriptions/{today_path}/{uuid.uuid4().hex}{ext}"
 
-        order_id = request.POST.get('order_id') or request.GET.get('order_id')
+            saved_path = default_storage.save(filename, file_obj)
+            file_url = default_storage.url(saved_path)
+            order_id = request.POST.get('order_id') or request.GET.get('order_id')
+            
+            print(f"📥 Uploaded prescription to S3: {file_url}")
+
+        # Update order if order_id is provided
         updated = False
         if order_id:
             try:
@@ -265,42 +295,74 @@ def upload_prescription_image(request):
                 order.prescription_image_url = file_url
                 order.save(update_fields=['prescription_image_url'])
                 updated = True
+                print(f"✅ Updated order {order_id} with prescription URL")
             except (Order.DoesNotExist, ValueError):
+                print(f"⚠️ Order {order_id} not found")
                 pass
 
         return JsonResponse({'success': True, 'url': file_url, 'order_id': order_id, 'order_updated': updated})
     except Exception as e:
+        print(f"❌ Prescription upload error: {e}")
         return JsonResponse({'success': False, 'error': 'Upload failed', 'message': str(e)}, status=500)
 
 
 @csrf_exempt
 def upload_driver_license_image(request):
+    """
+    Upload driver's license image endpoint that supports both:
+    1. JSON payload with Cloudinary URL (license_url) - Recommended for new implementations
+    2. multipart/form-data with file upload (file/image) - Legacy support
+    """
     if request.method != 'POST':
         return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
     try:
         from django.core.files.storage import default_storage
         from django.utils import timezone
         from api.users.models import User, UserDocument
-        import uuid, os
+        import uuid, os, json
 
-        file_obj = request.FILES.get('file') or request.FILES.get('image')
-        if not file_obj:
-            return JsonResponse({'success': False, 'error': 'No file uploaded'}, status=400)
+        file_url = None
+        user_id = None
+        content_type = request.content_type or ''
 
-        today_path = timezone.now().strftime('%Y/%m/%d')
-        _, ext = os.path.splitext(file_obj.name or '')
-        if not ext:
-            ext = '.jpg'
-        filename = f"drivers_licenses/{today_path}/{uuid.uuid4().hex}{ext}"
-
-        saved_path = default_storage.save(filename, file_obj)
-        file_url = default_storage.url(saved_path)
-
-        user_id_str = request.POST.get('user_id') or request.GET.get('user_id')
-        user = None
-        if user_id_str:
+        # Check if this is a JSON payload with Cloudinary URL
+        if 'application/json' in content_type:
             try:
-                user = User.objects.get(id=int(user_id_str))
+                data = json.loads(request.body)
+                file_url = data.get('license_url')
+                user_id = data.get('user_id')
+                
+                if not file_url:
+                    return JsonResponse({'success': False, 'error': 'No license_url provided in JSON payload'}, status=400)
+                
+                print(f"📥 Received Cloudinary driver license URL: {file_url}")
+                
+            except json.JSONDecodeError as e:
+                return JsonResponse({'success': False, 'error': 'Invalid JSON', 'message': str(e)}, status=400)
+        
+        # Handle multipart/form-data (legacy file upload)
+        else:
+            file_obj = request.FILES.get('file') or request.FILES.get('image')
+            if not file_obj:
+                return JsonResponse({'success': False, 'error': 'No file uploaded. Use form-data key "file" or "image", or send JSON with "license_url".'}, status=400)
+
+            today_path = timezone.now().strftime('%Y/%m/%d')
+            _, ext = os.path.splitext(file_obj.name or '')
+            if not ext:
+                ext = '.jpg'
+            filename = f"drivers_licenses/{today_path}/{uuid.uuid4().hex}{ext}"
+
+            saved_path = default_storage.save(filename, file_obj)
+            file_url = default_storage.url(saved_path)
+            user_id = request.POST.get('user_id') or request.GET.get('user_id')
+            
+            print(f"📥 Uploaded driver license to S3: {file_url}")
+
+        # Create UserDocument if user_id is provided
+        user = None
+        if user_id:
+            try:
+                user = User.objects.get(id=int(user_id))
             except (User.DoesNotExist, ValueError):
                 user = None
 
@@ -314,11 +376,14 @@ def upload_driver_license_image(request):
                     document_file=file_url,
                     status='uploaded',
                 )
-            except Exception:
+                print(f"✅ Created UserDocument {document.id} for user {user.id}")
+            except Exception as e:
+                print(f"⚠️ Failed to create UserDocument: {e}")
                 document = None
 
         return JsonResponse({'success': True, 'url': file_url, 'document_id': getattr(document, 'id', None)})
     except Exception as e:
+        print(f"❌ Driver license upload error: {e}")
         return JsonResponse({'success': False, 'error': 'Upload failed', 'message': str(e)}, status=500)
 
 

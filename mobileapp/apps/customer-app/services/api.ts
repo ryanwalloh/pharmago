@@ -344,39 +344,56 @@ class ApiService {
     orderId?: number
   ): Promise<ApiResponse<{ url: string; order_updated?: boolean; order_id?: number }>> {
     try {
-      const url = `${this.getDirectBaseUrl()}/upload-prescription-image/`;
-      console.log('📸 Uploading prescription image (multipart)...', { url, localUri, orderId });
+      // Step 1: Upload to Cloudinary
+      console.log('☁️ Uploading prescription to Cloudinary...');
+      const { uploadPrescriptionImage } = await import('./cloudinaryService');
+      
+      const cloudinaryResult = await uploadPrescriptionImage(localUri);
+      
+      if (!cloudinaryResult.success || !cloudinaryResult.url) {
+        console.error('❌ Cloudinary upload failed:', cloudinaryResult.error);
+        return { 
+          success: false, 
+          error: cloudinaryResult.error || 'Failed to upload to cloud storage' 
+        };
+      }
 
-      const form = new FormData();
-      form.append('file', {
-        uri: localUri,
-        name: 'prescription.jpg',
-        type: 'image/jpeg',
-      } as any);
+      console.log('✅ Cloudinary upload successful:', cloudinaryResult.url);
+
+      // Step 2: Send Cloudinary URL to backend
+      const url = `${this.getDirectBaseUrl()}/upload-prescription-image/`;
+      console.log('📤 Sending Cloudinary URL to backend...', { url, cloudinaryUrl: cloudinaryResult.url, orderId });
+
+      const payload: any = {
+        prescription_url: cloudinaryResult.url,
+      };
       if (orderId) {
-        form.append('order_id', String(orderId));
+        payload.order_id = orderId;
       }
 
       const response = await fetch(url, {
         method: 'POST',
-        // Do NOT set Content-Type; let fetch/RN set correct boundary for multipart
-        body: form,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
       });
 
       const json = await response.json();
       if (!response.ok || !json.success) {
-        return { success: false, error: json.error || 'Upload failed', message: json.message };
+        return { success: false, error: json.error || 'Failed to save prescription URL', message: json.message };
       }
 
       return {
         success: true,
         data: {
-          url: json.url,
+          url: cloudinaryResult.url,
           order_updated: json.order_updated,
           order_id: json.order_id,
         },
       };
     } catch (error) {
+      console.error('❌ Prescription upload error:', error);
       return { success: false, error: error instanceof Error ? error.message : 'Upload error' };
     }
   }
@@ -387,37 +404,55 @@ class ApiService {
     userId?: number
   ): Promise<ApiResponse<{ url: string; document_id?: number }>> {
     try {
-      const url = `${this.getDirectBaseUrl()}/upload-driver-license/`;
-      console.log('🪪 Uploading driver license image (multipart)...', { url, localUri, userId });
+      // Step 1: Upload to Cloudinary
+      console.log('☁️ Uploading driver license to Cloudinary...');
+      const { uploadDriverLicenseImage } = await import('./cloudinaryService');
+      
+      const cloudinaryResult = await uploadDriverLicenseImage(localUri);
+      
+      if (!cloudinaryResult.success || !cloudinaryResult.url) {
+        console.error('❌ Cloudinary upload failed:', cloudinaryResult.error);
+        return { 
+          success: false, 
+          error: cloudinaryResult.error || 'Failed to upload to cloud storage' 
+        };
+      }
 
-      const form = new FormData();
-      form.append('file', {
-        uri: localUri,
-        name: 'driver_license.jpg',
-        type: 'image/jpeg',
-      } as any);
+      console.log('✅ Cloudinary upload successful:', cloudinaryResult.url);
+
+      // Step 2: Send Cloudinary URL to backend
+      const url = `${this.getDirectBaseUrl()}/upload-driver-license/`;
+      console.log('📤 Sending Cloudinary URL to backend...', { url, cloudinaryUrl: cloudinaryResult.url, userId });
+
+      const payload: any = {
+        license_url: cloudinaryResult.url,
+      };
       if (userId) {
-        form.append('user_id', String(userId));
+        payload.user_id = userId;
       }
 
       const response = await fetch(url, {
         method: 'POST',
-        body: form,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
       });
 
       const json = await response.json();
       if (!response.ok || !json.success) {
-        return { success: false, error: json.error || 'Upload failed', message: json.message };
+        return { success: false, error: json.error || 'Failed to save license URL', message: json.message };
       }
 
       return {
         success: true,
         data: {
-          url: json.url,
+          url: cloudinaryResult.url,
           document_id: json.document_id,
         },
       };
     } catch (error) {
+      console.error('❌ Driver license upload error:', error);
       return { success: false, error: error instanceof Error ? error.message : 'Upload error' };
     }
   }

@@ -785,18 +785,73 @@ const AdminDashboard = () => {
                   <h3 className="text-lg font-bold text-[#2C7A5D] mb-2">Driver's License</h3>
                   {detailedRiderData.documents && detailedRiderData.documents.length > 0 ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {detailedRiderData.documents.map((doc) => (
-                        <div key={doc.id} className="bg-white rounded-lg p-4 border border-[#D5E8D4]">
-                          <div className="w-full h-48 bg-gray-100 rounded-lg mb-3 overflow-hidden flex items-center justify-center">
-                            {doc.id ? (
-                              <img src={`${(process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '')}/api/document/${doc.id}/`} alt="Driver License" className="w-full h-full object-cover cursor-pointer hover:opacity-80 transition-opacity duration-200" onClick={() => window.open(`${(process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '')}/api/document/${doc.id}/`, '_blank')} />
-                            ) : (
-                              <span className="text-[#999999] text-sm">No preview</span>
-                            )}
+                      {detailedRiderData.documents.map((doc) => {
+                        // Check if URL is from Cloudinary (direct URL) or needs backend proxy
+                        const isCloudinaryUrl = doc.file_url && (
+                          doc.file_url.includes('cloudinary.com') || 
+                          doc.file_url.startsWith('http://') || 
+                          doc.file_url.startsWith('https://')
+                        );
+                        
+                        // Use Cloudinary URL directly if available, otherwise use backend proxy
+                        const imageUrl = isCloudinaryUrl 
+                          ? doc.file_url 
+                          : `${(process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '')}/api/document/${doc.id}/`;
+                        
+                        return (
+                          <div key={doc.id} className="bg-white rounded-lg p-4 border border-[#D5E8D4]">
+                            <div className="w-full h-48 bg-gray-100 rounded-lg mb-3 overflow-hidden flex items-center justify-center relative">
+                              {doc.file_url || doc.id ? (
+                                <>
+                                  <img 
+                                    src={imageUrl} 
+                                    alt="Driver License" 
+                                    className="w-full h-full object-cover cursor-pointer hover:opacity-80 transition-opacity duration-200" 
+                                    onClick={() => window.open(imageUrl, '_blank')}
+                                    onError={(e) => {
+                                      console.error('Failed to load image:', imageUrl);
+                                      e.target.style.display = 'none';
+                                      e.target.nextSibling.style.display = 'flex';
+                                    }}
+                                  />
+                                  {/* Fallback for failed image loads */}
+                                  <div 
+                                    className="w-full h-full flex flex-col items-center justify-center bg-[#D5E8D4] absolute inset-0"
+                                    style={{ display: 'none' }}
+                                  >
+                                    <svg className="h-8 w-8 text-[#999999] mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    <span className="text-[#999999] text-sm">Unable to load preview</span>
+                                    {isCloudinaryUrl && (
+                                      <button
+                                        onClick={() => window.open(imageUrl, '_blank')}
+                                        className="mt-2 px-3 py-1 bg-[#4DAF7C] text-white text-xs rounded hover:bg-[#6BBF9A]"
+                                      >
+                                        Try opening directly
+                                      </button>
+                                    )}
+                                  </div>
+                                </>
+                              ) : (
+                                <span className="text-[#999999] text-sm">No preview</span>
+                              )}
+                            </div>
+                            <div className="text-center">
+                              <p className="text-xs text-[#666666] mb-1">
+                                Status: <span className={`font-medium capitalize ${
+                                  doc.status === 'approved' ? 'text-green-600' :
+                                  doc.status === 'rejected' ? 'text-red-600' :
+                                  'text-yellow-600'
+                                }`}>{doc.status || 'pending'}</span>
+                              </p>
+                              {isCloudinaryUrl && (
+                                <p className="text-xs text-blue-600">☁️ Cloudinary</p>
+                              )}
+                            </div>
                           </div>
-                          <p className="text-xs text-[#666666]">Status: <span className="font-medium capitalize">{doc.status || 'pending'}</span></p>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   ) : (
                     <p className="text-sm text-[#666666]">No documents uploaded</p>
@@ -1544,7 +1599,7 @@ const AdminDashboard = () => {
                         // Determine file type from URL
                         const getFileType = (url) => {
                           if (!url) return 'unknown';
-                          const extension = url.split('.').pop().toLowerCase();
+                          const extension = url.split('.').pop().toLowerCase().split('?')[0]; // Remove query params
                           if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(extension)) return 'image';
                           if (extension === 'pdf') return 'pdf';
                           return 'unknown';
@@ -1553,6 +1608,18 @@ const AdminDashboard = () => {
                         const fileType = getFileType(document.file_url);
                         const isImage = fileType === 'image';
                         const isPdf = fileType === 'pdf';
+                        
+                        // Check if URL is from Cloudinary (direct URL) or needs backend proxy
+                        const isCloudinaryUrl = document.file_url && (
+                          document.file_url.includes('cloudinary.com') || 
+                          document.file_url.startsWith('http://') || 
+                          document.file_url.startsWith('https://')
+                        );
+                        
+                        // Use Cloudinary URL directly if available, otherwise use backend proxy
+                        const imageUrl = isCloudinaryUrl 
+                          ? document.file_url 
+                          : `${(process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '')}/api/document/${document.id}/`;
 
                         return (
                           <div key={document.id} className="bg-white rounded-lg p-4 border border-[#D5E8D4]">
@@ -1561,30 +1628,33 @@ const AdminDashboard = () => {
                                 <>
                                   {isImage ? (
                                     <img
-                                      src={`${(process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '')}/api/document/${document.id}/`}
+                                      src={imageUrl}
                                       alt={document.document_type}
                                       className="w-full h-full object-cover cursor-pointer hover:opacity-80 transition-opacity duration-200"
-                                      onClick={() => window.open(`${(process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '')}/api/document/${document.id}/`, '_blank')}
+                                      onClick={() => window.open(imageUrl, '_blank')}
                                       onError={(e) => {
+                                        console.error('Failed to load image:', imageUrl);
                                         e.target.style.display = 'none';
                                         e.target.nextSibling.style.display = 'flex';
                                       }}
                                     />
                                   ) : isPdf ? (
                                     <div className="w-full h-full flex flex-col items-center justify-center bg-red-50 cursor-pointer hover:bg-red-100 transition-colors duration-200"
-                                         onClick={() => window.open(`${(process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '')}/api/document/${document.id}/`, '_blank')}>
+                                         onClick={() => window.open(imageUrl, '_blank')}>
                                       <svg className="h-12 w-12 text-red-500 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
                                       </svg>
                                       <span className="text-red-600 font-medium text-sm">PDF Document</span>
+                                      <span className="text-red-500 text-xs mt-1">Click to open</span>
                                     </div>
                                   ) : (
                                     <div className="w-full h-full flex flex-col items-center justify-center bg-gray-50 cursor-pointer hover:bg-gray-100 transition-colors duration-200"
-                                         onClick={() => window.open(`${(process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '')}/api/document/${document.id}/`, '_blank')}>
+                                         onClick={() => window.open(imageUrl, '_blank')}>
                                       <svg className="h-12 w-12 text-gray-500 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                       </svg>
                                       <span className="text-gray-600 font-medium text-sm">Document</span>
+                                      <span className="text-gray-500 text-xs mt-1">Click to open</span>
                                     </div>
                                   )}
                                   
@@ -1597,6 +1667,14 @@ const AdminDashboard = () => {
                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                                     </svg>
                                     <span className="text-[#999999] text-sm">Unable to load preview</span>
+                                    {isCloudinaryUrl && (
+                                      <button
+                                        onClick={() => window.open(imageUrl, '_blank')}
+                                        className="mt-2 px-3 py-1 bg-[#4DAF7C] text-white text-xs rounded hover:bg-[#6BBF9A]"
+                                      >
+                                        Try opening directly
+                                      </button>
+                                    )}
                                   </div>
                                 </>
                               ) : (
@@ -1618,6 +1696,11 @@ const AdminDashboard = () => {
                                   {document.status.charAt(0).toUpperCase() + document.status.slice(1)}
                                 </span>
                               </p>
+                              {isCloudinaryUrl && (
+                                <p className="text-xs text-blue-600 mb-1">
+                                  ☁️ Cloudinary
+                                </p>
+                              )}
                               {document.document_number && (
                                 <p className="text-xs text-[#999999]">ID: {document.document_number}</p>
                               )}
@@ -1629,7 +1712,7 @@ const AdminDashboard = () => {
                               {document.file_url && (
                                 <div className="mt-2 space-y-1">
                                   <button
-                                    onClick={() => window.open(`${(process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '')}/api/document/${document.id}/`, '_blank')}
+                                    onClick={() => window.open(imageUrl, '_blank')}
                                     className="w-full px-3 py-1 bg-[#4DAF7C] text-white text-xs rounded hover:bg-[#6BBF9A] transition-colors duration-200"
                                   >
                                     {isImage ? 'View Full Size' : isPdf ? 'Open PDF' : 'View Document'}

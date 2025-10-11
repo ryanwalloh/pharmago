@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useRegistration } from '../contexts/RegistrationContext';
+import { uploadPharmacyDocument, uploadStorefrontImage } from '../services/cloudinary';
 
 const PharmacyRegistration4 = () => {
   const navigate = useNavigate();
@@ -14,6 +15,14 @@ const PharmacyRegistration4 = () => {
 
   // Image preview state
   const [imagePreviewUrl, setImagePreviewUrl] = useState(null);
+
+  // Upload status state
+  const [uploadStatus, setUploadStatus] = useState({
+    pharmacyLicense: { uploading: false, error: null },
+    businessPermit: { uploading: false, error: null },
+    ownerPrimaryId: { uploading: false, error: null },
+    storefrontImage: { uploading: false, error: null }
+  });
 
   // Form state for document uploads
   const [formData, setFormData] = useState({
@@ -75,53 +84,89 @@ const PharmacyRegistration4 = () => {
     }));
   }, [documents]);
 
-  // Handle file input changes
-  const handleFileChange = (documentType, e) => {
+  // Handle file input changes - Now uploads to Cloudinary immediately
+  const handleFileChange = async (documentType, e) => {
     const file = e.target.files[0];
-    if (file) {
-      // Validate file type based on document type
-      let allowedTypes;
-      let maxSize;
-      
+    if (!file) return;
+
+    // Validate file type based on document type
+    let allowedTypes;
+    let maxSize;
+    
+    if (documentType === 'storefrontImage') {
+      // Storefront image only accepts image formats
+      allowedTypes = ['image/jpeg', 'image/jpg', 'image/png'];
+      maxSize = 2 * 1024 * 1024; // 2MB limit for images
+    } else {
+      // Documents accept PDF and image formats
+      allowedTypes = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'];
+      maxSize = 10 * 1024 * 1024; // 10MB limit for documents
+    }
+    
+    if (!allowedTypes.includes(file.type)) {
+      const allowedFormats = documentType === 'storefrontImage' ? 'JPG, or PNG' : 'PDF, JPG, or PNG';
+      alert(`Please upload only ${allowedFormats} files.`);
+      return;
+    }
+
+    if (file.size > maxSize) {
+      const sizeLimit = documentType === 'storefrontImage' ? '2MB' : '10MB';
+      alert(`File size must be less than ${sizeLimit}.`);
+      return;
+    }
+
+    // Set uploading status
+    setUploadStatus(prev => ({
+      ...prev,
+      [documentType]: { uploading: true, error: null }
+    }));
+
+    try {
+      // Upload to Cloudinary
+      let uploadResult;
       if (documentType === 'storefrontImage') {
-        // Storefront image only accepts image formats
-        allowedTypes = ['image/jpeg', 'image/jpg', 'image/png'];
-        maxSize = 2 * 1024 * 1024; // 2MB limit for images
+        uploadResult = await uploadStorefrontImage(file);
       } else {
-        // Documents accept PDF and image formats
-        allowedTypes = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'];
-        maxSize = 10 * 1024 * 1024; // 10MB limit for documents
-      }
-      
-      if (!allowedTypes.includes(file.type)) {
-        const allowedFormats = documentType === 'storefrontImage' ? 'JPG, or PNG' : 'PDF, JPG, or PNG';
-        alert(`Please upload only ${allowedFormats} files.`);
-        return;
+        uploadResult = await uploadPharmacyDocument(file, documentType);
       }
 
-      if (file.size > maxSize) {
-        const sizeLimit = documentType === 'storefrontImage' ? '2MB' : '10MB';
-        alert(`File size must be less than ${sizeLimit}.`);
-        return;
-      }
+      if (uploadResult.success) {
+        // Store Cloudinary URL in state
+        setFormData(prev => ({
+          ...prev,
+          [documentType]: {
+            ...prev[documentType],
+            file: file, // Keep file for display purposes
+            fileUrl: uploadResult.url,
+            uploaded: true
+          }
+        }));
 
-      // Store file in state (no upload yet)
-      setFormData(prev => ({
-        ...prev,
-        [documentType]: {
-          ...prev[documentType],
-          file: file,
-          uploaded: true
+        // Create image preview for storefront image
+        if (documentType === 'storefrontImage') {
+          setImagePreviewUrl(uploadResult.url); // Use Cloudinary URL for preview
         }
+
+        // Clear uploading status
+        setUploadStatus(prev => ({
+          ...prev,
+          [documentType]: { uploading: false, error: null }
+        }));
+
+        console.log(`File uploaded to Cloudinary: ${file.name}`, uploadResult);
+      } else {
+        throw new Error(uploadResult.error || 'Upload failed');
+      }
+    } catch (error) {
+      console.error('Upload error:', error);
+      
+      // Set error status
+      setUploadStatus(prev => ({
+        ...prev,
+        [documentType]: { uploading: false, error: error.message }
       }));
 
-      // Create image preview for storefront image
-      if (documentType === 'storefrontImage') {
-        const previewUrl = createImagePreview(file);
-        setImagePreviewUrl(previewUrl);
-      }
-
-      console.log(`File selected: ${file.name} (${file.size} bytes)`);
+      alert(`Failed to upload ${file.name}: ${error.message}`);
     }
   };
 
@@ -283,16 +328,20 @@ const PharmacyRegistration4 = () => {
     console.log('=============================');
   }, [formData]);
 
-  // Form validation
+  // Form validation - Check for fileUrl (Cloudinary URL) instead of file
   const isFormValid = () => {
     return (
-      formData.pharmacyLicense.file &&
+      formData.pharmacyLicense.fileUrl &&
       formData.pharmacyLicense.expiryDate !== '' &&
-      formData.businessPermit.file &&
+      formData.businessPermit.fileUrl &&
       formData.businessPermit.expiryDate !== '' &&
-      formData.ownerPrimaryId.file &&
+      formData.ownerPrimaryId.fileUrl &&
       formData.ownerPrimaryId.expiryDate !== '' &&
-      formData.storefrontImage.file
+      formData.storefrontImage.fileUrl &&
+      !uploadStatus.pharmacyLicense.uploading &&
+      !uploadStatus.businessPermit.uploading &&
+      !uploadStatus.ownerPrimaryId.uploading &&
+      !uploadStatus.storefrontImage.uploading
     );
   };
 
@@ -300,13 +349,13 @@ const PharmacyRegistration4 = () => {
   const isFieldValid = (fieldName) => {
     switch (fieldName) {
       case 'pharmacyLicense':
-        return formData.pharmacyLicense.file && formData.pharmacyLicense.expiryDate !== '';
+        return formData.pharmacyLicense.fileUrl && formData.pharmacyLicense.expiryDate !== '';
       case 'businessPermit':
-        return formData.businessPermit.file && formData.businessPermit.expiryDate !== '';
+        return formData.businessPermit.fileUrl && formData.businessPermit.expiryDate !== '';
       case 'ownerPrimaryId':
-        return formData.ownerPrimaryId.file && formData.ownerPrimaryId.expiryDate !== '';
+        return formData.ownerPrimaryId.fileUrl && formData.ownerPrimaryId.expiryDate !== '';
       case 'storefrontImage':
-        return formData.storefrontImage.file;
+        return formData.storefrontImage.fileUrl;
       default:
         return true;
     }
@@ -385,11 +434,22 @@ const PharmacyRegistration4 = () => {
                           type="file"
                           accept=".pdf,.jpg,.jpeg,.png"
                           onChange={(e) => handleFileChange('pharmacyLicense', e)}
-                          className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-[#6BBF9A] file:text-white hover:file:bg-[#4DAF7C]"
+                          disabled={uploadStatus.pharmacyLicense.uploading}
+                          className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-[#6BBF9A] file:text-white hover:file:bg-[#4DAF7C] disabled:opacity-50"
                         />
-                        {formData.pharmacyLicense.file && (
+                        {uploadStatus.pharmacyLicense.uploading && (
+                          <p className="text-xs text-blue-600 mt-1">
+                            ⏳ Uploading to cloud...
+                          </p>
+                        )}
+                        {uploadStatus.pharmacyLicense.error && (
+                          <p className="text-xs text-red-600 mt-1">
+                            ✗ {uploadStatus.pharmacyLicense.error}
+                          </p>
+                        )}
+                        {formData.pharmacyLicense.file && !uploadStatus.pharmacyLicense.uploading && !uploadStatus.pharmacyLicense.error && (
                           <p className="text-xs text-green-600 mt-1">
-                            ✓ {formData.pharmacyLicense.file.name}
+                            ✓ {formData.pharmacyLicense.file.name} (Uploaded to cloud)
                           </p>
                         )}
                       </div>
@@ -434,11 +494,22 @@ const PharmacyRegistration4 = () => {
                           type="file"
                           accept=".pdf,.jpg,.jpeg,.png"
                           onChange={(e) => handleFileChange('businessPermit', e)}
-                          className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-[#6BBF9A] file:text-white hover:file:bg-[#4DAF7C]"
+                          disabled={uploadStatus.businessPermit.uploading}
+                          className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-[#6BBF9A] file:text-white hover:file:bg-[#4DAF7C] disabled:opacity-50"
                         />
-                        {formData.businessPermit.file && (
+                        {uploadStatus.businessPermit.uploading && (
+                          <p className="text-xs text-blue-600 mt-1">
+                            ⏳ Uploading to cloud...
+                          </p>
+                        )}
+                        {uploadStatus.businessPermit.error && (
+                          <p className="text-xs text-red-600 mt-1">
+                            ✗ {uploadStatus.businessPermit.error}
+                          </p>
+                        )}
+                        {formData.businessPermit.file && !uploadStatus.businessPermit.uploading && !uploadStatus.businessPermit.error && (
                           <p className="text-xs text-green-600 mt-1">
-                            ✓ {formData.businessPermit.file.name}
+                            ✓ {formData.businessPermit.file.name} (Uploaded to cloud)
                           </p>
                         )}
                       </div>
@@ -483,11 +554,22 @@ const PharmacyRegistration4 = () => {
                           type="file"
                           accept=".pdf,.jpg,.jpeg,.png"
                           onChange={(e) => handleFileChange('ownerPrimaryId', e)}
-                          className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-[#6BBF9A] file:text-white hover:file:bg-[#4DAF7C]"
+                          disabled={uploadStatus.ownerPrimaryId.uploading}
+                          className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-[#6BBF9A] file:text-white hover:file:bg-[#4DAF7C] disabled:opacity-50"
                         />
-                        {formData.ownerPrimaryId.file && (
+                        {uploadStatus.ownerPrimaryId.uploading && (
+                          <p className="text-xs text-blue-600 mt-1">
+                            ⏳ Uploading to cloud...
+                          </p>
+                        )}
+                        {uploadStatus.ownerPrimaryId.error && (
+                          <p className="text-xs text-red-600 mt-1">
+                            ✗ {uploadStatus.ownerPrimaryId.error}
+                          </p>
+                        )}
+                        {formData.ownerPrimaryId.file && !uploadStatus.ownerPrimaryId.uploading && !uploadStatus.ownerPrimaryId.error && (
                           <p className="text-xs text-green-600 mt-1">
-                            ✓ {formData.ownerPrimaryId.file.name}
+                            ✓ {formData.ownerPrimaryId.file.name} (Uploaded to cloud)
                           </p>
                         )}
                       </div>
@@ -532,11 +614,22 @@ const PharmacyRegistration4 = () => {
                           type="file"
                           accept=".jpg,.jpeg,.png"
                           onChange={(e) => handleFileChange('storefrontImage', e)}
-                          className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-[#6BBF9A] file:text-white hover:file:bg-[#4DAF7C]"
+                          disabled={uploadStatus.storefrontImage.uploading}
+                          className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-[#6BBF9A] file:text-white hover:file:bg-[#4DAF7C] disabled:opacity-50"
                         />
-                        {formData.storefrontImage.file && (
+                        {uploadStatus.storefrontImage.uploading && (
+                          <p className="text-xs text-blue-600 mt-1">
+                            ⏳ Uploading to cloud...
+                          </p>
+                        )}
+                        {uploadStatus.storefrontImage.error && (
+                          <p className="text-xs text-red-600 mt-1">
+                            ✗ {uploadStatus.storefrontImage.error}
+                          </p>
+                        )}
+                        {formData.storefrontImage.file && !uploadStatus.storefrontImage.uploading && !uploadStatus.storefrontImage.error && (
                           <p className="text-xs text-green-600 mt-1">
-                            ✓ {formData.storefrontImage.file.name}
+                            ✓ {formData.storefrontImage.file.name} (Uploaded to cloud)
                           </p>
                         )}
                       </div>
