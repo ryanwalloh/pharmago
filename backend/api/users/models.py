@@ -396,13 +396,16 @@ class UserDocument(models.Model):
     
     document_file = models.FileField(
         upload_to='user_documents/%Y/%m/%d/',
-        help_text=_('Uploaded document file.')
+        blank=True,
+        null=True,
+        help_text=_('Uploaded document file (optional if file_url is provided).')
     )
     
     file_url = models.URLField(
+        max_length=1000,
         blank=True,
         null=True,
-        help_text=_('S3 URL of uploaded file.')
+        help_text=_('URL of uploaded file (S3 or Cloudinary).')
     )
     
     document_number = models.CharField(
@@ -1368,21 +1371,26 @@ def create_user_profile(sender, instance, created, **kwargs):
         # Create role-specific profiles
         if instance.role == User.UserRole.PHARMACY:
             Pharmacy.objects.create(user=instance)
-        elif instance.role == User.UserRole.RIDER:
-            Rider.objects.create(user=instance)
+        # Note: Rider profile is NOT auto-created because it requires additional 
+        # mandatory fields (date_of_birth, gender, vehicle_type) that must be 
+        # provided during registration via the complete_rider_registration endpoint
 
 
 @receiver(post_save, sender=User)
 def save_user_profile(sender, instance, **kwargs):
     """
     Automatically save profile when user is saved.
+    Note: Rider profiles are not auto-created, so we check if they exist first.
     """
     if instance.role == User.UserRole.CUSTOMER and hasattr(instance, 'customer'):
         instance.customer.save()
     elif instance.role == User.UserRole.PHARMACY and hasattr(instance, 'pharmacy'):
         instance.pharmacy.save()
     elif instance.role == User.UserRole.RIDER and hasattr(instance, 'rider'):
-        instance.rider.save()
+        try:
+            instance.rider.save()
+        except Rider.DoesNotExist:
+            pass  # Rider profile will be created manually during registration
 
 
 # Data migration for existing valid ID types

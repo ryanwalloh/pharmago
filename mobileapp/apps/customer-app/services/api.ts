@@ -466,6 +466,20 @@ class ApiService {
     });
   }
 
+  // Get available orders count for riders (direct endpoint)
+  async getAvailableOrdersCount(): Promise<ApiResponse<{count: number}>> {
+    return this.makeDirectRequest('/available-orders-count/', {
+      method: 'GET',
+    });
+  }
+
+  // Get available orders for riders (direct endpoint)
+  async getAvailableOrders(): Promise<ApiResponse<{count: number, orders: any[]}>> {
+    return this.makeDirectRequest('/available-orders/', {
+      method: 'GET',
+    });
+  }
+
   // Prescription order methods
   async createPrescriptionOrder(orderData: any): Promise<ApiResponse<any>> {
     console.log('📦 Creating prescription order...');

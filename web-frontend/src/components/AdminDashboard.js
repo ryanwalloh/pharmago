@@ -374,6 +374,7 @@ const AdminDashboard = () => {
           riderName: `${selectedRider.first_name} ${selectedRider.last_name}`,
           email: response.data.email,
           phone: response.data.phone_number,
+          emailStatus: response.data.email_status || 'not_sent',
         });
         setIsRiderSuccessOpen(true);
         handleCloseRiderModal();
@@ -889,7 +890,7 @@ const AdminDashboard = () => {
               </div>
               <div>
                 <h2 className="text-xl font-bold text-[#2C7A5D]">Rider Approved!</h2>
-                <p className="text-sm text-[#666666]">Notification prepared</p>
+                <p className="text-sm text-[#666666]">Welcome email sent</p>
               </div>
             </div>
             <button onClick={handleCloseRiderSuccess} className="p-2 hover:bg-[#D5E8D4] rounded-lg transition-colors duration-200">
@@ -897,9 +898,79 @@ const AdminDashboard = () => {
             </button>
           </div>
           <div className="p-6">
-            <div className="text-center">
-              <h3 className="text-lg font-semibold text-[#2C7A5D] mb-2">✅ {riderSuccessData.riderName} Approved!</h3>
-              <p className="text-sm text-[#666666] mb-4">The rider has been approved and can be activated.</p>
+            <div className="space-y-4">
+              <div className="text-center">
+                <h3 className="text-lg font-semibold text-[#2C7A5D] mb-2">✅ {riderSuccessData.riderName} Approved!</h3>
+                <p className="text-sm text-[#666666] mb-4">The rider account is now active and ready to start deliveries.</p>
+              </div>
+
+              <div className="bg-[#F8F9FA] rounded-xl p-4 space-y-3">
+                <div className="flex items-center space-x-3">
+                  <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                    <svg className="h-4 w-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-[#2C7A5D]">Welcome Email Sent</p>
+                    <p className="text-xs text-[#666666]">{riderSuccessData.email}</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center space-x-3">
+                  <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
+                    <svg className="h-4 w-4 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-[#2C7A5D]">Login Credentials</p>
+                    <p className="text-xs text-[#666666]">Rider will use their registration password</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center space-x-3">
+                  <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
+                    <svg className="h-4 w-4 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-[#2C7A5D]">Email Status</p>
+                    <p className="text-xs text-[#666666] capitalize">{riderSuccessData.emailStatus || 'sent'}</p>
+                  </div>
+                </div>
+              </div>
+
+              {riderSuccessData.emailStatus === 'sent' ? (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                  <div className="flex items-start space-x-2">
+                    <svg className="h-5 w-5 text-green-600 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <div>
+                      <p className="text-sm font-medium text-green-800">Email Sent Successfully</p>
+                      <p className="text-xs text-green-700">
+                        The rider has received their login credentials and can now access the app.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                  <div className="flex items-start space-x-2">
+                    <svg className="h-5 w-5 text-red-600 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <div>
+                      <p className="text-sm font-medium text-red-800">Email Sending Failed</p>
+                      <p className="text-xs text-red-700">
+                        Please contact the rider directly to inform them of their approval.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
           <div className="flex items-center justify-end p-6 border-t border-[#D5E8D4] bg-[#F8F9FA]">

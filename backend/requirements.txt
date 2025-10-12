@@ -17,6 +17,7 @@ django-storages==1.14.2          # Django storage backends (S3, etc.)
 Pillow==10.1.0                   # Image processing for profile pictures
 django-phonenumber-field==7.3.0  # Phone number validation and formatting
 phonenumbers==8.13.25            # Phone number parsing and validation
+googlemaps==4.10.0               # Google Maps Distance Matrix API for order batching
 
 # Phase 3.5: Global API Infrastructure
 django-redis==5.4.0                    # Redis caching backend
