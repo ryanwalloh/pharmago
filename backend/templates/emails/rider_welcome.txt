@@ -1,0 +1,61 @@
+Welcome to PharmaGo Riders - Your Account is Approved!
+
+Dear {{ rider_name }},
+
+Congratulations! Your rider application has been successfully reviewed and approved by our admin team. Your account is now ACTIVE and you can start delivering with PharmaGo!
+
+YOUR LOGIN CREDENTIALS
+=======================
+
+Here are your login credentials to access the PharmaGo Rider app:
+
+📧 Email Address: {{ email }}
+📱 Phone Number: {{ phone_number }}
+{% if temporary_password %}
+🔑 Temporary Password: {{ temporary_password }}
+{% else %}
+🔑 Password: Use the password you created during registration
+{% endif %}
+
+Login URL: {{ login_url }}
+
+GETTING STARTED
+===============
+
+1. Download the App: Get the PharmaGo Rider app from your app store
+2. Login: Use your email and password to sign in
+3. Complete Profile: Add your vehicle and availability details
+4. Start Earning: Accept delivery requests and start making money!
+
+{% if temporary_password %}
+IMPORTANT SECURITY NOTICE
+=========================
+Please change your temporary password after your first login for security reasons. You can do this in the app settings.
+{% endif %}
+
+WHAT YOU CAN DO AS A PHARMAGO RIDER
+====================================
+
+✓ Accept delivery requests in real-time
+✓ Track your earnings and delivery history
+✓ Manage your availability schedule
+✓ Earn bonuses and incentives
+✓ Get navigation support for all deliveries
+
+If you have any questions or need assistance, our support team is available 24/7 to help you.
+
+Welcome to the PharmaGo family! Let's deliver health to communities together.
+
+Safe rides and happy deliveries,
+The PharmaGo Team
+
+CONTACT INFORMATION
+===================
+Email: riders@pharmago.com
+Website: www.pharmago.com
+Rider Support: Available 24/7
+Emergency Hotline: 1-800-PHARMAGO
+
+---
+This email was sent to {{ email }}. If you did not register as a PharmaGo Rider, please contact our support team immediately.
+

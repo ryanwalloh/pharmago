@@ -615,7 +615,7 @@ class OrderBatchingService:
     """
     
     @staticmethod
-    def can_batch_orders(orders, max_batch_size=3, max_distance_km=2.0):
+    def can_batch_orders(orders, max_batch_size=3, max_distance_km=2.0, use_driving_distance=True):
         """
         Check if a group of orders can be batched together.
         
@@ -623,6 +623,7 @@ class OrderBatchingService:
             orders: List of Order objects
             max_batch_size: Maximum number of orders in a batch
             max_distance_km: Maximum distance between orders in km
+            use_driving_distance: If True, use Google Maps driving distance; otherwise use Haversine
             
         Returns:
             bool: True if orders can be batched, False otherwise
@@ -636,22 +637,49 @@ class OrderBatchingService:
         # Check if all orders are within the maximum distance of each other
         order_addresses = [order.delivery_address for order in orders]
         
-        for i in range(len(order_addresses)):
-            for j in range(i + 1, len(order_addresses)):
-                addr1 = order_addresses[i]
-                addr2 = order_addresses[j]
-                
-                if not addr1.has_coordinates() or not addr2.has_coordinates():
-                    return False
-                
-                distance = addr1.get_distance_to(addr2.latitude, addr2.longitude)
-                if distance is None or distance > max_distance_km:
-                    return False
+        # Validate all addresses have coordinates
+        for addr in order_addresses:
+            if not addr.has_coordinates():
+                return False
+        
+        if use_driving_distance:
+            # Use Google Maps for accurate driving distances
+            from api.utils.google_maps_service import GoogleMapsService
+            
+            for i in range(len(order_addresses)):
+                for j in range(i + 1, len(order_addresses)):
+                    addr1 = order_addresses[i]
+                    addr2 = order_addresses[j]
+                    
+                    result = GoogleMapsService.get_driving_distance(
+                        float(addr1.latitude), float(addr1.longitude),
+                        float(addr2.latitude), float(addr2.longitude),
+                        fallback_to_haversine=True
+                    )
+                    
+                    if result:
+                        distance = result[0]  # Get distance in km
+                        if distance > max_distance_km:
+                            return False
+                    else:
+                        return False
+        else:
+            # Use Haversine (straight-line) distance
+            for i in range(len(order_addresses)):
+                for j in range(i + 1, len(order_addresses)):
+                    addr1 = order_addresses[i]
+                    addr2 = order_addresses[j]
+                    
+                    distance = addr1.get_distance_to(
+                        float(addr2.latitude), float(addr2.longitude)
+                    )
+                    if distance is None or distance > max_distance_km:
+                        return False
         
         return True
     
     @staticmethod
-    def find_batchable_orders(orders, max_batch_size=3, max_distance_km=2.0):
+    def find_batchable_orders(orders, max_batch_size=3, max_distance_km=2.0, use_driving_distance=True):
         """
         Find groups of orders that can be batched together.
         
@@ -659,6 +687,7 @@ class OrderBatchingService:
             orders: List of Order objects
             max_batch_size: Maximum number of orders in a batch
             max_distance_km: Maximum distance between orders in km
+            use_driving_distance: If True, use Google Maps driving distance; otherwise use Haversine
             
         Returns:
             list: List of order batches (each batch is a list of orders)
@@ -689,7 +718,9 @@ class OrderBatchingService:
                 
                 # Check if this order can be added to the current batch
                 test_batch = current_batch + [other_order]
-                if OrderBatchingService.can_batch_orders(test_batch, max_batch_size, max_distance_km):
+                if OrderBatchingService.can_batch_orders(
+                    test_batch, max_batch_size, max_distance_km, use_driving_distance
+                ):
                     current_batch.append(other_order)
                     used_orders.add(other_order.id)
             

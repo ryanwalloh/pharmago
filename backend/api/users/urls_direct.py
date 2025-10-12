@@ -1,5 +1,7 @@
 from django.urls import path
 from . import direct_endpoints as views
+from . import rider_endpoints
+from api.delivery import rider_endpoints as delivery_rider_endpoints
 
 app_name = 'users_direct'
 
@@ -12,6 +14,10 @@ urlpatterns = [
     path('complete-user-setup/<str:token>/', views.complete_user_setup),
     path('pharmacy-login/', views.pharmacy_login),
     path('pharmacy-register/', views.pharmacy_register),
+    path('rider-login/', rider_endpoints.rider_login),
+    path('rider-session/', rider_endpoints.rider_session),
+    path('available-orders-count/', rider_endpoints.available_orders_count),
+    path('available-orders/', delivery_rider_endpoints.get_available_orders),
 ]
 
 

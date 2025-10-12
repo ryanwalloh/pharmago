@@ -36,32 +36,82 @@ export default function RiderLoginScreen() {
     }
     try {
       setSubmitting(true);
-      // Backend login uses username+password; we map identifier to username
-      const res = await apiService.loginUser(identifier.trim(), password);
-      if (!res.success) {
-        Alert.alert('Login failed', res.error || 'Invalid credentials');
+      
+      // Use rider-specific login endpoint
+      const res = await apiService.makeDirectRequest('/rider-login/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: identifier.trim(),
+          password: password,
+        }),
+      });
+      
+      console.log('🔐 Rider login response:', res);
+      
+      if (!res || !(res as any).success) {
+        Alert.alert('Login failed', (res as any)?.error || 'Invalid credentials');
         setSubmitting(false);
         return;
       }
-      // Verify role == rider and redirect to rider home
-      const user = (res.data as any)?.user || res.data;
-      if (!user || user.role !== 'rider') {
-        Alert.alert('Access denied', 'This account is not a rider.');
-        setSubmitting(false);
-        return;
+      
+      const loginData = res as any;
+      
+      // Extract data from nested structure
+      const userData = loginData.data?.user || loginData.user;
+      const riderData = loginData.data?.rider || loginData.rider;
+      const statsData = loginData.data?.stats || loginData.stats;
+      const tokensData = loginData.data?.tokens || loginData.tokens;
+      
+      console.log('📦 Extracted data:', {
+        hasUser: !!userData,
+        hasRider: !!riderData,
+        hasStats: !!statsData,
+        hasTokens: !!tokensData,
+      });
+      
+      // Store complete session data
+      try {
+        // Store full rider session
+        const riderSession = {
+          user: userData,
+          rider: riderData,
+          stats: statsData,
+          loginTime: new Date().toISOString(),
+        };
+        
+        await AsyncStorage.setItem('rider_session', JSON.stringify(riderSession));
+        
+        // Store individual pieces for backward compatibility
+        await AsyncStorage.setItem('rider_user', JSON.stringify(userData));
+        await AsyncStorage.setItem('rider_profile', JSON.stringify(riderData));
+        await AsyncStorage.setItem('rider_stats', JSON.stringify(statsData));
+        
+        console.log('✅ Rider session stored successfully');
+        console.log('👤 Rider:', `${riderData.first_name} ${riderData.last_name}`);
+        console.log('📊 Stats:', statsData);
+      } catch (storageError) {
+        console.error('❌ Failed to store session:', storageError);
       }
+      
+      // Store auth token
       try {
-        // Persist minimal rider user info for home screen display
-        await AsyncStorage.setItem('rider_user', JSON.stringify(user));
-      } catch {}
-      // Store token if backend returned one (optional in current backend)
-      try {
-        const accessToken = (res.data as any)?.tokens?.access;
-        apiService.setAuthToken(accessToken || null);
-      } catch {}
+        const accessToken = tokensData?.access;
+        if (accessToken) {
+          await AsyncStorage.setItem('auth_token', accessToken);
+          apiService.setAuthToken(accessToken);
+          console.log('🔑 Auth token stored');
+        }
+      } catch (tokenError) {
+        console.error('❌ Failed to store token:', tokenError);
+      }
+      
       // Navigate to rider home page
+      console.log('🚀 Navigating to rider home...');
       router.replace('/home');
+      
     } catch (e) {
+      console.error('❌ Login error:', e);
       Alert.alert('Network error', 'Please check your connection and try again.');
     } finally {
       setSubmitting(false);

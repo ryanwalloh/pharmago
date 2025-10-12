@@ -3,16 +3,26 @@
  * Handles file uploads to Cloudinary for the PharmaGo platform
  * 
  * Configuration:
- * - Cloud Name: You need to get this from your Cloudinary dashboard
- * - Upload Preset: pharmago-file-uploads (configured in Cloudinary)
- * - API Key: 947651824417687
+ * All credentials are loaded from environment variables (.env file):
+ * - REACT_APP_CLOUDINARY_CLOUD_NAME
+ * - REACT_APP_CLOUDINARY_UPLOAD_PRESET
+ * - REACT_APP_CLOUDINARY_API_KEY
  * 
- * Note: In production, these should be environment variables
+ * Make sure these are set in your .env file before using this service.
  */
 
-const CLOUD_NAME = process.env.REACT_APP_CLOUDINARY_CLOUD_NAME || 'dw8x5q1wa'; // Replace with your actual cloud name
-const UPLOAD_PRESET = process.env.REACT_APP_CLOUDINARY_UPLOAD_PRESET || 'pharmago-file-uploads';
-const API_KEY = process.env.REACT_APP_CLOUDINARY_API_KEY || '947651824417687';
+const CLOUD_NAME = process.env.REACT_APP_CLOUDINARY_CLOUD_NAME;
+const UPLOAD_PRESET = process.env.REACT_APP_CLOUDINARY_UPLOAD_PRESET;
+const API_KEY = process.env.REACT_APP_CLOUDINARY_API_KEY;
+
+// Validate that required environment variables are set
+if (!CLOUD_NAME || !UPLOAD_PRESET || !API_KEY) {
+  console.error('❌ Cloudinary credentials missing! Please check your .env file.');
+  console.error('Required variables:');
+  console.error('- REACT_APP_CLOUDINARY_CLOUD_NAME:', CLOUD_NAME ? '✓' : '✗ MISSING');
+  console.error('- REACT_APP_CLOUDINARY_UPLOAD_PRESET:', UPLOAD_PRESET ? '✓' : '✗ MISSING');
+  console.error('- REACT_APP_CLOUDINARY_API_KEY:', API_KEY ? '✓' : '✗ MISSING');
+}
 
 /**
  * Upload a file to Cloudinary

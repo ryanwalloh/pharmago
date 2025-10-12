@@ -10,9 +10,14 @@ def approve_rider_direct(request, rider_id):
     """Direct endpoint to approve a rider application."""
     if request.method != 'POST':
         return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
+    
+    import logging
+    logger = logging.getLogger(__name__)
+    
     try:
         from api.users.models import Rider, User
         from django.utils import timezone
+        from api.utils.email_utils import send_rider_welcome_email
 
         rider = Rider.objects.select_related('user').get(id=rider_id)
         rider.status = 'approved'
@@ -28,10 +33,21 @@ def approve_rider_direct(request, rider_id):
         rider.user.status = 'active'
         rider.user.save(update_fields=['status'])
 
+        # Send welcome email with login credentials
+        email_status = 'not_sent'
+        try:
+            email_sent = send_rider_welcome_email(rider, temporary_password=None)
+            email_status = 'sent' if email_sent else 'failed'
+            logger.info(f"Rider welcome email status: {email_status} for {rider.user.email}")
+        except Exception as e:
+            logger.error(f"Failed to send rider welcome email: {str(e)}")
+            email_status = 'failed'
+
         return JsonResponse({
             'success': True,
             'email': rider.user.email,
             'phone_number': rider.user.phone_number,
+            'email_status': email_status,
         })
     except Rider.DoesNotExist:
         return JsonResponse({'success': False, 'error': 'Rider not found'}, status=404)
@@ -54,8 +70,12 @@ def complete_rider_registration(request):
         return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
 
     import json
+    import logging
+    logger = logging.getLogger(__name__)
+    
     try:
         payload = json.loads(request.body or '{}')
+        logger.info(f"📝 Rider registration payload received: {payload.keys()}")
 
         from api.users.models import User, Rider, UserDocument, ValidID
         from django.db import transaction
@@ -63,6 +83,10 @@ def complete_rider_registration(request):
         user_data = payload.get('user') or {}
         rider_data = payload.get('rider') or {}
         documents = payload.get('documents') or []
+        
+        logger.info(f"👤 User data: email={user_data.get('email')}, phone={user_data.get('phone_number')}")
+        logger.info(f"🏍️ Rider data: name={rider_data.get('first_name')} {rider_data.get('last_name')}, vehicle={rider_data.get('vehicle_type')}")
+        logger.info(f"📄 Documents count: {len(documents)}")
 
         required_user = ['email', 'phone_number', 'password']
         for f in required_user:
@@ -81,36 +105,44 @@ def complete_rider_registration(request):
                 phone_number=user_data.get('phone_number'),
                 password=user_data.get('password'),
                 username=username,
-                role='customer',
+                role='rider',
                 first_name=user_data.get('first_name') or rider_data.get('first_name') or '',
                 last_name=user_data.get('last_name') or rider_data.get('last_name') or '',
                 status=User.UserStatus.PENDING,
             )
 
             dob_raw = rider_data.get('date_of_birth')
+            logger.info(f"📅 Raw date_of_birth: {dob_raw} (type: {type(dob_raw).__name__})")
             dob = None
-            if isinstance(dob_raw, str):
-                dob = parse_date(dob_raw)
-            elif isinstance(dob_raw, (int, float)):
-                try:
+            
+            try:
+                if isinstance(dob_raw, str):
+                    dob = parse_date(dob_raw)
+                    logger.info(f"📅 Parsed string date: {dob}")
+                elif isinstance(dob_raw, (int, float)):
                     import datetime
                     ts = int(dob_raw)
                     if ts > 10_000_000_000:
                         ts = ts / 1000
                     dob = datetime.date.fromtimestamp(ts)
-                except Exception:
-                    dob = None
-            elif hasattr(dob_raw, 'year'):
-                dob = dob_raw
+                    logger.info(f"📅 Parsed timestamp date: {dob}")
+                elif hasattr(dob_raw, 'year'):
+                    dob = dob_raw
+                    logger.info(f"📅 Date object received: {dob}")
+            except Exception as e:
+                logger.error(f"❌ Date parsing failed: {str(e)}")
+                dob = None
 
             if dob is None:
-                return JsonResponse({'success': False, 'error': 'Invalid or missing rider.date_of_birth (YYYY-MM-DD)'}, status=400)
+                logger.error(f"❌ Date of birth is None after parsing. Raw value was: {dob_raw}")
+                return JsonResponse({'success': False, 'error': f'Invalid or missing rider.date_of_birth. Received: {dob_raw}'}, status=400)
 
             if not rider_data.get('gender'):
                 return JsonResponse({'success': False, 'error': 'Missing rider.gender'}, status=400)
             if not rider_data.get('vehicle_type'):
                 return JsonResponse({'success': False, 'error': 'Missing rider.vehicle_type'}, status=400)
 
+            logger.info(f"🏍️ Creating Rider with date_of_birth: {dob} (type: {type(dob).__name__})")
             rider = Rider.objects.create(
                 user=user,
                 first_name=rider_data.get('first_name') or user.first_name,
@@ -125,9 +157,7 @@ def complete_rider_registration(request):
                 vehicle_color=rider_data.get('vehicle_color') or None,
                 drivers_license_uploaded=bool(rider_data.get('drivers_license_uploaded')),
             )
-
-            user.role = 'rider'
-            user.save(update_fields=['role'])
+            logger.info(f"✅ Rider created successfully! ID: {rider.id}, DOB: {rider.date_of_birth}")
 
             for doc in documents:
                 id_type_code = doc.get('id_type')
@@ -145,12 +175,15 @@ def complete_rider_registration(request):
                     user=user,
                     id_type=id_type,
                     file_url=file_url,
-                    document_file=file_url,
+                    document_file='',  # Empty for Cloudinary URLs (document_file is FileField, not for URLs)
                     status=UserDocument.DocumentStatus.PENDING,
                 )
+                logger.info(f"✅ Created document: {id_type_code} ({file_url[:60]}...) for user {user.id}")
 
-        return JsonResponse({'success': True, 'user_id': user.id})
+        logger.info(f"✅ Rider registration complete! User ID: {user.id}, Rider ID: {rider.id}")
+        return JsonResponse({'success': True, 'user_id': user.id, 'rider_id': rider.id})
     except Exception as e:
+        logger.error(f"❌ Rider registration failed: {str(e)}", exc_info=True)
         return JsonResponse({'success': False, 'error': 'Registration failed', 'message': str(e)}, status=500)
 
 
