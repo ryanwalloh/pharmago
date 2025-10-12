@@ -13,6 +13,6 @@ class Migration(migrations.Migration):
         migrations.AlterField(
             model_name='userdocument',
             name='file_url',
-            field=models.URLField(blank=True, help_text='S3 URL of uploaded file.', null=True),
+            field=models.URLField(max_length=1000, blank=True, help_text='URL of uploaded file (S3 or Cloudinary).', null=True),
         ),
     ]

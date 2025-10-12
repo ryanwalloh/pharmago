@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Welcome to PharmaGo Riders</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        .email-container {
+            background-color: #ffffff;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+        .logo {
+            font-size: 28px;
+            font-weight: bold;
+            color: #4DAF7C;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            color: #666;
+            font-size: 16px;
+        }
+        .content {
+            margin-bottom: 30px;
+        }
+        .welcome-message {
+            font-size: 18px;
+            color: #2C7A5D;
+            margin-bottom: 20px;
+            font-weight: bold;
+        }
+        .rider-name {
+            font-weight: bold;
+            color: #4DAF7C;
+        }
+        .credentials-section {
+            background-color: #D5E8D4;
+            padding: 25px;
+            border-radius: 8px;
+            margin: 25px 0;
+            border-left: 4px solid #4DAF7C;
+        }
+        .credential-item {
+            background-color: #ffffff;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+            border: 1px solid #6BBF9A;
+        }
+        .credential-label {
+            font-weight: bold;
+            color: #2C7A5D;
+            font-size: 14px;
+            margin-bottom: 5px;
+        }
+        .credential-value {
+            font-family: monospace;
+            font-size: 16px;
+            color: #333;
+            background-color: #f8f9fa;
+            padding: 8px 12px;
+            border-radius: 3px;
+            word-break: break-all;
+        }
+        .login-button {
+            display: inline-block;
+            background-color: #4DAF7C;
+            color: white;
+            padding: 15px 30px;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: bold;
+            margin: 15px 0;
+            transition: background-color 0.3s;
+            text-align: center;
+        }
+        .login-button:hover {
+            background-color: #2C7A5D;
+        }
+        .instructions {
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .warning {
+            background-color: #ffe6e6;
+            border: 1px solid #ffcccc;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+            color: #cc0000;
+        }
+        .footer {
+            text-align: center;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #e0e0e0;
+            color: #666;
+            font-size: 14px;
+        }
+        .contact-info {
+            margin-top: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="email-container">
+        <div class="header">
+            <div class="logo">🏍️ PharmaGo Riders</div>
+            <div class="subtitle">Delivering Health, Delivering Hope</div>
+        </div>
+        
+        <div class="content">
+            <div class="welcome-message">
+                🎉 Congratulations! Your rider account has been approved!
+            </div>
+            
+            <p>Dear <span class="rider-name">{{ rider_name }}</span>,</p>
+            
+            <p>We are excited to inform you that your rider application has been successfully reviewed and approved by our admin team. Your account is now <strong>active</strong> and you can start delivering with PharmaGo!</p>
+            
+            <div class="credentials-section">
+                <h3>🔐 Your Login Credentials</h3>
+                <p>Here are your login credentials to access the PharmaGo Rider app:</p>
+                
+                <div class="credential-item">
+                    <div class="credential-label">📧 Email Address:</div>
+                    <div class="credential-value">{{ email }}</div>
+                </div>
+                
+                <div class="credential-item">
+                    <div class="credential-label">📱 Phone Number:</div>
+                    <div class="credential-value">{{ phone_number }}</div>
+                </div>
+                
+                {% if temporary_password %}
+                <div class="credential-item">
+                    <div class="credential-label">🔑 Temporary Password:</div>
+                    <div class="credential-value">{{ temporary_password }}</div>
+                </div>
+                {% else %}
+                <p><strong>🔑 Password:</strong> Use the password you created during registration</p>
+                {% endif %}
+                
+                <a href="{{ login_url }}" class="login-button">Login to Rider App</a>
+            </div>
+            
+            <div class="instructions">
+                <h4>📋 Getting Started:</h4>
+                <ul>
+                    <li><strong>Download the App:</strong> Get the PharmaGo Rider app from your app store</li>
+                    <li><strong>Login:</strong> Use your email and password to sign in</li>
+                    <li><strong>Complete Profile:</strong> Add your vehicle and availability details</li>
+                    <li><strong>Start Earning:</strong> Accept delivery requests and start making money!</li>
+                </ul>
+            </div>
+            
+            {% if temporary_password %}
+            <div class="warning">
+                <h4>⚠️ Important Security Notice:</h4>
+                <p>Please change your temporary password after your first login for security reasons. You can do this in the app settings.</p>
+            </div>
+            {% endif %}
+            
+            <p><strong>What you can do as a PharmaGo Rider:</strong></p>
+            <ul>
+                <li>✅ Accept delivery requests in real-time</li>
+                <li>✅ Track your earnings and delivery history</li>
+                <li>✅ Manage your availability schedule</li>
+                <li>✅ Earn bonuses and incentives</li>
+                <li>✅ Get navigation support for all deliveries</li>
+            </ul>
+            
+            <p>If you have any questions or need assistance, our support team is available 24/7 to help you.</p>
+            
+            <p>Welcome to the PharmaGo family! Let's deliver health to communities together.</p>
+        </div>
+        
+        <div class="footer">
+            <p><strong>Safe rides and happy deliveries,</strong><br>
+            The PharmaGo Team</p>
+            
+            <div class="contact-info">
+                <p>📧 Email: riders@pharmago.com<br>
+                🌐 Website: www.pharmago.com<br>
+                📞 Rider Support: Available 24/7<br>
+                💬 Emergency Hotline: 1-800-PHARMAGO</p>
+            </div>
+            
+            <p style="font-size: 12px; color: #999; margin-top: 20px;">
+                This email was sent to {{ email }}. If you did not register as a PharmaGo Rider, please contact our support team immediately.
+            </p>
+        </div>
+    </div>
+</body>
+</html>
+

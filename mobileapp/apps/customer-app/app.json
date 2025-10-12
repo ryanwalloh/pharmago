@@ -9,7 +9,10 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "config": {
+        "googleMapsApiKey": "AIzaSyCCuDLJMhB-23kQiXYpXwi-yYGvKz7OgSQ"
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -26,6 +29,11 @@
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION"
       ],
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyCCuDLJMhB-23kQiXYpXwi-yYGvKz7OgSQ"
+        }
+      },
       "package": "com.anonymous.mobileapp"
     },
     "web": {
