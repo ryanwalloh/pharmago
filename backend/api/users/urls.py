@@ -3,6 +3,7 @@ from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView, TokenVerifyView
 from .views import UserViewSet, CustomerViewSet, PharmacyViewSet, RiderViewSet, DocumentUploadViewSet
 from .jwt_views import jwt_login, jwt_refresh, jwt_logout, jwt_verify
+from .rider_endpoints import rider_login, rider_session
 
 router = DefaultRouter()
 router.register(r'users', UserViewSet, basename='user')
@@ -35,6 +36,10 @@ urlpatterns = [
     ])),
     path('customers/', include([
         path('my-profile/', CustomerViewSet.as_view({'get': 'my_profile'}), name='customer-my-profile'),
+    ])),
+    path('riders/', include([
+        path('login/', rider_login, name='rider-login'),
+        path('session/', rider_session, name='rider-session'),
     ])),
 ]
 

@@ -556,16 +556,13 @@ const PharmacyDashboard = () => {
         }
       }
       
-      // Fallback to frontend search
+      // Fallback to frontend search - optimized to search by product name only
+      const searchTerm = query.toLowerCase().trim();
       const filtered = medicines.filter(medicine => 
-        medicine.name?.toLowerCase().includes(query.toLowerCase()) ||
-        medicine.generic_name?.toLowerCase().includes(query.toLowerCase()) ||
-        medicine.category?.name?.toLowerCase().includes(query.toLowerCase()) ||
-        medicine.therapeutic_class?.toLowerCase().includes(query.toLowerCase()) ||
-        medicine.description?.toLowerCase().includes(query.toLowerCase())
+        medicine.name?.toLowerCase().includes(searchTerm)
       );
       setFilteredMedicines(filtered);
-      console.log(`🔍 Frontend search found ${filtered.length} medicines for "${query}"`);
+      console.log(`🔍 Name search found ${filtered.length} medicines for "${query}"`);
     }
   };
 
@@ -1680,7 +1677,7 @@ const PharmacyDashboard = () => {
                       <div className="relative mb-4">
                         <input
                           type="text"
-                          placeholder="Search medicines by name, generic name, category, or therapeutic class..."
+                          placeholder="Search medicines by product name..."
                           className="w-full p-3 pl-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2c786c] focus:border-transparent"
                           value={catalogSearchQuery}
                           onChange={(e) => handleCatalogSearch(e.target.value)}

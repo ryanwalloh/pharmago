@@ -62,6 +62,58 @@ def send_pharmacy_welcome_email(pharmacy, login_token):
         return False
 
 
+def send_rider_welcome_email(rider, temporary_password=None):
+    """
+    Send welcome email to approved rider with login credentials.
+    
+    Args:
+        rider: Rider model instance
+        temporary_password: Optional temporary password (if generated)
+        
+    Returns:
+        bool: True if email sent successfully, False otherwise
+    """
+    try:
+        # Prepare email context
+        rider_name = f"{rider.first_name} {rider.last_name}"
+        context = {
+            'rider_name': rider_name,
+            'email': rider.user.email,
+            'phone_number': rider.user.phone_number,
+            'temporary_password': temporary_password,
+            'login_url': f"{settings.FRONTEND_URL}/rider-login",  # Adjust this URL as needed
+        }
+        
+        # Render email templates
+        html_content = render_to_string('emails/rider_welcome.html', context)
+        text_content = render_to_string('emails/rider_welcome.txt', context)
+        
+        # Email subject
+        subject = f"Welcome to PharmaGo - Your Rider Account is Approved!"
+        
+        # Send email
+        email = EmailMultiAlternatives(
+            subject=subject,
+            body=text_content,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            to=[rider.user.email],
+        )
+        email.attach_alternative(html_content, "text/html")
+        
+        result = email.send()
+        
+        if result:
+            logger.info(f"Welcome email sent successfully to {rider.user.email} for rider {rider_name}")
+            return True
+        else:
+            logger.error(f"Failed to send welcome email to {rider.user.email}")
+            return False
+            
+    except Exception as e:
+        logger.error(f"Error sending welcome email to {rider.user.email}: {str(e)}")
+        return False
+
+
 def send_simple_email(subject, message, recipient_email, html_message=None):
     """
     Send a simple email message.
