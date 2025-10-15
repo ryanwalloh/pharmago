@@ -7,14 +7,17 @@ import {
   TouchableOpacity,
   Image,
   ImageBackground,
-  StatusBar
+  StatusBar,
+  Alert
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { apiService } from '../../../customer-app/services/api';
+import { dispatchService, DispatchOffer } from '../../../customer-app/services/dispatchService';
+import DispatchOfferModal from '../../components/DispatchOfferModal';
 
-// ⚙️ DEVELOPMENT FLAG: Set to false to disable WebSocket (use polling only)
-const ENABLE_WEBSOCKET = false;
+// ⚙️ DEVELOPMENT FLAG: Set to true to enable dispatch WebSocket
+const ENABLE_DISPATCH_WEBSOCKET = true;
 
 interface RiderUser {
   id: number;
@@ -37,9 +40,12 @@ export default function RiderHome() {
     rating: 4.8,
   });
   const [availableOrdersCount, setAvailableOrdersCount] = useState(0);
-  const [isWebSocketConnected, setIsWebSocketConnected] = useState(false);
-  const wsRef = React.useRef<WebSocket | null>(null);
-  const reconnectTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+
+  // Dispatch Offer Modal State
+  const [currentDispatchOffer, setCurrentDispatchOffer] = useState<DispatchOffer | null>(null);
+  const [showDispatchModal, setShowDispatchModal] = useState(false);
+  const [acceptingOffer, setAcceptingOffer] = useState(false);
+  const [rejectingOffer, setRejectingOffer] = useState(false);
   
   // Mock data
   const recentTransactions = [
@@ -125,132 +131,186 @@ export default function RiderHome() {
     }
   }, []);
 
-  const connectWebSocket = useCallback(() => {
-    // Get WebSocket URL from environment or derive from API URL
-    const getWebSocketUrl = () => {
-      // For Railway deployment
-      if (process.env.EXPO_PUBLIC_WS_URL) {
-        return process.env.EXPO_PUBLIC_WS_URL;
-      }
-      
-      // Derive from current API configuration
-      // In production (Railway), this will be wss://your-app.railway.app/ws/rider/orders/
-      // In development, this will be ws://192.168.x.x:8000/ws/rider/orders/
-      const envBase = process.env.EXPO_PUBLIC_API_BASE;
-      if (envBase) {
-        const wsProtocol = envBase.startsWith('https') ? 'wss' : 'ws';
-        const host = envBase.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
-        return `${wsProtocol}://${host}/ws/rider/orders/`;
-      }
-      
-      // Fallback to localhost for development
-      return 'ws://localhost:8000/ws/rider/orders/';
-    };
 
+  // ========== DISPATCH OFFER HANDLERS ==========
+
+  /**
+   * Handle incoming dispatch offer from WebSocket
+   */
+  const handleDispatchOffer = useCallback((offer: DispatchOffer) => {
+    console.log('🚨 NEW DISPATCH OFFER RECEIVED!', offer);
+    setCurrentDispatchOffer(offer);
+    setShowDispatchModal(true);
+  }, []);
+
+  /**
+   * Handle offer cancellation from WebSocket
+   */
+  const handleOfferCancelled = useCallback((offerId: string) => {
+    console.log('🚫 Offer cancelled:', offerId);
+    if (currentDispatchOffer?.offer_id === offerId) {
+      setShowDispatchModal(false);
+      setCurrentDispatchOffer(null);
+      Alert.alert('Offer Cancelled', 'This order was assigned to another rider.');
+    }
+  }, [currentDispatchOffer]);
+
+  /**
+   * Accept dispatch offer
+   */
+  const handleAcceptOffer = async () => {
+    if (!currentDispatchOffer || !riderProfile?.id) return;
+
+    setAcceptingOffer(true);
+    
     try {
-      const wsUrl = getWebSocketUrl();
-      console.log(`🔌 Connecting to WebSocket: ${wsUrl}`);
-      
-      const ws = new WebSocket(wsUrl);
-      wsRef.current = ws;
+      const result = await dispatchService.acceptOffer(
+        currentDispatchOffer.offer_id,
+        riderProfile.id
+      );
 
-      ws.onopen = () => {
-        console.log('✅ WebSocket connected');
-        setIsWebSocketConnected(true);
+      if (result.success) {
+        Alert.alert(
+          'Order Accepted! 🎉',
+          currentDispatchOffer.is_batch
+            ? `You've accepted ${currentDispatchOffer.orders_count} orders. Start deliveries now!`
+            : 'Head to the pharmacy to pick up this order.',
+          [
+            {
+              text: 'View Order',
+              onPress: () => {
+                setShowDispatchModal(false);
+                setCurrentDispatchOffer(null);
+                // TODO: Navigate to active deliveries screen
+                console.log('Navigate to active deliveries');
+              },
+            },
+          ]
+        );
         
-        // Send initial subscription message
-        ws.send(JSON.stringify({
-          type: 'subscribe',
-          channel: 'available_orders'
-        }));
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          console.log('📨 WebSocket message:', data);
-          
-          if (data.type === 'order_count_update' && typeof data.count === 'number') {
-            setAvailableOrdersCount((prevCount) => {
-              const timestamp = new Date().toLocaleTimeString();
-              if (data.count !== prevCount) {
-                console.log(`⚡ [${timestamp}] WebSocket: Order count updated: ${prevCount} → ${data.count}`);
-              }
-              return data.count;
-            });
-          }
-        } catch (error) {
-          console.error('❌ WebSocket message parse error:', error);
-        }
-      };
-
-      ws.onerror = (error) => {
-        console.error('❌ WebSocket error:', error);
-        setIsWebSocketConnected(false);
-      };
-
-      ws.onclose = () => {
-        console.log('🔌 WebSocket disconnected');
-        setIsWebSocketConnected(false);
-        wsRef.current = null;
+        setShowDispatchModal(false);
+        setCurrentDispatchOffer(null);
         
-        // Attempt to reconnect after 5 seconds
-        reconnectTimeoutRef.current = setTimeout(() => {
-          console.log('🔄 Attempting to reconnect WebSocket...');
-          connectWebSocket();
-        }, 5000) as any;
-      };
-
+        // Refresh available orders count
+        fetchAvailableOrders();
+      } else {
+        Alert.alert('Failed to Accept', result.message || 'Please try again.');
+      }
     } catch (error) {
-      console.error('❌ WebSocket connection error:', error);
-      setIsWebSocketConnected(false);
+      console.error('❌ Error accepting offer:', error);
+      Alert.alert('Error', 'Failed to accept offer. Please try again.');
+    } finally {
+      setAcceptingOffer(false);
     }
-  }, []);
+  };
 
-  const disconnectWebSocket = useCallback(() => {
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current);
-      reconnectTimeoutRef.current = null;
+  /**
+   * Reject dispatch offer
+   */
+  const handleRejectOffer = async () => {
+    if (!currentDispatchOffer || !riderProfile?.id) return;
+
+    setRejectingOffer(true);
+    
+    try {
+      const result = await dispatchService.rejectOffer(
+        currentDispatchOffer.offer_id,
+        riderProfile.id,
+        'not_interested'
+      );
+
+      if (result.success) {
+        console.log('✅ Offer rejected successfully');
+        setShowDispatchModal(false);
+        setCurrentDispatchOffer(null);
+      } else {
+        Alert.alert('Failed to Reject', result.message || 'Please try again.');
+      }
+    } catch (error) {
+      console.error('❌ Error rejecting offer:', error);
+      Alert.alert('Error', 'Failed to reject offer. Please try again.');
+    } finally {
+      setRejectingOffer(false);
+    }
+  };
+
+  /**
+   * Toggle rider online/offline status
+   */
+  const handleToggleOnlineStatus = async () => {
+    const newStatus = !isOnline;
+    
+    // Update UI immediately
+    setIsOnline(newStatus);
+    
+    // Update backend
+    if (riderProfile?.id) {
+      try {
+        await dispatchService.updateRiderStatus(
+          riderProfile.id,
+          newStatus ? 'online' : 'offline'
+        );
+        console.log(`✅ Rider status updated to: ${newStatus ? 'online' : 'offline'}`);
+      } catch (error) {
+        console.error('❌ Failed to update rider status:', error);
+      }
     }
     
-    if (wsRef.current) {
-      console.log('🔌 Closing WebSocket connection');
-      wsRef.current.close();
-      wsRef.current = null;
+    // Connect/disconnect dispatch WebSocket
+    if (ENABLE_DISPATCH_WEBSOCKET && riderProfile?.id) {
+      if (newStatus) {
+        // Going online - connect to dispatch channel
+        console.log('🔌 Connecting to dispatch WebSocket (rider going online)');
+        dispatchService.connectToDispatchChannel(
+          riderProfile.id,
+          handleDispatchOffer,
+          handleOfferCancelled
+        );
+      } else {
+        // Going offline - disconnect
+        console.log('🔌 Disconnecting from dispatch WebSocket (rider going offline)');
+        dispatchService.disconnect();
+      }
     }
-    
-    setIsWebSocketConnected(false);
-  }, []);
+  };
 
   useEffect(() => {
     loadRiderData();
     fetchAvailableOrders();
     
-    // Try to connect to WebSocket (only if enabled)
-    if (ENABLE_WEBSOCKET) {
-      console.log('🔌 WebSocket enabled - attempting connection');
-      connectWebSocket();
-    } else {
-      console.log('⚠️ WebSocket disabled - using polling only');
-    }
-    
-    // Set up polling as fallback (only runs if WebSocket is not connected)
-    // Polling every 15 seconds
+    // Set up polling for order count (every 15 seconds)
     const orderPollingInterval = setInterval(() => {
-      if (!ENABLE_WEBSOCKET || !isWebSocketConnected) {
-        console.log('📡 Polling for order updates');
-        fetchAvailableOrders();
-      }
+      console.log('📡 Polling for order updates');
+      fetchAvailableOrders();
     }, 15000); // 15 seconds
     
     // Cleanup on unmount
     return () => {
       clearInterval(orderPollingInterval);
-      if (ENABLE_WEBSOCKET) {
-        disconnectWebSocket();
+      // Disconnect dispatch WebSocket on unmount
+      if (ENABLE_DISPATCH_WEBSOCKET) {
+        dispatchService.disconnect();
       }
     };
-  }, [fetchAvailableOrders, connectWebSocket, disconnectWebSocket, isWebSocketConnected]);
+  }, [fetchAvailableOrders]);
+
+  // Connect to dispatch WebSocket when rider profile is loaded and rider is online
+  useEffect(() => {
+    if (ENABLE_DISPATCH_WEBSOCKET && riderProfile?.id && isOnline) {
+      console.log('🔌 Connecting to dispatch WebSocket (rider is online)');
+      dispatchService.connectToDispatchChannel(
+        riderProfile.id,
+        handleDispatchOffer,
+        handleOfferCancelled
+      );
+
+      // Cleanup: disconnect when offline or unmount
+      return () => {
+        console.log('🔌 Cleaning up dispatch WebSocket');
+        dispatchService.disconnect();
+      };
+    }
+  }, [riderProfile?.id, isOnline, handleDispatchOffer, handleOfferCancelled]);
 
   const riderFirstName = riderProfile?.first_name || user?.first_name || user?.email?.split('@')[0] || 'Rider';
   
@@ -295,7 +355,7 @@ export default function RiderHome() {
           </View>
           <TouchableOpacity 
             style={styles.toggleButton}
-            onPress={() => setIsOnline(!isOnline)}
+            onPress={handleToggleOnlineStatus}
           >
             <View style={[styles.toggleTrack, isOnline && styles.toggleTrackActive]}>
               <View style={[styles.toggleThumb, isOnline && styles.toggleThumbActive]} />
@@ -314,15 +374,8 @@ export default function RiderHome() {
             <View style={styles.ordersText}>
               <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
                 <Text style={styles.ordersTitle}>{availableOrdersCount} delivery orders found!</Text>
-                <View style={[
-                  styles.liveBadge, 
-                  ENABLE_WEBSOCKET && isWebSocketConnected && styles.liveBadgeConnected
-                ]}>
-                  <Text style={styles.liveBadgeText}>
-                    {ENABLE_WEBSOCKET 
-                      ? (isWebSocketConnected ? '⚡ LIVE' : 'LIVE')
-                      : 'POLLING'}
-                  </Text>
+                <View style={styles.liveBadge}>
+                  <Text style={styles.liveBadgeText}>POLLING</Text>
                 </View>
               </View>
               <TouchableOpacity onPress={() => router.push('/orders/' as any)}>
@@ -399,6 +452,16 @@ export default function RiderHome() {
           <Text style={styles.navLabel}>Profile</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Dispatch Offer Modal */}
+      <DispatchOfferModal
+        visible={showDispatchModal}
+        offer={currentDispatchOffer}
+        onAccept={handleAcceptOffer}
+        onReject={handleRejectOffer}
+        accepting={acceptingOffer}
+        rejecting={rejectingOffer}
+      />
     </View>
   );
 }

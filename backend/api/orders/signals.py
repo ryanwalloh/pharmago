@@ -2,8 +2,11 @@ from django.db.models.signals import post_save, post_delete, m2m_changed
 from django.dispatch import receiver
 from django.core.cache import cache
 from django.utils import timezone
+import logging
 
 from .models import Order, OrderLine
+
+logger = logging.getLogger(__name__)
 
 
 def _bump_pharmacy_orders_version(pharmacy_ids):
@@ -55,5 +58,63 @@ def on_orderline_deleted(sender, instance: OrderLine, **kwargs):
         _bump_pharmacy_orders_version([pid])
     except Exception:
         pass
+
+
+# ========== DISPATCH SYSTEM AUTO-TRIGGER ==========
+
+@receiver(post_save, sender=Order)
+def auto_dispatch_on_order_acceptance(sender, instance: Order, created, **kwargs):
+    """
+    Automatically dispatch order to riders when status changes to 'accepted'.
+    
+    This signal is triggered when:
+    - Customer approves the price quote from pharmacy
+    - Order status changes to 'accepted'
+    
+    Safety checks prevent infinite loops and duplicate dispatches.
+    """
+    # Only trigger for existing orders (not newly created)
+    if created:
+        return
+    
+    # Only trigger when status is 'accepted'
+    if instance.order_status != Order.OrderStatus.ACCEPTED:
+        return
+    
+    # Safety check #1: Already assigned to a rider?
+    if instance.is_assigned_to_rider():
+        logger.debug(f"⏭️  Order {instance.order_number} already assigned, skipping dispatch")
+        return
+    
+    # Safety check #2: Already in dispatch queue?
+    from api.delivery.models import DispatchQueue
+    existing_queue = DispatchQueue.objects.filter(
+        order=instance,
+        status__in=[
+            DispatchQueue.QueueStatus.PENDING,
+            DispatchQueue.QueueStatus.DISPATCHING
+        ]
+    ).exists()
+    
+    if existing_queue:
+        logger.debug(f"⏭️  Order {instance.order_number} already in dispatch queue")
+        return
+    
+    # All checks passed - trigger dispatch!
+    try:
+        from api.delivery.dispatch_service import DispatchService
+        
+        logger.info(f"🚀 Auto-dispatch triggered for order {instance.order_number}")
+        
+        # Dispatch in background (async recommended for production)
+        success = DispatchService.dispatch_order(instance)
+        
+        if success:
+            logger.info(f"✅ Dispatch initiated for {instance.order_number}")
+        else:
+            logger.warning(f"⚠️  Dispatch failed for {instance.order_number}")
+            
+    except Exception as e:
+        logger.error(f"❌ Error in auto-dispatch signal: {str(e)}", exc_info=True)
 
 
