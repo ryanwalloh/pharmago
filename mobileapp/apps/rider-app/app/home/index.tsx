@@ -170,25 +170,19 @@ export default function RiderHome() {
       );
 
       if (result.success) {
-        Alert.alert(
-          'Order Accepted! 🎉',
-          currentDispatchOffer.is_batch
-            ? `You've accepted ${currentDispatchOffer.orders_count} orders. Start deliveries now!`
-            : 'Head to the pharmacy to pick up this order.',
-          [
-            {
-              text: 'View Order',
-              onPress: () => {
-                setShowDispatchModal(false);
-                setCurrentDispatchOffer(null);
-                // TODO: Navigate to active deliveries screen
-                console.log('Navigate to active deliveries');
-              },
-            },
-          ]
-        );
-        
+        // Close modal
         setShowDispatchModal(false);
+        
+        // Navigate to delivery tracking screen using assignment_id from backend
+        const assignmentId = (result as any).assignment_id;
+        if (assignmentId) {
+          console.log(`🚀 Navigating to delivery tracking: /delivery/${assignmentId}`);
+          router.push(`/delivery/${assignmentId}` as any);
+        } else {
+          Alert.alert('Success', 'Order accepted! Check Active Deliveries.');
+        }
+        
+        // Clear offer state
         setCurrentDispatchOffer(null);
         
         // Refresh available orders count

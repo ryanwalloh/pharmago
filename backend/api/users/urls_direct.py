@@ -2,6 +2,7 @@ from django.urls import path
 from . import direct_endpoints as views
 from . import rider_endpoints
 from api.delivery import rider_endpoints as delivery_rider_endpoints
+from api.delivery import assignment_endpoints
 
 app_name = 'users_direct'
 
@@ -25,6 +26,9 @@ urlpatterns = [
     path('rider/update-status/', delivery_rider_endpoints.update_rider_status),
     path('rider/update-location/', delivery_rider_endpoints.update_rider_location),
     path('rider/current-offer/', delivery_rider_endpoints.get_current_dispatch_offer),
+    
+    # Assignment Details Endpoint
+    path('assignment/<int:assignment_id>/', assignment_endpoints.get_assignment_details),
 ]
 
 

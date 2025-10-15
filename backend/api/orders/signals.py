@@ -73,12 +73,17 @@ def auto_dispatch_on_order_acceptance(sender, instance: Order, created, **kwargs
     
     Safety checks prevent infinite loops and duplicate dispatches.
     """
+    # DEBUG: Log every save
+    logger.info(f"📝 Order saved: {instance.order_number} | created={created} | status={instance.order_status}")
+    
     # Only trigger for existing orders (not newly created)
     if created:
+        logger.debug(f"⏭️  Skipping new order {instance.order_number}")
         return
     
     # Only trigger when status is 'accepted'
     if instance.order_status != Order.OrderStatus.ACCEPTED:
+        logger.debug(f"⏭️  Order {instance.order_number} status is {instance.order_status}, not 'accepted'")
         return
     
     # Safety check #1: Already assigned to a rider?
