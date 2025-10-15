@@ -3,6 +3,7 @@ from django.utils.translation import gettext_lazy as _
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.core.exceptions import ValidationError
 from django.db.models import Sum, F
+from decimal import Decimal
 from api.users.models import User
 from api.users.models import Customer
 from api.locations.models import Address
@@ -774,6 +775,8 @@ class OrderLine(models.Model):
     @property
     def line_total(self):
         """Calculate line total."""
+        if self.unit_price is None or self.quantity is None:
+            return Decimal('0.00')
         return self.unit_price * self.quantity
     
     @property
