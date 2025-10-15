@@ -82,15 +82,11 @@ class DispatchService:
             logger.warning(f"⚠️  Order {order.order_number} already in dispatch queue")
             return False
         
-        # Check for immediate batching opportunity
-        compatible_orders = cls.check_for_batchable_orders(order)
-        
-        if len(compatible_orders) > 1:
-            logger.info(f"🔄 Found {len(compatible_orders)} orders to batch immediately")
-            return cls._dispatch_batch(compatible_orders)
-        else:
-            logger.info(f"📦 Dispatching as single order")
-            return cls._dispatch_single(order)
+        # TODO: Immediate batching feature (temporarily disabled for testing)
+        # For now, always dispatch as single order first
+        # Batching will occur on rider rejection (dynamic batching)
+        logger.info(f"📦 Dispatching as single order")
+        return cls._dispatch_single(order)
     
     @classmethod
     def _dispatch_single(cls, order: Order) -> bool:
@@ -155,7 +151,7 @@ class DispatchService:
                 max_batch_size=cls.MAX_BATCH_SIZE,
                 total_delivery_fee=Decimal(str(total_delivery_fee)),
                 rider_earnings=Decimal(str(rider_earnings)),
-                status=RiderAssignment.AssignmentStatus.PENDING,
+                status=RiderAssignment.AssignmentStatus.ASSIGNED,
                 estimated_completion=timezone.now() + timedelta(hours=2)
             )
             
@@ -395,7 +391,7 @@ class DispatchService:
                 max_batch_size=cls.MAX_BATCH_SIZE,
                 total_delivery_fee=Decimal(str(total_delivery_fee)),
                 rider_earnings=Decimal(str(rider_earnings)),
-                status=RiderAssignment.AssignmentStatus.PENDING,
+                status=RiderAssignment.AssignmentStatus.ASSIGNED,
                 estimated_completion=timezone.now() + timedelta(hours=2)
             )
             
