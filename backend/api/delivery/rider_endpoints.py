@@ -4,6 +4,7 @@ Rider-specific delivery endpoints for order management.
 import logging
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
+from django.utils import timezone
 from api.orders.models import Order
 from api.users.models import User, Rider
 from api.users.jwt_views import token_manager
@@ -129,5 +130,392 @@ def get_available_orders(request):
         return JsonResponse({
             'success': False, 
             'error': 'Failed to fetch orders'
+        }, status=500)
+
+
+# ========== DISPATCH SYSTEM ENDPOINTS ==========
+
+@csrf_exempt
+def accept_dispatch_offer(request):
+    """
+    Rider accepts a dispatch offer.
+    
+    POST /api/rider/accept-offer/
+    Body: {
+        "offer_id": "OFFER_DQ_ORD123_1",
+        "rider_id": 123
+    }
+    """
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
+    
+    try:
+        import json
+        from api.delivery.dispatch_service import DispatchService
+        
+        data = json.loads(request.body)
+        offer_id = data.get('offer_id')
+        rider_id = data.get('rider_id')
+        
+        if not offer_id or not rider_id:
+            return JsonResponse({
+                'success': False,
+                'error': 'Missing offer_id or rider_id'
+            }, status=400)
+        
+        # Verify rider exists and owns this offer
+        try:
+            from api.delivery.models import DispatchOffer
+            offer = DispatchOffer.objects.get(offer_id=offer_id, rider_id=rider_id)
+        except DispatchOffer.DoesNotExist:
+            return JsonResponse({
+                'success': False,
+                'error': 'Offer not found or does not belong to this rider'
+            }, status=404)
+        
+        # Process acceptance
+        result = DispatchService.handle_rider_response(offer_id, accepted=True)
+        
+        if result['success']:
+            logger.info(f"✅ Rider {rider_id} accepted offer {offer_id}")
+            return JsonResponse({
+                'success': True,
+                'message': 'Offer accepted successfully',
+                'assignment_id': result.get('assignment_id')
+            }, status=200)
+        else:
+            return JsonResponse({
+                'success': False,
+                'error': result.get('message', 'Failed to accept offer')
+            }, status=400)
+        
+    except Exception as e:
+        logger.error(f"❌ Error accepting offer: {str(e)}", exc_info=True)
+        return JsonResponse({
+            'success': False,
+            'error': 'Internal server error'
+        }, status=500)
+
+
+@csrf_exempt
+def reject_dispatch_offer(request):
+    """
+    Rider rejects a dispatch offer.
+    
+    POST /api/rider/reject-offer/
+    Body: {
+        "offer_id": "OFFER_DQ_ORD123_1",
+        "rider_id": 123,
+        "reason": "too_far" (optional)
+    }
+    """
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
+    
+    try:
+        import json
+        from api.delivery.dispatch_service import DispatchService
+        
+        data = json.loads(request.body)
+        offer_id = data.get('offer_id')
+        rider_id = data.get('rider_id')
+        reason = data.get('reason')
+        
+        if not offer_id or not rider_id:
+            return JsonResponse({
+                'success': False,
+                'error': 'Missing offer_id or rider_id'
+            }, status=400)
+        
+        # Verify rider exists and owns this offer
+        try:
+            from api.delivery.models import DispatchOffer
+            offer = DispatchOffer.objects.get(offer_id=offer_id, rider_id=rider_id)
+        except DispatchOffer.DoesNotExist:
+            return JsonResponse({
+                'success': False,
+                'error': 'Offer not found or does not belong to this rider'
+            }, status=404)
+        
+        # Process rejection
+        result = DispatchService.handle_rider_response(
+            offer_id, 
+            accepted=False, 
+            rejection_reason=reason
+        )
+        
+        logger.info(f"❌ Rider {rider_id} rejected offer {offer_id} (reason: {reason or 'not specified'})")
+        
+        return JsonResponse({
+            'success': True,
+            'message': result.get('message', 'Offer rejected, trying next rider')
+        }, status=200)
+        
+    except Exception as e:
+        logger.error(f"❌ Error rejecting offer: {str(e)}", exc_info=True)
+        return JsonResponse({
+            'success': False,
+            'error': 'Internal server error'
+        }, status=500)
+
+
+@csrf_exempt
+def update_rider_status(request):
+    """
+    Update rider's activity status (online/offline/busy/break).
+    
+    POST /api/rider/update-status/
+    Body: {
+        "rider_id": 123,
+        "status": "online" | "offline" | "busy" | "break"
+    }
+    """
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
+    
+    try:
+        import json
+        
+        data = json.loads(request.body)
+        rider_id = data.get('rider_id')
+        status = data.get('status')
+        
+        if not rider_id or not status:
+            return JsonResponse({
+                'success': False,
+                'error': 'Missing rider_id or status'
+            }, status=400)
+        
+        # Validate status
+        valid_statuses = ['online', 'offline', 'busy', 'break']
+        if status not in valid_statuses:
+            return JsonResponse({
+                'success': False,
+                'error': f'Invalid status. Must be one of: {", ".join(valid_statuses)}'
+            }, status=400)
+        
+        # Get rider
+        try:
+            rider = Rider.objects.get(id=rider_id)
+        except Rider.DoesNotExist:
+            return JsonResponse({
+                'success': False,
+                'error': 'Rider not found'
+            }, status=404)
+        
+        # Update status
+        old_status = rider.activity_status
+        rider.activity_status = status
+        rider.save()
+        
+        logger.info(f"🔄 Rider {rider.full_name} status: {old_status} → {status}")
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'Status updated to {status}',
+            'rider': {
+                'id': rider.id,
+                'name': rider.full_name,
+                'activity_status': rider.activity_status,
+                'last_seen_at': rider.last_seen_at.isoformat() if rider.last_seen_at else None
+            }
+        }, status=200)
+        
+    except Exception as e:
+        logger.error(f"❌ Error updating rider status: {str(e)}", exc_info=True)
+        return JsonResponse({
+            'success': False,
+            'error': 'Internal server error'
+        }, status=500)
+
+
+@csrf_exempt
+def update_rider_location(request):
+    """
+    Update rider's current location.
+    Called periodically (every 30s) when rider is online.
+    
+    POST /api/rider/update-location/
+    Body: {
+        "rider_id": 123,
+        "latitude": 8.2280,
+        "longitude": 124.2452
+    }
+    """
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
+    
+    try:
+        import json
+        
+        data = json.loads(request.body)
+        rider_id = data.get('rider_id')
+        latitude = data.get('latitude')
+        longitude = data.get('longitude')
+        
+        if not rider_id or latitude is None or longitude is None:
+            return JsonResponse({
+                'success': False,
+                'error': 'Missing rider_id, latitude, or longitude'
+            }, status=400)
+        
+        # Validate coordinates
+        try:
+            lat = float(latitude)
+            lng = float(longitude)
+            
+            if not (-90 <= lat <= 90) or not (-180 <= lng <= 180):
+                return JsonResponse({
+                    'success': False,
+                    'error': 'Invalid coordinates'
+                }, status=400)
+        except (ValueError, TypeError):
+            return JsonResponse({
+                'success': False,
+                'error': 'Invalid coordinate format'
+            }, status=400)
+        
+        # Get rider
+        try:
+            rider = Rider.objects.get(id=rider_id)
+        except Rider.DoesNotExist:
+            return JsonResponse({
+                'success': False,
+                'error': 'Rider not found'
+            }, status=404)
+        
+        # Update location
+        rider.update_location(lat, lng)
+        
+        logger.debug(f"📍 Updated location for {rider.full_name}: ({lat:.6f}, {lng:.6f})")
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Location updated',
+            'rider': {
+                'id': rider.id,
+                'latitude': float(rider.current_latitude),
+                'longitude': float(rider.current_longitude),
+                'last_seen_at': rider.last_seen_at.isoformat()
+            }
+        }, status=200)
+        
+    except Exception as e:
+        logger.error(f"❌ Error updating rider location: {str(e)}", exc_info=True)
+        return JsonResponse({
+            'success': False,
+            'error': 'Internal server error'
+        }, status=500)
+
+
+@csrf_exempt
+def get_current_dispatch_offer(request):
+    """
+    Get rider's current active dispatch offer (if any).
+    
+    GET /api/rider/current-offer/?rider_id=123
+    """
+    if request.method != 'GET':
+        return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
+    
+    try:
+        from api.delivery.dispatch_service import DispatchService
+        
+        rider_id = request.GET.get('rider_id')
+        
+        if not rider_id:
+            return JsonResponse({
+                'success': False,
+                'error': 'Missing rider_id parameter'
+            }, status=400)
+        
+        # Get rider
+        try:
+            rider = Rider.objects.get(id=rider_id)
+        except Rider.DoesNotExist:
+            return JsonResponse({
+                'success': False,
+                'error': 'Rider not found'
+            }, status=404)
+        
+        # Get current offer
+        offer = DispatchService.get_rider_current_offer(rider)
+        
+        if not offer:
+            return JsonResponse({
+                'success': True,
+                'has_offer': False,
+                'offer': None
+            }, status=200)
+        
+        # Serialize offer data
+        offer_data = {
+            'offer_id': offer.offer_id,
+            'is_batch': offer.is_batch,
+            'orders_count': offer.orders_count,
+            'total_earnings': float(offer.total_earnings),
+            'pickup_distance_km': float(offer.pickup_distance_km) if offer.pickup_distance_km else None,
+            'expires_at': offer.expires_at.isoformat(),
+            'timeout_seconds': int((offer.expires_at - timezone.now()).total_seconds()),
+            'attempt_number': offer.attempt_number,
+        }
+        
+        # Add order details
+        if offer.is_batch and offer.batch_assignment:
+            # Get all orders in batch
+            orders_in_batch = []
+            for order_assignment in offer.batch_assignment.order_assignments.all():
+                order = order_assignment.order
+                
+                # Get pharmacy
+                pharmacy = None
+                if order.order_lines.exists():
+                    first_line = order.order_lines.first()
+                    if first_line and first_line.inventory_item:
+                        pharmacy = first_line.inventory_item.pharmacy
+                
+                orders_in_batch.append({
+                    'order_number': order.order_number,
+                    'customer_name': f"{order.customer.first_name} {order.customer.last_name}" if order.customer else 'Unknown',
+                    'pharmacy_name': pharmacy.pharmacy_name if pharmacy else 'Unknown Pharmacy',
+                    'pharmacy_address': f"{pharmacy.barangay}, {pharmacy.city}" if pharmacy else '',
+                    'delivery_address': f"{order.delivery_address.barangay}, {order.delivery_address.city}" if order.delivery_address else '',
+                    'earnings': float(order.delivery_fee) * 0.8,
+                })
+            
+            offer_data['orders'] = orders_in_batch
+            
+        elif offer.order:
+            # Single order
+            order = offer.order
+            
+            # Get pharmacy
+            pharmacy = None
+            if order.order_lines.exists():
+                first_line = order.order_lines.first()
+                if first_line and first_line.inventory_item:
+                    pharmacy = first_line.inventory_item.pharmacy
+            
+            offer_data['order'] = {
+                'order_number': order.order_number,
+                'customer_name': f"{order.customer.first_name} {order.customer.last_name}" if order.customer else 'Unknown',
+                'pharmacy_name': pharmacy.pharmacy_name if pharmacy else 'Unknown Pharmacy',
+                'pharmacy_address': f"{pharmacy.barangay}, {pharmacy.city}" if pharmacy else '',
+                'delivery_address': f"{order.delivery_address.barangay}, {order.delivery_address.city}" if order.delivery_address else '',
+                'delivery_fee': float(order.delivery_fee),
+                'earnings': float(order.delivery_fee) * 0.8,
+            }
+        
+        return JsonResponse({
+            'success': True,
+            'has_offer': True,
+            'offer': offer_data
+        }, status=200)
+        
+    except Exception as e:
+        logger.error(f"❌ Error getting current offer: {str(e)}", exc_info=True)
+        return JsonResponse({
+            'success': False,
+            'error': 'Internal server error'
         }, status=500)
 

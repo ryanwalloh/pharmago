@@ -994,6 +994,12 @@ class Rider(models.Model):
         SCOOTER = 'scooter', _('Scooter')
         OTHER = 'other', _('Other')
     
+    class ActivityStatus(models.TextChoices):
+        OFFLINE = 'offline', _('Offline')
+        ONLINE = 'online', _('Online - Available for Orders')
+        BUSY = 'busy', _('Busy - Currently on Delivery')
+        BREAK = 'break', _('On Break')
+    
     user = models.OneToOneField(
         User,
         on_delete=models.CASCADE,
@@ -1169,6 +1175,73 @@ class Rider(models.Model):
         help_text=_('Total earnings from deliveries.')
     )
     
+    # Activity Status and Location (for Dispatch System)
+    activity_status = models.CharField(
+        max_length=20,
+        choices=ActivityStatus.choices,
+        default=ActivityStatus.OFFLINE,
+        help_text=_('Current activity status of rider for dispatch system.')
+    )
+    
+    last_seen_at = models.DateTimeField(
+        auto_now=True,
+        help_text=_('Last time rider was active (updated every 30 seconds).')
+    )
+    
+    current_latitude = models.DecimalField(
+        max_digits=10,
+        decimal_places=8,
+        blank=True,
+        null=True,
+        validators=[MinValueValidator(-90), MaxValueValidator(90)],
+        help_text=_('Current latitude coordinate (updated in real-time).')
+    )
+    
+    current_longitude = models.DecimalField(
+        max_digits=11,
+        decimal_places=8,
+        blank=True,
+        null=True,
+        validators=[MinValueValidator(-180), MaxValueValidator(180)],
+        help_text=_('Current longitude coordinate (updated in real-time).')
+    )
+    
+    # Dispatch Performance Metrics
+    acceptance_rate = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=100.00,
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+        help_text=_('Percentage of dispatch offers accepted (0-100%).')
+    )
+    
+    total_offers_received = models.PositiveIntegerField(
+        default=0,
+        help_text=_('Total dispatch offers received.')
+    )
+    
+    total_offers_accepted = models.PositiveIntegerField(
+        default=0,
+        help_text=_('Total dispatch offers accepted.')
+    )
+    
+    total_offers_rejected = models.PositiveIntegerField(
+        default=0,
+        help_text=_('Total dispatch offers rejected.')
+    )
+    
+    total_offers_timeout = models.PositiveIntegerField(
+        default=0,
+        help_text=_('Total dispatch offers that timed out.')
+    )
+    
+    average_response_time = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=0.00,
+        help_text=_('Average response time to dispatch offers in seconds.')
+    )
+    
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -1183,6 +1256,9 @@ class Rider(models.Model):
             models.Index(fields=['status'], name='idx_rider_status'),
             models.Index(fields=['vehicle_type'], name='idx_rider_vehicle'),
             models.Index(fields=['average_rating'], name='idx_rider_rating'),
+            models.Index(fields=['activity_status'], name='idx_rider_activity'),
+            models.Index(fields=['current_latitude', 'current_longitude'], name='idx_rider_location'),
+            models.Index(fields=['acceptance_rate'], name='idx_rider_acceptance'),
         ]
     
     def __str__(self):
@@ -1274,6 +1350,60 @@ class Rider(models.Model):
         
         if delivery_earnings is not None:
             self.total_earnings += delivery_earnings
+        
+        self.save()
+    
+    # Activity Status Methods (for Dispatch System)
+    def is_online(self):
+        """Check if rider is currently online."""
+        return self.activity_status == self.ActivityStatus.ONLINE
+    
+    def is_available_for_dispatch(self):
+        """Check if rider can receive dispatch offers."""
+        return (
+            self.activity_status == self.ActivityStatus.ONLINE and
+            self.is_fully_verified and
+            self.user.status == User.UserStatus.ACTIVE and
+            self.status == self.RiderStatus.APPROVED
+        )
+    
+    def has_current_location(self):
+        """Check if rider has current location set."""
+        return bool(self.current_latitude and self.current_longitude)
+    
+    def update_location(self, latitude, longitude):
+        """Update rider's current location."""
+        self.current_latitude = latitude
+        self.current_longitude = longitude
+        self.last_seen_at = timezone.now()
+        self.save(update_fields=['current_latitude', 'current_longitude', 'last_seen_at'])
+    
+    def update_dispatch_metrics(self, accepted, response_time_seconds=None):
+        """
+        Update rider's dispatch performance metrics.
+        
+        Args:
+            accepted: True if offer was accepted, False if rejected/timeout
+            response_time_seconds: Time taken to respond (optional)
+        """
+        from decimal import Decimal
+        
+        self.total_offers_received += 1
+        
+        if accepted:
+            self.total_offers_accepted += 1
+        else:
+            self.total_offers_rejected += 1
+        
+        # Update acceptance rate
+        self.acceptance_rate = Decimal(str((self.total_offers_accepted / self.total_offers_received) * 100))
+        
+        # Update average response time
+        if response_time_seconds is not None:
+            current_avg = float(self.average_response_time)
+            new_response = float(response_time_seconds)
+            total_response = (current_avg * (self.total_offers_received - 1)) + new_response
+            self.average_response_time = Decimal(str(total_response / self.total_offers_received))
         
         self.save()
 

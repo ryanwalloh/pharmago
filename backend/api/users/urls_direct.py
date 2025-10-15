@@ -18,6 +18,13 @@ urlpatterns = [
     path('rider-session/', rider_endpoints.rider_session),
     path('available-orders-count/', rider_endpoints.available_orders_count),
     path('available-orders/', delivery_rider_endpoints.get_available_orders),
+    
+    # Dispatch System Endpoints
+    path('rider/accept-offer/', delivery_rider_endpoints.accept_dispatch_offer),
+    path('rider/reject-offer/', delivery_rider_endpoints.reject_dispatch_offer),
+    path('rider/update-status/', delivery_rider_endpoints.update_rider_status),
+    path('rider/update-location/', delivery_rider_endpoints.update_rider_location),
+    path('rider/current-offer/', delivery_rider_endpoints.get_current_dispatch_offer),
 ]
 
 
