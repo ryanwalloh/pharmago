@@ -68,6 +68,7 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt.token_blacklist',
     'corsheaders',
     'drf_spectacular',
+    'channels',  # WebSocket support for dispatch system
     
     # Local apps
     'api.apps.ApiConfig',
@@ -119,6 +120,17 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'pharmago.wsgi.application'
+ASGI_APPLICATION = 'pharmago.asgi.application'
+
+# Channels Configuration (WebSocket Support)
+CHANNEL_LAYERS = {
+    'default': {
+        # Use in-memory channel layer for development
+        # For production with multiple workers, use Redis:
+        # 'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'BACKEND': 'channels.layers.InMemoryChannelLayer',
+    },
+}
 
 
 # Database

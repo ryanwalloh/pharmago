@@ -6,6 +6,9 @@ from django.db.models import Sum, F
 from api.users.models import User
 from api.users.models import Customer
 from api.locations.models import Address
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class Order(models.Model):
@@ -314,14 +317,47 @@ class Order(models.Model):
         discount_amount = self.discount_amount
         
         # Calculate total
-        # Delivery fee: prefer existing delivery_fee if set (>0), otherwise default to 29.00 in dev
+        # Delivery fee: calculate dynamically based on distance or use existing
         try:
             existing_delivery = float(self.delivery_fee)
         except Exception:
             existing_delivery = 0.0
+        
+        # Only recalculate if delivery_fee is not set or is zero
         if not existing_delivery or existing_delivery <= 0:
             from decimal import Decimal
-            self.delivery_fee = Decimal('29.00')
+            
+            # Try to calculate dynamic delivery fee
+            if self.delivery_address and hasattr(self, 'order_lines'):
+                # Get pharmacy from first order line
+                first_line = self.order_lines.first() if self.order_lines.exists() else None
+                if first_line and first_line.inventory_item and first_line.inventory_item.pharmacy:
+                    pharmacy = first_line.inventory_item.pharmacy
+                    
+                    # Calculate if both have coordinates
+                    if (pharmacy.latitude and pharmacy.longitude and
+                        self.delivery_address.latitude and self.delivery_address.longitude):
+                        
+                        try:
+                            from api.orders.pricing_service import DeliveryPricingService
+                            calculated_fee, distance_km = DeliveryPricingService.calculate_delivery_fee(
+                                float(pharmacy.latitude),
+                                float(pharmacy.longitude),
+                                float(self.delivery_address.latitude),
+                                float(self.delivery_address.longitude),
+                                use_google_maps=True
+                            )
+                            self.delivery_fee = calculated_fee
+                            logger.info(f"💰 Recalculated delivery fee: {distance_km:.2f}km → ₱{self.delivery_fee:.2f}")
+                        except Exception as e:
+                            logger.warning(f"⚠️ Failed to calculate delivery fee in save(): {str(e)}")
+                            self.delivery_fee = Decimal('29.00')  # Fallback
+                    else:
+                        self.delivery_fee = Decimal('29.00')  # No coordinates, use default
+                else:
+                    self.delivery_fee = Decimal('29.00')  # No pharmacy, use default
+            else:
+                self.delivery_fee = Decimal('29.00')  # No delivery address, use default
 
         total = subtotal + tax_amount + self.delivery_fee - discount_amount
         

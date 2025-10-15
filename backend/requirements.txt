@@ -26,3 +26,8 @@ openpyxl==3.1.2                        # Excel export/import support
 redis==5.0.1                           # Redis Python client
 django-cacheops==7.2                   # Advanced caching operations
 watchdog==4.0.2                        # Reliable file watching on Windows
+
+# WebSocket Support (for Dispatch System)
+channels==4.0.0                        # Django Channels for WebSocket
+channels-redis==4.1.0                  # Redis channel layer backend
+daphne==4.0.0                          # ASGI server for Channels
