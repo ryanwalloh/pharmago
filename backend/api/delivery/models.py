@@ -822,3 +822,366 @@ class OrderBatchingService:
                     nearby_riders.append(rider)
         
         return Rider.objects.filter(id__in=[r.id for r in nearby_riders])
+
+
+class DispatchOffer(models.Model):
+    """
+    Represents a delivery offer sent to a specific rider.
+    Tracks acceptance, rejection, timeout, and response time.
+    Part of the smart dispatch system.
+    """
+    
+    class OfferStatus(models.TextChoices):
+        PENDING = 'pending', _('Pending Response')
+        ACCEPTED = 'accepted', _('Accepted')
+        REJECTED = 'rejected', _('Rejected')
+        TIMEOUT = 'timeout', _('Timed Out')
+        CANCELLED = 'cancelled', _('Cancelled')
+    
+    # Offer identification
+    offer_id = models.CharField(
+        max_length=50,
+        unique=True,
+        help_text=_('Unique offer identifier (e.g., OFFER_DQ_ORD123_1)')
+    )
+    
+    # Related entities
+    rider = models.ForeignKey(
+        Rider,
+        on_delete=models.CASCADE,
+        related_name='dispatch_offers',
+        help_text=_('Rider receiving this offer')
+    )
+    
+    order = models.ForeignKey(
+        Order,
+        on_delete=models.CASCADE,
+        related_name='dispatch_offers',
+        blank=True,
+        null=True,
+        help_text=_('Single order (if not a batch)')
+    )
+    
+    batch_assignment = models.ForeignKey(
+        RiderAssignment,
+        on_delete=models.CASCADE,
+        related_name='dispatch_offers',
+        blank=True,
+        null=True,
+        help_text=_('Batch assignment (if batched orders)')
+    )
+    
+    # Offer details
+    is_batch = models.BooleanField(
+        default=False,
+        help_text=_('Whether this is a batch offer (multiple orders)')
+    )
+    
+    orders_count = models.PositiveIntegerField(
+        default=1,
+        help_text=_('Number of orders in this offer')
+    )
+    
+    total_earnings = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        help_text=_('Total rider earnings for this offer')
+    )
+    
+    pickup_distance_km = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        blank=True,
+        null=True,
+        help_text=_('Distance from rider current location to pickup')
+    )
+    
+    # Timing
+    offered_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text=_('When offer was sent to rider')
+    )
+    
+    expires_at = models.DateTimeField(
+        help_text=_('When offer expires (typically 30-45 seconds from offered_at)')
+    )
+    
+    responded_at = models.DateTimeField(
+        blank=True,
+        null=True,
+        help_text=_('When rider responded (accepted or rejected)')
+    )
+    
+    response_time_seconds = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        blank=True,
+        null=True,
+        help_text=_('How many seconds rider took to respond')
+    )
+    
+    # Status and feedback
+    status = models.CharField(
+        max_length=20,
+        choices=OfferStatus.choices,
+        default=OfferStatus.PENDING,
+        help_text=_('Current status of this offer')
+    )
+    
+    rejection_reason = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        help_text=_('Reason for rejection (if rider rejected)')
+    )
+    
+    # Metadata
+    attempt_number = models.PositiveIntegerField(
+        default=1,
+        help_text=_('Which attempt this is (1st rider, 2nd rider, etc.)')
+    )
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = _('Dispatch Offer')
+        verbose_name_plural = _('Dispatch Offers')
+        ordering = ['-created_at']
+        db_table = 'dispatch_offer'
+        
+        indexes = [
+            models.Index(fields=['offer_id'], name='idx_offer_id'),
+            models.Index(fields=['rider'], name='idx_offer_rider'),
+            models.Index(fields=['order'], name='idx_offer_order'),
+            models.Index(fields=['status'], name='idx_offer_status'),
+            models.Index(fields=['expires_at'], name='idx_offer_expires'),
+            models.Index(fields=['attempt_number'], name='idx_offer_attempt'),
+        ]
+    
+    def __str__(self):
+        return f"{self.offer_id} → {self.rider.full_name} ({self.status})"
+    
+    def is_expired(self):
+        """Check if offer has expired."""
+        return timezone.now() > self.expires_at
+    
+    def is_active(self):
+        """Check if offer is still active (pending and not expired)."""
+        return self.status == self.OfferStatus.PENDING and not self.is_expired()
+    
+    def mark_accepted(self):
+        """Mark offer as accepted and calculate response time."""
+        if self.status != self.OfferStatus.PENDING:
+            raise ValidationError(_('Only pending offers can be accepted'))
+        
+        self.status = self.OfferStatus.ACCEPTED
+        self.responded_at = timezone.now()
+        self.response_time_seconds = (self.responded_at - self.offered_at).total_seconds()
+        self.save()
+        
+        # Update rider metrics
+        self.rider.update_dispatch_metrics(
+            accepted=True,
+            response_time_seconds=float(self.response_time_seconds)
+        )
+    
+    def mark_rejected(self, reason=None):
+        """Mark offer as rejected and calculate response time."""
+        if self.status != self.OfferStatus.PENDING:
+            raise ValidationError(_('Only pending offers can be rejected'))
+        
+        self.status = self.OfferStatus.REJECTED
+        self.rejection_reason = reason
+        self.responded_at = timezone.now()
+        self.response_time_seconds = (self.responded_at - self.offered_at).total_seconds()
+        self.save()
+        
+        # Update rider metrics
+        self.rider.update_dispatch_metrics(
+            accepted=False,
+            response_time_seconds=float(self.response_time_seconds)
+        )
+    
+    def mark_timeout(self):
+        """Mark offer as timed out."""
+        if self.status != self.OfferStatus.PENDING:
+            return  # Already processed
+        
+        self.status = self.OfferStatus.TIMEOUT
+        self.responded_at = timezone.now()
+        self.response_time_seconds = (self.responded_at - self.offered_at).total_seconds()
+        self.save()
+        
+        # Update rider timeout counter
+        self.rider.total_offers_timeout += 1
+        self.rider.save()
+    
+    def cancel(self):
+        """Cancel offer (e.g., another rider accepted)."""
+        if self.status == self.OfferStatus.PENDING:
+            self.status = self.OfferStatus.CANCELLED
+            self.save()
+
+
+class DispatchQueue(models.Model):
+    """
+    Manages the dispatch process for orders waiting for rider assignment.
+    Tracks current offer, attempt count, and overall dispatch status.
+    """
+    
+    class QueueStatus(models.TextChoices):
+        PENDING = 'pending', _('Pending Dispatch')
+        DISPATCHING = 'dispatching', _('Currently Being Offered to Riders')
+        ASSIGNED = 'assigned', _('Successfully Assigned to Rider')
+        FAILED = 'failed', _('All Riders Rejected/Timeout')
+        CANCELLED = 'cancelled', _('Cancelled')
+    
+    # Queue identification
+    queue_id = models.CharField(
+        max_length=50,
+        unique=True,
+        help_text=_('Unique queue identifier (e.g., DQ_ORD20251012_123)')
+    )
+    
+    # Related entities
+    order = models.ForeignKey(
+        Order,
+        on_delete=models.CASCADE,
+        related_name='dispatch_queue',
+        blank=True,
+        null=True,
+        help_text=_('Single order to dispatch')
+    )
+    
+    batch_assignment = models.ForeignKey(
+        RiderAssignment,
+        on_delete=models.CASCADE,
+        related_name='dispatch_queue',
+        blank=True,
+        null=True,
+        help_text=_('Batch assignment to dispatch')
+    )
+    
+    # Dispatch details
+    is_batch = models.BooleanField(
+        default=False,
+        help_text=_('Whether dispatching a batch of orders')
+    )
+    
+    priority_level = models.PositiveIntegerField(
+        default=1,
+        validators=[MinValueValidator(1), MaxValueValidator(10)],
+        help_text=_('Priority level (1=highest, 10=lowest)')
+    )
+    
+    current_offer = models.ForeignKey(
+        DispatchOffer,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name='active_in_queue',
+        help_text=_('Currently active offer for this queue')
+    )
+    
+    # Attempt tracking
+    total_attempts = models.PositiveIntegerField(
+        default=0,
+        help_text=_('Number of riders this has been offered to')
+    )
+    
+    max_attempts = models.PositiveIntegerField(
+        default=10,
+        help_text=_('Maximum number of riders to try before giving up')
+    )
+    
+    # Status
+    status = models.CharField(
+        max_length=20,
+        choices=QueueStatus.choices,
+        default=QueueStatus.PENDING,
+        help_text=_('Current status of dispatch queue')
+    )
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    dispatched_at = models.DateTimeField(
+        blank=True,
+        null=True,
+        help_text=_('When first dispatch attempt started')
+    )
+    completed_at = models.DateTimeField(
+        blank=True,
+        null=True,
+        help_text=_('When dispatch was completed (assigned or failed)')
+    )
+    
+    # Retry tracking
+    retry_count = models.PositiveIntegerField(
+        default=0,
+        help_text=_('Number of times dispatch was retried after failure')
+    )
+    
+    fee_increased = models.BooleanField(
+        default=False,
+        help_text=_('Whether delivery fee was increased to incentivize acceptance')
+    )
+    
+    class Meta:
+        verbose_name = _('Dispatch Queue')
+        verbose_name_plural = _('Dispatch Queues')
+        ordering = ['priority_level', 'created_at']
+        db_table = 'dispatch_queue'
+        
+        indexes = [
+            models.Index(fields=['queue_id'], name='idx_queue_id'),
+            models.Index(fields=['order'], name='idx_queue_order'),
+            models.Index(fields=['status'], name='idx_queue_status'),
+            models.Index(fields=['priority_level'], name='idx_queue_priority'),
+            models.Index(fields=['created_at'], name='idx_queue_created'),
+        ]
+    
+    def __str__(self):
+        if self.order:
+            return f"Queue {self.queue_id} - Order {self.order.order_number}"
+        elif self.batch_assignment:
+            return f"Queue {self.queue_id} - Batch {self.batch_assignment.assignment_id}"
+        return f"Queue {self.queue_id}"
+    
+    def is_active(self):
+        """Check if queue is still active (pending or dispatching)."""
+        return self.status in [
+            self.QueueStatus.PENDING,
+            self.QueueStatus.DISPATCHING
+        ]
+    
+    def is_completed(self):
+        """Check if queue is completed (assigned or failed)."""
+        return self.status in [
+            self.QueueStatus.ASSIGNED,
+            self.QueueStatus.FAILED,
+            self.QueueStatus.CANCELLED
+        ]
+    
+    def mark_assigned(self):
+        """Mark queue as successfully assigned."""
+        self.status = self.QueueStatus.ASSIGNED
+        self.completed_at = timezone.now()
+        self.save()
+    
+    def mark_failed(self):
+        """Mark queue as failed (all riders rejected/timeout)."""
+        self.status = self.QueueStatus.FAILED
+        self.completed_at = timezone.now()
+        self.save()
+    
+    def cancel(self):
+        """Cancel the dispatch queue."""
+        self.status = self.QueueStatus.CANCELLED
+        self.completed_at = timezone.now()
+        self.save()
+        
+        # Cancel current offer if exists
+        if self.current_offer and self.current_offer.status == DispatchOffer.OfferStatus.PENDING:
+            self.current_offer.cancel()

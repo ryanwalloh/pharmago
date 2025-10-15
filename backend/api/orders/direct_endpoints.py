@@ -150,8 +150,38 @@ def direct_prescription_order_creation(request):
                     is_default=is_default
                 )
             
-            # Create prescription order
+            # Calculate dynamic delivery fee based on distance
             from decimal import Decimal
+            from api.orders.pricing_service import DeliveryPricingService
+            
+            delivery_fee = Decimal('29.00')  # Default fallback
+            calculated_distance = None
+            
+            # Calculate delivery fee if both pharmacy and delivery address have coordinates
+            if (pharmacy.latitude and pharmacy.longitude and 
+                delivery_address.latitude and delivery_address.longitude):
+                
+                try:
+                    calculated_fee, distance_km = DeliveryPricingService.calculate_delivery_fee(
+                        float(pharmacy.latitude),
+                        float(pharmacy.longitude),
+                        float(delivery_address.latitude),
+                        float(delivery_address.longitude),
+                        use_google_maps=True
+                    )
+                    delivery_fee = calculated_fee
+                    calculated_distance = distance_km
+                    
+                    logger.info(
+                        f"💰 Dynamic pricing: {distance_km:.2f}km → ₱{delivery_fee:.2f} "
+                        f"(Pharmacy: {pharmacy.pharmacy_name} → Customer: {customer.full_name})"
+                    )
+                except Exception as e:
+                    logger.warning(f"⚠️ Failed to calculate dynamic delivery fee: {str(e)}, using default ₱29.00")
+            else:
+                logger.warning("⚠️ Missing coordinates for dynamic pricing, using default ₱29.00")
+            
+            # Create prescription order
             order = Order.objects.create(
                 customer=customer,
                 delivery_address=delivery_address,
@@ -160,7 +190,7 @@ def direct_prescription_order_creation(request):
                 delivery_type=Order.DeliveryType.STANDARD,
                 subtotal=0.00,  # Will be calculated when pharmacist adds items
                 tax_amount=Decimal('19.00'),  # Dev default service fee
-                delivery_fee=Decimal('29.00'),  # Dev default delivery fee
+                delivery_fee=delivery_fee,  # Dynamic delivery fee based on distance
                 discount_amount=0.00,
                 total_amount=0.00,  # Will be calculated when pharmacist adds items
                 source='mobile',
