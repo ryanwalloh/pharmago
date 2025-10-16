@@ -15,14 +15,91 @@ import {
   Platform,
   Linking,
   Dimensions,
+  Image,
+  Modal,
+  ActivityIndicator,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import * as Location from 'expo-location';
+import * as ImagePicker from 'expo-image-picker';
 import { apiService } from '../../../customer-app/services/api';
+import { uploadProofOfDelivery } from '../../../customer-app/services/cloudinaryService';
 
 const { width, height } = Dimensions.get('window');
+
+// Custom Map Style - Clean minimal design
+const customMapStyle = [
+  {
+    "featureType": "administrative.land_parcel",
+    "stylers": [
+      {
+        "visibility": "off"
+      }
+    ]
+  },
+  {
+    "featureType": "administrative.neighborhood",
+    "stylers": [
+      {
+        "visibility": "off"
+      }
+    ]
+  },
+  {
+    "featureType": "poi",
+    "elementType": "labels.text",
+    "stylers": [
+      {
+        "visibility": "off"
+      }
+    ]
+  },
+  {
+    "featureType": "poi.business",
+    "stylers": [
+      {
+        "visibility": "off"
+      }
+    ]
+  },
+  {
+    "featureType": "road",
+    "elementType": "labels",
+    "stylers": [
+      {
+        "visibility": "off"
+      }
+    ]
+  },
+  {
+    "featureType": "road",
+    "elementType": "labels.icon",
+    "stylers": [
+      {
+        "visibility": "off"
+      }
+    ]
+  },
+  {
+    "featureType": "transit",
+    "stylers": [
+      {
+        "visibility": "off"
+      }
+    ]
+  },
+  {
+    "featureType": "water",
+    "elementType": "labels.text",
+    "stylers": [
+      {
+        "visibility": "off"
+      }
+    ]
+  }
+];
 
 interface DeliveryOrder {
   id: number;
@@ -65,6 +142,12 @@ export default function ActiveDeliveryScreen() {
   const [riderLocation, setRiderLocation] = useState<{latitude: number; longitude: number} | null>(null);
   const [loading, setLoading] = useState(true);
   const [allPickedUp, setAllPickedUp] = useState(false);
+  const [routeCoordinates, setRouteCoordinates] = useState<{latitude: number; longitude: number}[]>([]);
+  const [uploadingProof, setUploadingProof] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [deliveredOrderEarnings, setDeliveredOrderEarnings] = useState(0);
+  const [totalEarnings, setTotalEarnings] = useState(0);
+  const [allDelivered, setAllDelivered] = useState(false);
 
   // Fetch delivery data
   useEffect(() => {
@@ -95,17 +178,40 @@ export default function ActiveDeliveryScreen() {
         return;
       }
       
-      const data = (response as any);
+      const responseData = (response as any);
+      const backendData = responseData.data || {}; // Extract nested data from makeDirectRequest wrapper
+      
+      console.log('📦 Backend data extracted:', {
+        hasAssignment: !!backendData.assignment,
+        hasPharmacy: !!backendData.pharmacy,
+        ordersCount: backendData.orders?.length || 0,
+      });
+      
+      // Validate required data exists
+      if (!backendData.assignment || !backendData.pharmacy || !backendData.orders) {
+        console.error('❌ Missing required data in response:', backendData);
+        Alert.alert('Error', 'Incomplete delivery data received. Please try again.');
+        setLoading(false);
+        return;
+      }
+      
+      // Validate pharmacy has valid coordinates
+      if (!backendData.pharmacy.latitude || !backendData.pharmacy.longitude) {
+        console.error('❌ Pharmacy missing coordinates');
+        Alert.alert('Error', 'Pharmacy location not available. Cannot display map.');
+        setLoading(false);
+        return;
+      }
       
       // Transform backend data to match our interface
       const deliveryInfo: DeliveryData = {
-        assignment_id: data.assignment.assignment_id,
-        is_batch: data.assignment.is_batch,
-        orders_count: data.assignment.orders_count,
-        total_earnings: data.assignment.total_earnings,
-        pharmacy: data.pharmacy,
-        orders: data.orders,
-        all_picked_up: data.assignment.all_picked_up,
+        assignment_id: backendData.assignment.assignment_id,
+        is_batch: backendData.assignment.is_batch,
+        orders_count: backendData.assignment.orders_count,
+        total_earnings: backendData.assignment.total_earnings,
+        pharmacy: backendData.pharmacy,
+        orders: backendData.orders,
+        all_picked_up: backendData.assignment.all_picked_up,
       };
       
       setDeliveryData(deliveryInfo);
@@ -114,11 +220,11 @@ export default function ActiveDeliveryScreen() {
       
       console.log('✅ Assignment loaded:', deliveryInfo.assignment_id);
 
-      // Fit map to show all markers
-      if (mapRef.current && data.pharmacy.latitude && data.pharmacy.longitude) {
+      // Fit map to show all markers (including rider location if available)
+      if (mapRef.current && backendData.pharmacy.latitude && backendData.pharmacy.longitude) {
         const coordinates = [
-          { latitude: data.pharmacy.latitude, longitude: data.pharmacy.longitude },
-          ...data.orders
+          { latitude: backendData.pharmacy.latitude, longitude: backendData.pharmacy.longitude },
+          ...backendData.orders
             .filter((o: any) => o.delivery_address.latitude && o.delivery_address.longitude)
             .map((o: any) => ({ 
               latitude: o.delivery_address.latitude, 
@@ -126,13 +232,18 @@ export default function ActiveDeliveryScreen() {
             })),
         ];
 
+        // Add rider location if available
+        if (riderLocation) {
+          coordinates.push(riderLocation);
+        }
+
         if (coordinates.length > 0) {
           setTimeout(() => {
             mapRef.current?.fitToCoordinates(coordinates, {
               edgePadding: { top: 100, right: 50, bottom: 300, left: 50 },
               animated: true,
             });
-          }, 500);
+          }, 800);
         }
       }
     } catch (error) {
@@ -141,6 +252,147 @@ export default function ActiveDeliveryScreen() {
       setLoading(false);
     }
   };
+
+  // Decode Google Maps polyline
+  const decodePolyline = (encoded: string): {latitude: number; longitude: number}[] => {
+    const points: {latitude: number; longitude: number}[] = [];
+    let index = 0;
+    let lat = 0;
+    let lng = 0;
+
+    while (index < encoded.length) {
+      let b;
+      let shift = 0;
+      let result = 0;
+      do {
+        b = encoded.charCodeAt(index++) - 63;
+        result |= (b & 0x1f) << shift;
+        shift += 5;
+      } while (b >= 0x20);
+      const dlat = ((result & 1) !== 0 ? ~(result >> 1) : (result >> 1));
+      lat += dlat;
+
+      shift = 0;
+      result = 0;
+      do {
+        b = encoded.charCodeAt(index++) - 63;
+        result |= (b & 0x1f) << shift;
+        shift += 5;
+      } while (b >= 0x20);
+      const dlng = ((result & 1) !== 0 ? ~(result >> 1) : (result >> 1));
+      lng += dlng;
+
+      points.push({
+        latitude: lat / 1e5,
+        longitude: lng / 1e5,
+      });
+    }
+    return points;
+  };
+
+  // Fetch route from Google Maps Directions API
+  const fetchRoute = React.useCallback(async () => {
+    if (!deliveryData || !riderLocation) {
+      console.log('⏭️ Skipping route fetch - missing data');
+      return;
+    }
+
+    try {
+      console.log('🗺️ Fetching route from Google Maps...');
+      
+      // Build waypoints: Rider -> Pharmacy -> Customers
+      const waypoints = [
+        `${riderLocation.latitude},${riderLocation.longitude}`,
+        `${deliveryData.pharmacy.latitude},${deliveryData.pharmacy.longitude}`,
+        ...deliveryData.orders
+          .filter(o => o.delivery_address.latitude && o.delivery_address.longitude)
+          .map(o => `${o.delivery_address.latitude},${o.delivery_address.longitude}`)
+      ];
+
+      console.log('📍 Waypoints:', waypoints);
+
+      if (waypoints.length < 2) {
+        console.log('⚠️ Not enough waypoints for route');
+        return;
+      }
+
+      const origin = waypoints[0];
+      const destination = waypoints[waypoints.length - 1];
+      const waypointsParam = waypoints.slice(1, -1).join('|');
+
+      const apiKey = 'AIzaSyCCuDLJMhB-23kQiXYpXwi-yYGvKz7OgSQ'; // Correct API key from app.json
+      const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${origin}&destination=${destination}${waypointsParam ? `&waypoints=${waypointsParam}` : ''}&key=${apiKey}`;
+
+      console.log('🌐 API URL:', url);
+
+      const response = await fetch(url);
+      const data = await response.json();
+
+      console.log('📡 API Response status:', data.status);
+
+      if (data.error_message) {
+        console.error('❌ Google Maps API Error:', data.error_message);
+        console.warn('⚠️ Falling back to straight-line route');
+        
+        // Fallback: Use straight lines if API fails
+        const fallbackRoute = waypoints.map(wp => {
+          const [lat, lng] = wp.split(',');
+          return { latitude: parseFloat(lat), longitude: parseFloat(lng) };
+        });
+        setRouteCoordinates(fallbackRoute);
+        console.log('✅ Using fallback straight-line route:', fallbackRoute.length, 'points');
+        return;
+      }
+
+      if (data.routes && data.routes.length > 0) {
+        const route = data.routes[0];
+        const points = decodePolyline(route.overview_polyline.points);
+        setRouteCoordinates(points);
+        console.log('✅ Route fetched successfully:', points.length, 'points');
+      } else {
+        console.warn('⚠️ No routes found in response');
+        
+        // Fallback: Use straight lines
+        const fallbackRoute = waypoints.map(wp => {
+          const [lat, lng] = wp.split(',');
+          return { latitude: parseFloat(lat), longitude: parseFloat(lng) };
+        });
+        setRouteCoordinates(fallbackRoute);
+        console.log('✅ Using fallback straight-line route:', fallbackRoute.length, 'points');
+      }
+    } catch (error) {
+      console.error('❌ Error fetching route:', error);
+      
+      // Fallback on error: Use straight lines
+      const waypoints = [
+        `${riderLocation.latitude},${riderLocation.longitude}`,
+        `${deliveryData.pharmacy.latitude},${deliveryData.pharmacy.longitude}`,
+        ...deliveryData.orders
+          .filter(o => o.delivery_address.latitude && o.delivery_address.longitude)
+          .map(o => `${o.delivery_address.latitude},${o.delivery_address.longitude}`)
+      ];
+      
+      const fallbackRoute = waypoints.map(wp => {
+        const [lat, lng] = wp.split(',');
+        return { latitude: parseFloat(lat), longitude: parseFloat(lng) };
+      });
+      setRouteCoordinates(fallbackRoute);
+      console.log('✅ Using fallback straight-line route after error:', fallbackRoute.length, 'points');
+    }
+  }, [deliveryData, riderLocation]);
+
+  // Fetch route when rider location or delivery data changes
+  useEffect(() => {
+    fetchRoute();
+  }, [fetchRoute]);
+
+  // Debug: Log when route coordinates change
+  useEffect(() => {
+    console.log('🛣️ Route coordinates updated. Count:', routeCoordinates.length);
+    if (routeCoordinates.length > 0) {
+      console.log('✅ Route line should now be visible on map');
+    }
+  }, [routeCoordinates]);
 
   const startLocationTracking = async () => {
     try {
@@ -188,6 +440,12 @@ export default function ActiveDeliveryScreen() {
     if (!deliveryData) return;
 
     const { latitude, longitude } = deliveryData.pharmacy;
+    
+    if (!latitude || !longitude) {
+      Alert.alert('Error', 'Pharmacy location not available');
+      return;
+    }
+
     const url = Platform.select({
       ios: `maps:0,0?q=${latitude},${longitude}`,
       android: `geo:0,0?q=${latitude},${longitude}(${deliveryData.pharmacy.name})`,
@@ -202,6 +460,12 @@ export default function ActiveDeliveryScreen() {
 
   const handleNavigateToDelivery = (order: DeliveryOrder) => {
     const { latitude, longitude } = order.delivery_address;
+    
+    if (!latitude || !longitude) {
+      Alert.alert('Error', 'Delivery location not available');
+      return;
+    }
+
     const url = Platform.select({
       ios: `maps:0,0?q=${latitude},${longitude}`,
       android: `geo:0,0?q=${latitude},${longitude}(${order.customer_name})`,
@@ -225,69 +489,127 @@ export default function ActiveDeliveryScreen() {
     });
   };
 
-  const handleMarkPickedUp = () => {
+  const handleMarkPickedUp = async () => {
+    if (!deliveryData) return;
+
     Alert.alert(
       'Mark as Picked Up?',
-      deliveryData?.is_batch 
+      deliveryData.is_batch 
         ? `Confirm you have picked up all ${deliveryData.orders_count} orders from ${deliveryData.pharmacy.name}`
         : 'Confirm you have picked up this order',
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Confirm',
-          onPress: () => {
-            setAllPickedUp(true);
-            Alert.alert('Success', 'Orders marked as picked up. You can now deliver to customers.');
-            // TODO: Call backend API to update status
+          onPress: async () => {
+            try {
+              // Call backend API to update status
+              const response = await apiService.makeDirectRequest(
+                `/assignment/${id}/mark-picked-up/`,
+                {
+                  method: 'POST',
+                }
+              );
+
+              console.log('📦 Mark picked up response:', response);
+
+              if ((response as any).success) {
+                // Update local state
+                setAllPickedUp(true);
+                
+                // Refresh delivery data to get updated statuses
+                await fetchDeliveryData();
+              } else {
+                Alert.alert('Error', (response as any).error || 'Failed to mark as picked up');
+              }
+            } catch (error) {
+              console.error('❌ Error marking as picked up:', error);
+              Alert.alert('Error', 'Failed to mark as picked up. Please try again.');
+            }
           },
         },
       ]
     );
   };
 
-  const handleMarkDelivered = (order: DeliveryOrder) => {
-    Alert.alert(
-      'Mark as Delivered?',
-      `Confirm delivery to ${order.customer_name}`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Confirm',
-          onPress: () => {
-            // Update local state
-            const updatedOrders = deliveryData?.orders.map(o =>
-              o.id === order.id ? { ...o, is_delivered: true } : o
-            );
+  const handleMarkDelivered = async (order: DeliveryOrder) => {
+    try {
+      // Request camera permission
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Required', 'Camera permission is required to take proof of delivery photo.');
+        return;
+      }
 
-            if (updatedOrders && deliveryData) {
-              setDeliveryData({
-                ...deliveryData,
-                orders: updatedOrders,
-              });
+      // Take photo
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
 
-              // Check if all delivered
-              const allDelivered = updatedOrders.every(o => o.is_delivered);
-              if (allDelivered) {
-                Alert.alert(
-                  'All Delivered! 🎉',
-                  `You earned ₱${deliveryData.total_earnings.toFixed(2)}!`,
-                  [
-                    {
-                      text: 'Done',
-                      onPress: () => router.push('/home'),
-                    },
-                  ]
-                );
-              } else {
-                Alert.alert('Success', `Order delivered to ${order.customer_name}`);
-              }
-            }
+      if (result.canceled) {
+        return;
+      }
 
-            // TODO: Call backend API to update status
-          },
-        },
-      ]
-    );
+      const photoUri = result.assets[0].uri;
+      
+      setUploadingProof(true);
+
+      try {
+        // Upload to Cloudinary
+        console.log('📸 Uploading proof of delivery...');
+        const uploadResult = await uploadProofOfDelivery(photoUri);
+
+        if (!uploadResult.success || !uploadResult.url) {
+          Alert.alert('Upload Failed', uploadResult.error || 'Failed to upload proof photo. Please try again.');
+          setUploadingProof(false);
+          return;
+        }
+
+        console.log('✅ Proof uploaded:', uploadResult.url);
+
+        // Call backend to mark as delivered
+        const response = await apiService.makeDirectRequest(
+          `/assignment/${id}/order/${order.id}/mark-delivered/`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              proof_of_delivery_url: uploadResult.url,
+            }),
+          }
+        );
+
+        console.log('📦 Mark delivered response:', response);
+
+        if ((response as any).success) {
+          const responseData = (response as any).data || response;
+          
+          // Store earnings data
+          setDeliveredOrderEarnings(responseData.order_earnings || 0);
+          setTotalEarnings(responseData.total_earnings || 0);
+          setAllDelivered(responseData.all_delivered || false);
+          
+          // Refresh delivery data
+          await fetchDeliveryData();
+          
+          // Show success modal
+          setShowSuccessModal(true);
+        } else {
+          Alert.alert('Error', (response as any).error || 'Failed to mark as delivered');
+        }
+      } catch (error) {
+        console.error('❌ Error in delivery process:', error);
+        Alert.alert('Error', 'Failed to complete delivery. Please try again.');
+      } finally {
+        setUploadingProof(false);
+      }
+    } catch (error) {
+      console.error('❌ Error launching camera:', error);
+      Alert.alert('Error', 'Failed to open camera. Please try again.');
+    }
   };
 
   if (loading || !deliveryData) {
@@ -307,14 +629,26 @@ export default function ActiveDeliveryScreen() {
         ref={mapRef}
         style={styles.map}
         provider={PROVIDER_GOOGLE}
+        customMapStyle={customMapStyle}
         initialRegion={{
-          latitude: deliveryData.pharmacy.latitude,
-          longitude: deliveryData.pharmacy.longitude,
-          latitudeDelta: 0.05,
-          longitudeDelta: 0.05,
+          latitude: riderLocation?.latitude || deliveryData.pharmacy.latitude,
+          longitude: riderLocation?.longitude || deliveryData.pharmacy.longitude,
+          latitudeDelta: 0.01,  // Closer zoom
+          longitudeDelta: 0.01,
         }}
       >
-        {/* Pharmacy Marker (Pickup) */}
+        {/* Route Polyline - Following actual roads */}
+        {routeCoordinates.length > 0 && (
+          <Polyline
+            coordinates={routeCoordinates}
+            strokeColor="#00BF63"
+            strokeWidth={4}
+            lineCap="round"
+            lineJoin="round"
+          />
+        )}
+
+        {/* Pharmacy Marker (Pickup) - Custom Image */}
         <Marker
           coordinate={{
             latitude: deliveryData.pharmacy.latitude,
@@ -322,15 +656,23 @@ export default function ActiveDeliveryScreen() {
           }}
           title={deliveryData.pharmacy.name}
           description="Pickup Location"
-          pinColor="green"
+          anchor={{ x: 0.5, y: 0.5 }}
         >
-          <View style={styles.pharmacyMarker}>
-            <Ionicons name="medkit" size={24} color="#FFFFFF" />
+          <View style={styles.markerWrapper}>
+            <View style={styles.markerContainer}>
+              <Image
+                source={require('../../assets/PharmacyCustomMarker.png')}
+                style={styles.markerImage}
+                resizeMode="contain"
+              />
+            </View>
           </View>
         </Marker>
 
-        {/* Customer Markers (Delivery) */}
-        {deliveryData.orders.map((order, index) => (
+        {/* Customer Markers (Delivery) - Custom Image */}
+        {deliveryData.orders
+          .filter(order => order.delivery_address.latitude && order.delivery_address.longitude)
+          .map((order, index) => (
           <Marker
             key={order.id}
             coordinate={{
@@ -339,29 +681,42 @@ export default function ActiveDeliveryScreen() {
             }}
             title={order.customer_name}
             description={order.delivery_address.street_address}
-            pinColor={order.is_delivered ? "gray" : "red"}
+            anchor={{ x: 0.5, y: 0.5 }}
+            opacity={order.is_delivered ? 0.5 : 1}
           >
-            <View style={[
-              styles.customerMarker,
-              order.is_delivered && styles.customerMarkerDelivered
-            ]}>
-              <Text style={styles.customerMarkerText}>
-                {deliveryData.is_batch ? index + 1 : ''}
-              </Text>
-              <Ionicons name={order.is_delivered ? "checkmark-circle" : "location"} size={20} color="#FFFFFF" />
+            <View style={styles.markerWrapper}>
+              <View style={styles.markerContainer}>
+                <Image
+                  source={require('../../assets/CustomerCustomMarker.png')}
+                  style={styles.markerImage}
+                  resizeMode="contain"
+                />
+                {deliveryData.is_batch && (
+                  <View style={styles.markerBadge}>
+                    <Text style={styles.markerBadgeText}>{index + 1}</Text>
+                  </View>
+                )}
+              </View>
             </View>
           </Marker>
         ))}
 
-        {/* Rider Marker (Current Location) */}
+        {/* Rider Marker (Current Location) - Custom Image */}
         {riderLocation && (
           <Marker
             coordinate={riderLocation}
             title="You"
             description="Your current location"
+            anchor={{ x: 0.5, y: 0.5 }}
           >
-            <View style={styles.riderMarker}>
-              <Ionicons name="bicycle" size={24} color="#FFFFFF" />
+            <View style={styles.markerWrapper}>
+              <View style={styles.markerContainer}>
+                <Image
+                  source={require('../../assets/RiderCustomMarker.png')}
+                  style={styles.markerImage}
+                  resizeMode="contain"
+                />
+              </View>
             </View>
           </Marker>
         )}
@@ -508,6 +863,65 @@ export default function ActiveDeliveryScreen() {
           </View>
         </ScrollView>
       </View>
+
+      {/* Uploading Proof Overlay */}
+      {uploadingProof && (
+        <View style={styles.uploadOverlay}>
+          <View style={styles.uploadOverlayContent}>
+            <ActivityIndicator size="large" color="#00BF63" />
+            <Text style={styles.uploadOverlayText}>Uploading proof of delivery...</Text>
+          </View>
+        </View>
+      )}
+
+      {/* Success Modal */}
+      <Modal
+        visible={showSuccessModal}
+        transparent={true}
+        animationType="fade"
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.successModal}>
+            <View style={styles.successIconContainer}>
+              <Ionicons name="checkmark-circle" size={80} color="#00BF63" />
+            </View>
+            
+            <Text style={styles.successTitle}>Delivery Complete! 🎉</Text>
+            
+            <View style={styles.earningsContainer}>
+              <Text style={styles.earningsLabel}>You Earned</Text>
+              <Text style={styles.earningsValue}>₱{deliveredOrderEarnings.toFixed(2)}</Text>
+            </View>
+
+            {!allDelivered && (
+              <View style={styles.remainingOrdersContainer}>
+                <Ionicons name="information-circle" size={20} color="#666666" />
+                <Text style={styles.remainingOrdersText}>
+                  You have more orders to deliver
+                </Text>
+              </View>
+            )}
+
+            {allDelivered && (
+              <View style={styles.totalEarningsContainer}>
+                <Text style={styles.totalEarningsLabel}>Total Earnings for this batch</Text>
+                <Text style={styles.totalEarningsValue}>₱{totalEarnings.toFixed(2)}</Text>
+              </View>
+            )}
+
+            <TouchableOpacity
+              style={styles.moreOrdersButton}
+              onPress={() => {
+                setShowSuccessModal(false);
+                router.push('/home');
+              }}
+            >
+              <Text style={styles.moreOrdersButtonText}>More Orders</Text>
+              <Ionicons name="arrow-forward" size={20} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -542,52 +956,45 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
   },
-  pharmacyMarker: {
-    backgroundColor: '#00BF63',
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    justifyContent: 'center',
+  markerWrapper: {
     alignItems: 'center',
-    borderWidth: 3,
-    borderColor: '#FFFFFF',
-  },
-  customerMarker: {
-    backgroundColor: '#FF6B35',
-    width: 44,
-    height: 44,
-    borderRadius: 22,
     justifyContent: 'center',
+  },
+  markerContainer: {
     alignItems: 'center',
-    borderWidth: 3,
-    borderColor: '#FFFFFF',
+    justifyContent: 'center',
+    width: 60,
+    height: 60,
   },
-  customerMarkerDelivered: {
-    backgroundColor: '#999999',
+  markerImage: {
+    width: 48,
+    height: 48,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
-  customerMarkerText: {
+  markerBadge: {
     position: 'absolute',
-    top: -8,
-    right: -8,
-    backgroundColor: '#FFFFFF',
-    color: '#FF6B35',
-    fontWeight: '700',
-    fontSize: 12,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  riderMarker: {
-    backgroundColor: '#007AFF',
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    top: -6,
+    right: -6,
+    backgroundColor: '#00BF63',
+    borderRadius: 12,
+    width: 24,
+    height: 24,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 3,
+    borderWidth: 2,
     borderColor: '#FFFFFF',
+  },
+  markerBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
   },
   bottomSheet: {
     flex: 1,
@@ -772,6 +1179,120 @@ const styles = StyleSheet.create({
     color: '#666666',
     fontStyle: 'italic',
     marginTop: 8,
+  },
+  // Upload Overlay Styles
+  uploadOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  uploadOverlayContent: {
+    backgroundColor: '#FFFFFF',
+    padding: 30,
+    borderRadius: 16,
+    alignItems: 'center',
+  },
+  uploadOverlayText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#1A1A1A',
+    fontWeight: '600',
+  },
+  // Success Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  successModal: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 32,
+    width: width * 0.85,
+    alignItems: 'center',
+  },
+  successIconContainer: {
+    marginBottom: 16,
+  },
+  successTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    marginBottom: 24,
+    textAlign: 'center',
+  },
+  earningsContainer: {
+    backgroundColor: '#E8F5E9',
+    padding: 20,
+    borderRadius: 16,
+    width: '100%',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  earningsLabel: {
+    fontSize: 14,
+    color: '#666666',
+    marginBottom: 8,
+  },
+  earningsValue: {
+    fontSize: 36,
+    fontWeight: '800',
+    color: '#00BF63',
+  },
+  remainingOrdersContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF3E0',
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 24,
+  },
+  remainingOrdersText: {
+    fontSize: 14,
+    color: '#666666',
+    marginLeft: 8,
+    flex: 1,
+  },
+  totalEarningsContainer: {
+    backgroundColor: '#FFF3E0',
+    padding: 16,
+    borderRadius: 12,
+    width: '100%',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  totalEarningsLabel: {
+    fontSize: 12,
+    color: '#666666',
+    marginBottom: 4,
+  },
+  totalEarningsValue: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#FF6B35',
+  },
+  moreOrdersButton: {
+    backgroundColor: '#00BF63',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderRadius: 12,
+    width: '100%',
+    gap: 8,
+  },
+  moreOrdersButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
   },
 });
 

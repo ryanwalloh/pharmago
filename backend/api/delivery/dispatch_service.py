@@ -391,7 +391,7 @@ class DispatchService:
                 max_batch_size=cls.MAX_BATCH_SIZE,
                 total_delivery_fee=Decimal(str(total_delivery_fee)),
                 rider_earnings=Decimal(str(rider_earnings)),
-                status=RiderAssignment.AssignmentStatus.ASSIGNED,
+                status=RiderAssignment.AssignmentStatus.PENDING,  # Fixed: PENDING until rider accepts
                 estimated_completion=timezone.now() + timedelta(hours=2)
             )
             
@@ -682,9 +682,9 @@ class DispatchService:
                 offer.mark_accepted()
                 
                 # Assign order(s) to rider
-                success = cls._assign_to_rider(offer)
+                assignment = cls._assign_to_rider(offer)
                 
-                if success:
+                if assignment:
                     # Mark queue as completed
                     queue = DispatchQueue.objects.get(current_offer=offer)
                     queue.mark_assigned()
@@ -695,7 +695,7 @@ class DispatchService:
                     return {
                         'success': True,
                         'message': 'Order assigned successfully',
-                        'assignment_id': offer.batch_assignment.assignment_id if offer.is_batch else None
+                        'assignment_id': assignment.id  # Return assignment database ID
                     }
                 else:
                     return {
@@ -740,7 +740,7 @@ class DispatchService:
             }
     
     @classmethod
-    def _assign_to_rider(cls, offer: DispatchOffer) -> bool:
+    def _assign_to_rider(cls, offer: DispatchOffer) -> Optional[RiderAssignment]:
         """
         Actually assign order(s) to the rider who accepted.
         Uses atomic transaction to prevent double-assignment.
@@ -769,6 +769,7 @@ class DispatchService:
                         pass
                     
                     logger.info(f"✅ Assigned batch {batch.assignment_id} to {offer.rider.full_name}")
+                    return batch  # Return the updated batch assignment
                     
                 else:
                     # Assign single order to rider
@@ -777,7 +778,7 @@ class DispatchService:
                     # Double-check not already assigned (race condition prevention)
                     if order.is_assigned_to_rider():
                         logger.warning(f"⚠️  Order {order.order_number} already assigned!")
-                        return False
+                        return None
                     
                     # Create assignment
                     assignment = RiderAssignment.objects.create(
@@ -803,12 +804,11 @@ class DispatchService:
                     # Status will progress: 'accepted' → 'ready_for_pickup' → 'picked_up' → 'delivered'
                     
                     logger.info(f"✅ Assigned order {order.order_number} to {offer.rider.full_name}")
-                
-                return True
+                    return assignment  # Return the created assignment
                 
         except Exception as e:
             logger.error(f"❌ Error assigning to rider: {str(e)}", exc_info=True)
-            return False
+            return None
     
     @classmethod
     def _cancel_other_offers(cls, accepted_offer: DispatchOffer):
