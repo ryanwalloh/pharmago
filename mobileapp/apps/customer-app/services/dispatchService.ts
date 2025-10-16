@@ -156,7 +156,7 @@ class DispatchService {
   /**
    * Accept a dispatch offer
    */
-  async acceptOffer(offerId: string, riderId: number): Promise<{success: boolean; message?: string}> {
+  async acceptOffer(offerId: string, riderId: number): Promise<{success: boolean; message?: string; assignment_id?: number}> {
     try {
       const response = await apiService.makeDirectRequest('/rider/accept-offer/', {
         method: 'POST',
@@ -167,7 +167,21 @@ class DispatchService {
         })
       });
 
-      return response as any;
+      // Extract assignment_id from nested response
+      const responseData = response as any;
+      const backendData = responseData.data || {};
+      
+      console.log('✅ Accept offer response:', {
+        success: responseData.success,
+        assignment_id: backendData.assignment_id,
+        message: backendData.message
+      });
+      
+      return {
+        success: responseData.success,
+        message: backendData.message || responseData.message,
+        assignment_id: backendData.assignment_id
+      };
     } catch (error) {
       console.error('❌ Error accepting offer:', error);
       return { success: false, message: 'Network error' };
