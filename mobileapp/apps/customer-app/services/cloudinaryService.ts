@@ -116,6 +116,19 @@ export async function uploadDriverLicenseImage(
 }
 
 /**
+ * Upload a proof of delivery photo to Cloudinary (rider app)
+ * @param fileUri - Local file URI
+ * @returns CloudinaryUploadResult
+ */
+export async function uploadProofOfDelivery(
+  fileUri: string
+): Promise<CloudinaryUploadResult> {
+  const folder = 'pharmago-file-uploads/proof-of-delivery';
+  const fileName = `pod_${Date.now()}.${fileUri.split('.').pop()}`;
+  return uploadToCloudinary(fileUri, folder, fileName);
+}
+
+/**
  * Get optimized Cloudinary URL with transformations
  * @param url - Original Cloudinary URL
  * @param width - Desired width
@@ -147,6 +160,7 @@ export default {
   uploadToCloudinary,
   uploadPrescriptionImage,
   uploadDriverLicenseImage,
+  uploadProofOfDelivery,
   getOptimizedUrl,
 };
 

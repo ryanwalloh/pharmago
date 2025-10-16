@@ -29,6 +29,10 @@ urlpatterns = [
     
     # Assignment Details Endpoint
     path('assignment/<int:assignment_id>/', assignment_endpoints.get_assignment_details),
+    
+    # Assignment Actions
+    path('assignment/<int:assignment_id>/mark-picked-up/', assignment_endpoints.mark_orders_picked_up),
+    path('assignment/<int:assignment_id>/order/<int:order_id>/mark-delivered/', assignment_endpoints.mark_order_delivered),
 ]
 
 
