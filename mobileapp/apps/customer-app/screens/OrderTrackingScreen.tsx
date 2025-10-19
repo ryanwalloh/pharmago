@@ -9,17 +9,17 @@ import {
   RefreshControl,
   Image,
   TextInput,
+  Modal,
+  NativeModules,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import MapView, { Marker, Region, Polyline } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
-import { apiService } from '../services/api';
+import { apiService, ApiResponse } from '../services/api';
 import { fontFamily } from '../utils/fonts';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Modal } from 'react-native';
 import Constants from 'expo-constants';
-import { NativeModules } from 'react-native';
 
 interface OrderData {
   order_id: number;
@@ -109,7 +109,7 @@ const OrderTrackingScreen: React.FC = () => {
   const chatFetchInFlightRef = useRef<boolean>(false);
   const typingTimerRef = useRef<any>(null);
   const isMountedRef = useRef<boolean>(true);
-  const [showPriceApprove, setShowPriceApprove] = useState(false);
+  const [_showPriceApprove, setShowPriceApprove] = useState(false);
   const [approving, setApproving] = useState(false);
   const [dismissedPricingPrompt, setDismissedPricingPrompt] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -809,7 +809,7 @@ const OrderTrackingScreen: React.FC = () => {
                             style={{ flex: 1, paddingVertical: 10, borderRadius: 8, backgroundColor: '#eeeeee', alignItems: 'center', marginRight: 8 }}
                             onPress={() => setDismissedPricingPrompt(true)}
                           >
-                            <Text style={{ color: '#333', fontFamily: fontFamily.bold }}>Refuse</Text>
+                            <Text style={{ color: '#333', fontFamily: fontFamily.heavy }}>Refuse</Text>
                           </TouchableOpacity>
                           <TouchableOpacity
                             style={{ flex: 1, paddingVertical: 10, borderRadius: 8, backgroundColor: '#00bf63', alignItems: 'center', marginLeft: 8, opacity: approving ? 0.6 : 1 }}
@@ -855,7 +855,7 @@ const OrderTrackingScreen: React.FC = () => {
                               }
                             }}
                           >
-                            <Text style={{ color: '#fff', fontFamily: fontFamily.bold }}>Accept</Text>
+                            <Text style={{ color: '#fff', fontFamily: fontFamily.heavy }}>Accept</Text>
                           </TouchableOpacity>
                         </View>
                       )}
