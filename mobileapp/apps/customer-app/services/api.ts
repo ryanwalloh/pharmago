@@ -11,8 +11,6 @@ const getApiBaseUrl = () => {
   }
 
   // Optional: EXPO_PUBLIC_API_BASE override (e.g., http://192.168.1.10:8000)
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-  // @ts-ignore
   const envBase: string | undefined = process.env.EXPO_PUBLIC_API_BASE;
   if (envBase) {
     const normalized = envBase.endsWith('/') ? envBase.slice(0, -1) : envBase;

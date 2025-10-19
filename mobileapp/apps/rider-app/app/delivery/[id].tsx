@@ -149,24 +149,14 @@ export default function ActiveDeliveryScreen() {
   const [totalEarnings, setTotalEarnings] = useState(0);
   const [allDelivered, setAllDelivered] = useState(false);
 
-  // Fetch delivery data
-  useEffect(() => {
-    fetchDeliveryData();
-  }, [id]);
-
-  // Start location tracking
-  useEffect(() => {
-    startLocationTracking();
-  }, []);
-
-  const fetchDeliveryData = async () => {
+  const fetchDeliveryData = React.useCallback(async () => {
     try {
       setLoading(true);
       
       console.log('📦 Fetching assignment details for ID:', id);
       
       // Fetch real assignment data from backend
-      const response = await apiService.makeDirectRequest(`/assignment/${id}/`, {
+      const response = await (apiService as any).makeDirectRequest(`/assignment/${id}/`, {
         method: 'GET',
       });
       
@@ -251,7 +241,17 @@ export default function ActiveDeliveryScreen() {
       Alert.alert('Error', 'Failed to load delivery details. Please try again.');
       setLoading(false);
     }
-  };
+  }, [id, riderLocation, mapRef]);
+
+  // Fetch delivery data
+  useEffect(() => {
+    fetchDeliveryData();
+  }, [id, fetchDeliveryData]);
+
+  // Start location tracking
+  useEffect(() => {
+    startLocationTracking();
+  }, []);
 
   // Decode Google Maps polyline
   const decodePolyline = (encoded: string): {latitude: number; longitude: number}[] => {
@@ -504,7 +504,7 @@ export default function ActiveDeliveryScreen() {
           onPress: async () => {
             try {
               // Call backend API to update status
-              const response = await apiService.makeDirectRequest(
+              const response = await (apiService as any).makeDirectRequest(
                 `/assignment/${id}/mark-picked-up/`,
                 {
                   method: 'POST',
@@ -571,7 +571,7 @@ export default function ActiveDeliveryScreen() {
         console.log('✅ Proof uploaded:', uploadResult.url);
 
         // Call backend to mark as delivered
-        const response = await apiService.makeDirectRequest(
+        const response = await (apiService as any).makeDirectRequest(
           `/assignment/${id}/order/${order.id}/mark-delivered/`,
           {
             method: 'POST',
@@ -746,7 +746,7 @@ export default function ActiveDeliveryScreen() {
               </Text>
             </View>
             <View style={styles.earningsBox}>
-              <Text style={styles.earningsLabel}>You'll Earn</Text>
+              <Text style={styles.earningsLabel}>You&apos;ll Earn</Text>
               <Text style={styles.earningsAmount}>₱{deliveryData.total_earnings.toFixed(2)}</Text>
             </View>
           </View>
@@ -889,7 +889,7 @@ export default function ActiveDeliveryScreen() {
             <Text style={styles.successTitle}>Delivery Complete! 🎉</Text>
             
             <View style={styles.earningsContainer}>
-              <Text style={styles.earningsLabel}>You Earned</Text>
+              <Text style={styles.earningsLabelModal}>You Earned</Text>
               <Text style={styles.earningsValue}>₱{deliveredOrderEarnings.toFixed(2)}</Text>
             </View>
 
@@ -1236,7 +1236,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 24,
   },
-  earningsLabel: {
+  earningsLabelModal: {
     fontSize: 14,
     color: '#666666',
     marginBottom: 8,
