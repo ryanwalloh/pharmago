@@ -82,6 +82,7 @@ INSTALLED_APPS = [
     'api.notifications.apps.NotificationsConfig',
     'api.chat.apps.ChatConfig',
     'api.global_api.apps.GlobalApiConfig',
+    'api.search.apps.SearchConfig',
 ]
 
 MIDDLEWARE = [

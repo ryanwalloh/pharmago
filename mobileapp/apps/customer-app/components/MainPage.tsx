@@ -85,6 +85,19 @@ const FilterIcon = ({ size = 24, color = '#999999' }) => (
 
 export default function MainPage() {
   const { isLoggedIn, user } = useAuth();
+  
+  const getGreetingMessage = () => {
+    const currentHour = new Date().getHours();
+    
+    if (currentHour >= 2 && currentHour < 12) {
+      return 'Magandang Umaga,';
+    } else if (currentHour >= 12 && currentHour < 18) {
+      return 'Magandang Hapon,';
+    } else {
+      return 'Magandang Gabi,';
+    }
+  };
+  
   const [currentBanner, setCurrentBanner] = useState(0);
   const [showPrescriptionModal, setShowPrescriptionModal] = useState(false);
 
@@ -201,7 +214,10 @@ export default function MainPage() {
               </View>
               <Text style={styles.bannerTitle} numberOfLines={1}>{item.title}</Text>
               <Text style={styles.bannerSubtitle}>{item.subtitle}</Text>
-              <TouchableOpacity style={styles.bannerCtaButton}>
+              <TouchableOpacity 
+                style={styles.bannerCtaButton}
+                onPress={() => router.push('/supersearch' as any)}
+              >
                 <Text style={styles.bannerCtaText}>{item.ctaText}</Text>
               </TouchableOpacity>
             </View>
@@ -231,8 +247,8 @@ export default function MainPage() {
 
   return (
     <LinearGradient
-      colors={['#D6F6D5', '#EDF9EB', '#EDF9EB', '#EDF9EB',]}
-      locations={[0, 0.3, 0.7, 1]}
+      colors={['#FFFFFF', '#FFD4EF4A', '#D4FFE24A']}
+      locations={[0, 0.5, 0.6]}
       style={styles.container}
     >
       <SafeAreaView style={styles.safeArea}>
@@ -240,19 +256,37 @@ export default function MainPage() {
         
         {/* Top Navigation Bar */}
         <View style={styles.topNav}>
-          <TouchableOpacity style={styles.navButton}>
-            <Text style={styles.navIcon}>🔔</Text>
-          </TouchableOpacity>
+          <View style={styles.logoContainer}>
+            <Image
+              source={require('../assets/logowhite.png')}
+              style={styles.logo}
+              resizeMode="contain"
+            />
+            <View style={styles.greetingContainer}>
+              <Text style={styles.greetingText}>{getGreetingMessage()}</Text>
+              <Text style={styles.userNameText}>
+                {user?.username ? user.username.charAt(0).toUpperCase() + user.username.slice(1).toLowerCase() : 'User'}
+              </Text>
+            </View>
+          </View>
           
-          <Image
-            source={require('../assets/logo.png')}
-            style={styles.logo}
-            resizeMode="contain"
-          />
-          
-          <TouchableOpacity style={styles.navButton}>
-            <Text style={styles.navIcon}>🛒</Text>
-          </TouchableOpacity>
+          <View style={styles.rightButtonsContainer}>
+            <TouchableOpacity style={styles.cartButton}>
+              <Image
+                source={require('../assets/cartwhite.png')}
+                style={styles.cartIcon}
+                resizeMode="contain"
+              />
+            </TouchableOpacity>
+            
+            <TouchableOpacity style={styles.notificationButton}>
+              <Image
+                source={require('../assets/bellwhite.png')}
+                style={styles.notificationIcon}
+                resizeMode="contain"
+              />
+            </TouchableOpacity>
+          </View>
         </View>
 
         <ScrollView 
@@ -470,16 +504,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   
-  // Top Navigation Bar
-  topNav: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 5,
-    marginTop: 0,
-    backgroundColor: 'transparent',
-  },
   navButton: {
     width: 40,
     height: 40,
@@ -489,9 +513,74 @@ const styles = StyleSheet.create({
   navIcon: {
     fontSize: 20,
   },
+  // Top Navigation Bar
+  topNav: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    marginTop: 0,
+    backgroundColor: 'transparent',
+  },
+  logoContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    
+  },
+  greetingContainer: {
+    marginLeft: 0,
+    justifyContent: 'center',
+  },
+  greetingText: {
+    fontSize: 12,
+    color: '#666',
+    fontFamily: fontFamily.light,
+    marginBottom: 0,
+  },
+  userNameText: {
+    fontSize: 18,
+    color: '#00BF63',
+    fontFamily: fontFamily.heavy,
+    fontWeight: 'bold',
+  },
   logo: {
-    width: 110,
+    width: 50,
     height: 50,
+    backgroundColor: '#00bf63',
+    borderRadius: 25,
+    marginRight: 10,
+   
+  },
+  rightButtonsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  cartButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  cartIcon: {
+    width: 20,
+    height: 20,
+  },
+  notificationButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  notificationIcon: {
+    width: 20,
+    height: 20,
   },
   
   // Scroll Container
