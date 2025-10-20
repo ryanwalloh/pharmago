@@ -314,6 +314,36 @@ class ApiService {
     return this.makeRequest(`/pharmacies/${id}/`);
   }
 
+  // Search methods
+  async searchMedicines(query: string, limit: number = 10): Promise<ApiResponse<any[]>> {
+    console.log('🔍 Searching medicines:', query);
+    return this.makeDirectRequest(`/search-medicines/?q=${encodeURIComponent(query)}&limit=${limit}`);
+  }
+
+  async searchPharmacies(query: string, limit: number = 10): Promise<ApiResponse<any[]>> {
+    console.log('🔍 Searching pharmacies:', query);
+    return this.makeDirectRequest(`/search-pharmacies/?q=${encodeURIComponent(query)}&limit=${limit}`);
+  }
+
+  async getPharmaciesByMedicine(medicineName: string, dosage: string, form: string): Promise<ApiResponse<any[]>> {
+    console.log('🔍 Getting pharmacies by medicine:', { medicineName, dosage, form });
+    return this.makeDirectRequest(
+      `/pharmacies-by-medicine/?medicine_name=${encodeURIComponent(medicineName)}&dosage=${encodeURIComponent(dosage)}&form=${encodeURIComponent(form)}`
+    );
+  }
+
+  async calculateDistanceAndFee(
+    pharmacyLat: number,
+    pharmacyLng: number,
+    customerLat: number,
+    customerLng: number
+  ): Promise<ApiResponse<any>> {
+    console.log('📏 Calculating distance and delivery fee');
+    return this.makeDirectRequest(
+      `/calculate-distance-fee/?pharmacy_lat=${pharmacyLat}&pharmacy_lng=${pharmacyLng}&customer_lat=${customerLat}&customer_lng=${customerLng}`
+    );
+  }
+
   // Order methods
   async createOrder(orderData: any): Promise<ApiResponse<any>> {
     console.log('📦 Creating order...');

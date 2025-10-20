@@ -31,6 +31,11 @@ urlpatterns = [
     # Mobile app direct endpoints
     path('create-prescription-order/', views.direct_prescription_order_creation),
     path('order-status/<int:order_id>/', views.get_order_status),
+    # Search endpoints
+    path('search-medicines/', views.direct_search_medicines),
+    path('search-pharmacies/', views.direct_search_pharmacies),
+    path('pharmacies-by-medicine/', views.direct_pharmacies_by_medicine),
+    path('calculate-distance-fee/', views.calculate_distance_and_fee),
 ]
 
 
