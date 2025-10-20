@@ -443,3 +443,285 @@ def direct_pharmacy_details(request, pharmacy_id):
         }, status=500)
 
 
+@csrf_exempt
+def direct_search_medicines(request):
+    """
+    Direct search for medicines in pharmacy inventories.
+    Query parameters:
+    - q: search query (required)
+    - limit: max results (default: 10)
+    """
+    try:
+        from api.inventory.models import PharmacyInventory
+        from django.db.models import Q
+        
+        query = request.GET.get('q', '').strip()
+        limit = int(request.GET.get('limit', 10))
+        
+        if not query or len(query) < 2:
+            return JsonResponse({
+                'success': False,
+                'error': 'Search query must be at least 2 characters'
+            }, status=400)
+        
+        # Search in pharmacy inventory (available items only)
+        medicines = PharmacyInventory.objects.filter(
+            Q(name__icontains=query) | 
+            Q(custom_name__icontains=query) |
+            Q(medicine__name__icontains=query) |
+            Q(medicine__generic_name__icontains=query),
+            is_available=True,
+            pharmacy__status='approved'
+        ).select_related('pharmacy', 'medicine', 'category').order_by('name', 'dosage', 'form').distinct('name', 'dosage', 'form')[:limit]
+        
+        results = []
+        for medicine in medicines:
+            # Get count of pharmacies that have this medicine
+            pharmacy_count = PharmacyInventory.objects.filter(
+                name=medicine.name,
+                dosage=medicine.dosage,
+                form=medicine.form,
+                is_available=True,
+                pharmacy__status='approved'
+            ).values('pharmacy').distinct().count()
+            
+            # Get price range
+            prices = PharmacyInventory.objects.filter(
+                name__iexact=medicine.name,
+                dosage__iexact=medicine.dosage,
+                form=medicine.form,
+                is_available=True,
+                pharmacy__status='approved'
+            ).values_list('price', flat=True)
+            
+            price_range = None
+            if prices:
+                price_range = {
+                    'min': float(min(prices)),
+                    'max': float(max(prices))
+                }
+            
+            results.append({
+                'id': medicine.id,
+                'name': medicine.display_name,
+                'dosage': medicine.dosage,
+                'form': medicine.get_form_display(),
+                'category': medicine.category.name if medicine.category else None,
+                'prescription_required': medicine.prescription_required,
+                'price_range': price_range,
+                'pharmacy_count': pharmacy_count,
+                'type': 'medicine'
+            })
+        
+        return JsonResponse({
+            'success': True,
+            'data': results,
+            'count': len(results)
+        })
+        
+    except Exception as e:
+        print(f"ERROR in direct_search_medicines: {e}")
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
+@csrf_exempt
+def direct_search_pharmacies(request):
+    """
+    Direct search for pharmacies by name or location.
+    Query parameters:
+    - q: search query (required)
+    - limit: max results (default: 10)
+    """
+    try:
+        from api.users.models import Pharmacy
+        from django.db.models import Q
+        
+        query = request.GET.get('q', '').strip()
+        limit = int(request.GET.get('limit', 10))
+        
+        if not query or len(query) < 2:
+            return JsonResponse({
+                'success': False,
+                'error': 'Search query must be at least 2 characters'
+            }, status=400)
+        
+        # Search pharmacies by name, address
+        pharmacies = Pharmacy.objects.filter(
+            Q(pharmacy_name__icontains=query) |
+            Q(street_address__icontains=query) |
+            Q(barangay__icontains=query) |
+            Q(city__icontains=query),
+            status='approved'
+        ).order_by('pharmacy_name')[:limit]
+        
+        results = []
+        for pharmacy in pharmacies:
+            results.append({
+                'id': pharmacy.id,
+                'pharmacy_name': pharmacy.pharmacy_name,
+                'address': f"{pharmacy.street_address}, {pharmacy.barangay}",
+                'barangay': pharmacy.barangay,
+                'city': pharmacy.city,
+                'province': pharmacy.province,
+                'latitude': float(pharmacy.latitude) if pharmacy.latitude else None,
+                'longitude': float(pharmacy.longitude) if pharmacy.longitude else None,
+                'storefront_image': pharmacy.storefront_image_url if hasattr(pharmacy, 'storefront_image_url') else None,
+                'type': 'pharmacy'
+            })
+        
+        return JsonResponse({
+            'success': True,
+            'data': results,
+            'count': len(results)
+        })
+        
+    except Exception as e:
+        print(f"ERROR in direct_search_pharmacies: {e}")
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
+@csrf_exempt
+def direct_pharmacies_by_medicine(request):
+    """
+    Direct endpoint to get all pharmacies that have a specific medicine in stock.
+    Query parameters:
+    - medicine_name: medicine name (required)
+    - dosage: medicine dosage (required)
+    - form: medicine form (required)
+    """
+    try:
+        from api.inventory.models import PharmacyInventory
+        
+        medicine_name = request.GET.get('medicine_name', '').strip()
+        dosage = request.GET.get('dosage', '').strip()
+        form = request.GET.get('form', '').strip()
+        
+        if not medicine_name or not dosage or not form:
+            return JsonResponse({
+                'success': False,
+                'error': 'medicine_name, dosage, and form are required'
+            }, status=400)
+        
+        # Get all pharmacies that have this medicine
+        inventory_items = PharmacyInventory.objects.filter(
+            name__iexact=medicine_name,
+            dosage__iexact=dosage,
+            form=form,
+            is_available=True,
+            stock_quantity__gt=0,
+            pharmacy__status='approved'
+        ).select_related('pharmacy').order_by('price')
+        
+        if not inventory_items.exists():
+            return JsonResponse({
+                'success': True,
+                'data': [],
+                'count': 0,
+                'message': 'No pharmacies found with this medicine in stock'
+            })
+        
+        results = []
+        for item in inventory_items:
+            pharmacy = item.pharmacy
+            results.append({
+                'inventory_id': item.id,
+                'pharmacy_id': pharmacy.id,
+                'pharmacy_name': pharmacy.pharmacy_name,
+                'address': f"{pharmacy.street_address}, {pharmacy.barangay}",
+                'barangay': pharmacy.barangay,
+                'city': pharmacy.city,
+                'province': pharmacy.province,
+                'latitude': float(pharmacy.latitude) if pharmacy.latitude else None,
+                'longitude': float(pharmacy.longitude) if pharmacy.longitude else None,
+                'storefront_image': pharmacy.storefront_image_url if hasattr(pharmacy, 'storefront_image_url') else None,
+                'phone': pharmacy.business_phone if pharmacy.business_phone else None,
+                'price': float(item.price),
+                'original_price': float(item.original_price) if item.original_price else float(item.price),
+                'is_on_sale': item.is_on_sale,
+                'discount_percentage': item.discount_percentage,
+                'stock_quantity': item.stock_quantity,
+                'prescription_required': item.prescription_required
+            })
+        
+        return JsonResponse({
+            'success': True,
+            'data': results,
+            'count': len(results),
+            'medicine': {
+                'name': medicine_name,
+                'dosage': dosage,
+                'form': form
+            }
+        })
+        
+    except Exception as e:
+        print(f"ERROR in direct_pharmacies_by_medicine: {e}")
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
+@csrf_exempt
+def calculate_distance_and_fee(request):
+    """
+    Calculate distance and delivery fee between two points.
+    Query parameters:
+    - pharmacy_lat, pharmacy_lng: Pharmacy coordinates
+    - customer_lat, customer_lng: Customer coordinates
+    """
+    try:
+        from api.orders.pricing_service import DeliveryPricingService
+        
+        pharmacy_lat = request.GET.get('pharmacy_lat')
+        pharmacy_lng = request.GET.get('pharmacy_lng')
+        customer_lat = request.GET.get('customer_lat')
+        customer_lng = request.GET.get('customer_lng')
+        
+        if not all([pharmacy_lat, pharmacy_lng, customer_lat, customer_lng]):
+            return JsonResponse({
+                'success': False,
+                'error': 'All coordinates are required'
+            }, status=400)
+        
+        # Convert to float
+        pharmacy_lat = float(pharmacy_lat)
+        pharmacy_lng = float(pharmacy_lng)
+        customer_lat = float(customer_lat)
+        customer_lng = float(customer_lng)
+        
+        # Calculate delivery fee and distance
+        delivery_fee, distance_km = DeliveryPricingService.calculate_delivery_fee(
+            pharmacy_lat,
+            pharmacy_lng,
+            customer_lat,
+            customer_lng,
+            use_google_maps=True
+        )
+        
+        # Get pricing breakdown
+        breakdown = DeliveryPricingService.get_pricing_breakdown(distance_km or 0)
+        
+        return JsonResponse({
+            'success': True,
+            'data': {
+                'distance_km': distance_km,
+                'delivery_fee': float(delivery_fee),
+                'breakdown': breakdown
+            }
+        })
+        
+    except Exception as e:
+        print(f"ERROR in calculate_distance_and_fee: {e}")
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+

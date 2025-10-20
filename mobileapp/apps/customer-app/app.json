@@ -32,6 +32,7 @@
       "config": {
         "googleMaps": {
           "apiKey": "AIzaSyCCuDLJMhB-23kQiXYpXwi-yYGvKz7OgSQ"
+          
         }
       },
       "package": "com.anonymous.mobileapp"
