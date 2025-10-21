@@ -48,7 +48,7 @@ interface Pharmacy {
   city: string;
   latitude: number | null;
   longitude: number | null;
-  storefront_image?: string | null;
+  storefront_image_url?: string | null;
 }
 
 interface SearchResult {
@@ -67,6 +67,7 @@ interface SearchResult {
   province?: string;
   latitude?: number | null;
   longitude?: number | null;
+  storefront_image_url?: string | null;
 }
 
 interface SelectedMedicine {
@@ -291,14 +292,24 @@ export default function SuperSearch() {
   };
 
   const handleMedicineSelect = (medicine: SearchResult) => {
+    // Extract base medicine name from full display name
+    // e.g., "Alaxan 200 mg/325 mg Tablet" -> "Alaxan"
+    const nameParts = medicine.name.split(' ');
+    const baseName = nameParts[0];
+    
     setSelectedMedicine({
-      name: medicine.name,
+      name: baseName,
       dosage: medicine.dosage || '',
       form: medicine.form || '',
     });
     setSearchQuery(medicine.name);
     setShowSuggestions(false);
-    console.log('💊 Medicine selected:', medicine.name);
+    console.log('💊 Medicine selected:', {
+      fullName: medicine.name,
+      baseName: baseName,
+      dosage: medicine.dosage,
+      form: medicine.form
+    });
   };
 
   const handlePharmacySelect = async (pharmacy: SearchResult) => {
@@ -382,20 +393,33 @@ export default function SuperSearch() {
       setPharmacyListLoading(true);
       setShowPharmacyModal(true);
       
-      console.log('🏥 Fetching pharmacies for medicine:', selectedMedicine);
+      // Use the exact name, dosage, and form from the selected medicine
+      const queryParams = {
+        name: selectedMedicine.name,
+        dosage: selectedMedicine.dosage,
+        form: selectedMedicine.form.toLowerCase()
+      };
+      
+      console.log('🏥 Fetching pharmacies for medicine:', queryParams);
       
       const response = await apiService.getPharmaciesByMedicine(
-        selectedMedicine.name.split(' ')[0], // Get base name
-        selectedMedicine.dosage,
-        selectedMedicine.form.toLowerCase()
+        queryParams.name,
+        queryParams.dosage,
+        queryParams.form
       );
+      
+      console.log('📦 Pharmacies API Response:', {
+        success: response.success,
+        dataType: typeof response.data,
+        rawData: response.data
+      });
       
       if (response.success && response.data) {
         // Unwrap nested data structure
         const pharmacyData = (response.data as any).data || response.data;
         const pharmacyArray = Array.isArray(pharmacyData) ? pharmacyData : [];
         setPharmacyList(pharmacyArray);
-        console.log(`✅ Found ${pharmacyArray.length} pharmacies`);
+        console.log(`✅ Found ${pharmacyArray.length} pharmacies for ${queryParams.name}`);
         
         // Calculate distances for all pharmacies
         if (pharmacyArray.length > 0) {
@@ -557,7 +581,7 @@ export default function SuperSearch() {
           <View style={styles.loadingCenter}>
             <ActivityIndicator size="large" color="#2CED9A" />
             <Animated.Text style={[styles.loadingText, { opacity: fadeAnim }]}>
-             Super search is loading...
+             Super search is starting...
             </Animated.Text>
           </View>
         </SafeAreaView>
@@ -821,12 +845,15 @@ export default function SuperSearch() {
                           <View style={styles.pharmacyImageContainer}>
                             <Image
                               source={
-                                pharmacy.storefront_image 
-                                  ? { uri: pharmacy.storefront_image }
+                                pharmacy.storefront_image_url 
+                                  ? { uri: pharmacy.storefront_image_url }
                                   : require('../assets/pharmacy.png')
                               }
                               style={styles.pharmacyImage}
                               resizeMode="cover"
+                              onError={() => {
+                                console.log('Failed to load storefront image for:', pharmacy.pharmacy_name);
+                              }}
                             />
                           </View>
 
@@ -857,7 +884,38 @@ export default function SuperSearch() {
                           style={styles.orderNowButton}
                           onPress={() => {
                             console.log('Order from pharmacy:', pharmacy.pharmacy_name);
-                            // TODO: Implement order flow
+                            
+                            // Navigate to order page with medicine and pharmacy data
+                            const orderData = {
+                              pharmacy: {
+                                pharmacy_id: pharmacy.pharmacy_id,
+                                pharmacy_name: pharmacy.pharmacy_name,
+                                barangay: pharmacy.barangay,
+                                city: pharmacy.city,
+                                province: pharmacy.province,
+                                latitude: pharmacy.latitude,
+                                longitude: pharmacy.longitude,
+                                storefront_image_url: pharmacy.storefront_image_url,
+                              },
+                              selectedMedicine: {
+                                inventory_id: pharmacy.inventory_id,
+                                name: selectedMedicine?.name || '',
+                                dosage: selectedMedicine?.dosage || '',
+                                form: selectedMedicine?.form || '',
+                                price: pharmacy.price,
+                                prescription_required: pharmacy.prescription_required,
+                              },
+                              deliveryInfo: distanceData || null,
+                            };
+                            
+                            router.push({
+                              pathname: '/order' as any,
+                              params: {
+                                pharmacy: JSON.stringify(orderData.pharmacy),
+                                selectedMedicine: JSON.stringify(orderData.selectedMedicine),
+                                deliveryInfo: JSON.stringify(orderData.deliveryInfo),
+                              }
+                            });
                           }}
                         >
                           <Text style={styles.orderNowButtonText}>Order Now</Text>
@@ -903,12 +961,15 @@ export default function SuperSearch() {
                       <View style={styles.pharmacyImageContainer}>
                         <Image
                           source={
-                            selectedPharmacy.storefront_image 
-                              ? { uri: selectedPharmacy.storefront_image }
+                            selectedPharmacy.storefront_image_url 
+                              ? { uri: selectedPharmacy.storefront_image_url }
                               : require('../assets/pharmacy.png')
                           }
                           style={styles.pharmacyImage}
                           resizeMode="cover"
+                          onError={() => {
+                            console.log('Failed to load storefront image for:', selectedPharmacy.pharmacy_name);
+                          }}
                         />
                       </View>
 
@@ -939,7 +1000,26 @@ export default function SuperSearch() {
                       onPress={() => {
                         console.log('Shop at pharmacy:', selectedPharmacy.pharmacy_name);
                         setShowPharmacyShopModal(false);
-                        // TODO: Navigate to pharmacy shop/inventory page
+                        
+                        // Navigate to order page for browsing pharmacy inventory
+                        const pharmacyData = {
+                          pharmacy_id: selectedPharmacy.id,
+                          pharmacy_name: selectedPharmacy.pharmacy_name,
+                          barangay: selectedPharmacy.barangay,
+                          city: selectedPharmacy.city,
+                          province: selectedPharmacy.province,
+                          latitude: selectedPharmacy.latitude,
+                          longitude: selectedPharmacy.longitude,
+                          storefront_image_url: selectedPharmacy.storefront_image_url,
+                        };
+                        
+                        router.push({
+                          pathname: '/order' as any,
+                          params: {
+                            pharmacy: JSON.stringify(pharmacyData),
+                            deliveryInfo: JSON.stringify(pharmacyDistances[selectedPharmacy.id] || null),
+                          }
+                        });
                       }}
                     >
                       <Text style={styles.shopButtonText}>Shop</Text>

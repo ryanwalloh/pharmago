@@ -463,12 +463,48 @@ def pharmacy_login(request):
                 ).first()
                 
                 if storefront_doc and storefront_doc.file_url:
-                    # Check if it's a Cloudinary URL - use it directly
+                    # Check if it's a Cloudinary URL or any other HTTP URL - use it directly
                     if 'cloudinary.com' in storefront_doc.file_url or storefront_doc.file_url.startswith('http'):
                         storefront_image_url = storefront_doc.file_url
+                    elif storefront_doc.file_url.startswith('/media/') or storefront_doc.file_url.startswith('media/'):
+                        # Local media file - convert to absolute URL
+                        from django.conf import settings
+                        media_url = getattr(settings, 'MEDIA_URL', '/media/')
+                        if not storefront_doc.file_url.startswith('/'):
+                            file_path = '/' + storefront_doc.file_url
+                        else:
+                            file_path = storefront_doc.file_url
+                        storefront_image_url = request.build_absolute_uri(file_path)
                     else:
-                        # Legacy S3 URL - use backend proxy endpoint
-                        storefront_image_url = f"/api/pharmacy-storefront/{pharmacy_obj.id}/"
+                        # S3 URL - generate presigned URL or use backend proxy endpoint
+                        try:
+                            import boto3
+                            from urllib.parse import urlparse
+                            from botocore.config import Config
+                            bucket_name = os.getenv('AWS_STORAGE_BUCKET_NAME', 'pharmago-user-uploads')
+                            region = os.getenv('AWS_S3_REGION_NAME', 'ap-southeast-2')
+                            parsed = urlparse(storefront_doc.file_url)
+                            key = parsed.path.lstrip('/')
+                            if key.startswith(f"{bucket_name}/"):
+                                key = key[len(bucket_name) + 1:]
+                            s3_client = boto3.client(
+                                's3',
+                                aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
+                                aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY'),
+                                region_name=region,
+                                endpoint_url=f"https://s3.{region}.amazonaws.com",
+                                config=Config(signature_version='s3v4'),
+                            )
+                            presigned = s3_client.generate_presigned_url(
+                                'get_object',
+                                Params={'Bucket': bucket_name, 'Key': key},
+                                ExpiresIn=3600,
+                            )
+                            storefront_image_url = presigned
+                        except Exception as e:
+                            # Fallback to backend proxy endpoint
+                            print(f"Failed to generate S3 presigned URL: {e}")
+                            storefront_image_url = f"/api/pharmacy-storefront/{pharmacy_obj.id}/"
             except Exception as e:
                 print(f"Error fetching storefront image: {e}")
                 

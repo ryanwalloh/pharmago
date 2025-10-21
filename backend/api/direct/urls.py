@@ -36,6 +36,8 @@ urlpatterns = [
     path('search-pharmacies/', views.direct_search_pharmacies),
     path('pharmacies-by-medicine/', views.direct_pharmacies_by_medicine),
     path('calculate-distance-fee/', views.calculate_distance_and_fee),
+    # Inventory management
+    path('bulk-set-max-stock/', views.bulk_set_inventory_max_stock),
 ]
 
 
