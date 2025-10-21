@@ -1163,7 +1163,7 @@ const PharmacyDashboard = () => {
       const requestData = {
         pharmacy_id: pharmacyInfo.id,
         medicines: medicinesWithPricing,
-        default_stock: 0      // Default stock, can be updated later
+        default_stock: 1000   // Set to max stock level (availability controlled by toggle)
       };
 
       // Call the API
@@ -1245,13 +1245,14 @@ const PharmacyDashboard = () => {
             className="w-12 h-12 rounded-full mr-3 object-cover" 
             src={
               pharmacyInfo?.profile_picture 
-                ? (pharmacyInfo.profile_picture.includes('cloudinary.com') || pharmacyInfo.profile_picture.startsWith('http')
+                ? (pharmacyInfo.profile_picture.startsWith('http') || pharmacyInfo.profile_picture.includes('cloudinary.com')
                     ? pharmacyInfo.profile_picture
-                    : `${(process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '')}${pharmacyInfo.profile_picture}`)
+                    : `${(process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')}${pharmacyInfo.profile_picture}`)
                 : "/images/pharmacie.png"
             } 
             alt="Pharmacy Profile"
             onError={(e) => {
+              console.error('Failed to load pharmacy profile picture:', pharmacyInfo?.profile_picture);
               e.target.src = "/images/pharmacie.png";
             }}
           />
