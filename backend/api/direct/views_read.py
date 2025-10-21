@@ -476,21 +476,22 @@ def direct_search_medicines(request):
         
         results = []
         for medicine in medicines:
-            # Get count of pharmacies that have this medicine
+            # Get count of pharmacies that have this medicine AVAILABLE
+            # Using is_available toggle instead of stock_quantity
             pharmacy_count = PharmacyInventory.objects.filter(
                 name=medicine.name,
                 dosage=medicine.dosage,
                 form=medicine.form,
-                is_available=True,
+                is_available=True,  # Only check availability toggle
                 pharmacy__status='approved'
             ).values('pharmacy').distinct().count()
             
-            # Get price range
+            # Get price range (only from available pharmacies)
             prices = PharmacyInventory.objects.filter(
                 name__iexact=medicine.name,
                 dosage__iexact=medicine.dosage,
                 form=medicine.form,
-                is_available=True,
+                is_available=True,  # Only check availability toggle
                 pharmacy__status='approved'
             ).values_list('price', flat=True)
             
@@ -559,6 +560,22 @@ def direct_search_pharmacies(request):
         
         results = []
         for pharmacy in pharmacies:
+            # Get storefront image URL
+            storefront_image_url = None
+            try:
+                from api.users.models import UserDocument
+                storefront_doc = UserDocument.objects.filter(
+                    user=pharmacy.user,
+                    id_type__name__icontains='storefront'
+                ).first()
+                
+                if storefront_doc and storefront_doc.file_url:
+                    # Check if it's a Cloudinary URL
+                    if 'cloudinary.com' in storefront_doc.file_url or storefront_doc.file_url.startswith('http'):
+                        storefront_image_url = storefront_doc.file_url
+            except Exception as e:
+                print(f"Error fetching storefront for pharmacy {pharmacy.id}: {e}")
+            
             results.append({
                 'id': pharmacy.id,
                 'pharmacy_name': pharmacy.pharmacy_name,
@@ -568,7 +585,7 @@ def direct_search_pharmacies(request):
                 'province': pharmacy.province,
                 'latitude': float(pharmacy.latitude) if pharmacy.latitude else None,
                 'longitude': float(pharmacy.longitude) if pharmacy.longitude else None,
-                'storefront_image': pharmacy.storefront_image_url if hasattr(pharmacy, 'storefront_image_url') else None,
+                'storefront_image_url': storefront_image_url,
                 'type': 'pharmacy'
             })
         
@@ -609,14 +626,19 @@ def direct_pharmacies_by_medicine(request):
             }, status=400)
         
         # Get all pharmacies that have this medicine
+        # Use icontains for name to be more flexible (handles partial matches)
+        # Use is_available instead of stock_quantity (stock managed by toggle)
         inventory_items = PharmacyInventory.objects.filter(
-            name__iexact=medicine_name,
+            name__icontains=medicine_name,
             dosage__iexact=dosage,
             form=form,
-            is_available=True,
-            stock_quantity__gt=0,
+            is_available=True,  # Only check availability toggle
             pharmacy__status='approved'
         ).select_related('pharmacy').order_by('price')
+        
+        # Log the query for debugging
+        print(f"🔍 Searching for medicine: name contains '{medicine_name}', dosage='{dosage}', form='{form}'")
+        print(f"✅ Found {inventory_items.count()} available inventory items")
         
         if not inventory_items.exists():
             return JsonResponse({
@@ -629,6 +651,23 @@ def direct_pharmacies_by_medicine(request):
         results = []
         for item in inventory_items:
             pharmacy = item.pharmacy
+            
+            # Get storefront image URL
+            storefront_image_url = None
+            try:
+                from api.users.models import UserDocument
+                storefront_doc = UserDocument.objects.filter(
+                    user=pharmacy.user,
+                    id_type__name__icontains='storefront'
+                ).first()
+                
+                if storefront_doc and storefront_doc.file_url:
+                    # Check if it's a Cloudinary URL
+                    if 'cloudinary.com' in storefront_doc.file_url or storefront_doc.file_url.startswith('http'):
+                        storefront_image_url = storefront_doc.file_url
+            except Exception as e:
+                print(f"Error fetching storefront for pharmacy {pharmacy.id}: {e}")
+            
             results.append({
                 'inventory_id': item.id,
                 'pharmacy_id': pharmacy.id,
@@ -639,7 +678,7 @@ def direct_pharmacies_by_medicine(request):
                 'province': pharmacy.province,
                 'latitude': float(pharmacy.latitude) if pharmacy.latitude else None,
                 'longitude': float(pharmacy.longitude) if pharmacy.longitude else None,
-                'storefront_image': pharmacy.storefront_image_url if hasattr(pharmacy, 'storefront_image_url') else None,
+                'storefront_image_url': storefront_image_url,
                 'phone': pharmacy.business_phone if pharmacy.business_phone else None,
                 'price': float(item.price),
                 'original_price': float(item.original_price) if item.original_price else float(item.price),
@@ -662,6 +701,69 @@ def direct_pharmacies_by_medicine(request):
         
     except Exception as e:
         print(f"ERROR in direct_pharmacies_by_medicine: {e}")
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
+@csrf_exempt
+def bulk_set_inventory_max_stock(request):
+    """
+    Bulk update all inventory items to maximum stock level.
+    POST /api/bulk-set-max-stock/
+    Optional body: { "pharmacy_id": 123 } to update single pharmacy
+    """
+    try:
+        from api.inventory.models import PharmacyInventory
+        from django.db.models import F
+        import json
+        
+        # Check if updating single pharmacy or all
+        pharmacy_id = None
+        if request.body:
+            try:
+                data = json.loads(request.body)
+                pharmacy_id = data.get('pharmacy_id')
+            except:
+                pass
+        
+        # Build query
+        if pharmacy_id:
+            items = PharmacyInventory.objects.filter(
+                pharmacy_id=pharmacy_id,
+                stock_quantity__lt=F('max_stock_level')
+            )
+            scope = f"pharmacy #{pharmacy_id}"
+        else:
+            items = PharmacyInventory.objects.filter(
+                stock_quantity__lt=F('max_stock_level')
+            )
+            scope = "all pharmacies"
+        
+        count_to_update = items.count()
+        
+        if count_to_update == 0:
+            return JsonResponse({
+                'success': True,
+                'message': f'All items already at max stock for {scope}',
+                'updated_count': 0
+            })
+        
+        # Perform bulk update
+        updated = items.update(stock_quantity=F('max_stock_level'))
+        
+        print(f"✅ Updated {updated} inventory items to max stock for {scope}")
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'Updated {updated} items to maximum stock',
+            'updated_count': updated,
+            'scope': scope
+        })
+        
+    except Exception as e:
+        print(f"ERROR in bulk_set_inventory_max_stock: {e}")
         return JsonResponse({
             'success': False,
             'error': str(e)

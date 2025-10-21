@@ -168,6 +168,8 @@ def add_medicines_to_inventory(request):
                         'price': _safe_float(pricing.get('price', 0)),
                         'original_price': _safe_float(pricing.get('original_price', pricing.get('price', 0))),
                         'cost_price': _safe_float(pricing.get('cost_price', 0)),
+                        'stock_quantity': 1000,  # Set to max stock (availability managed by toggle)
+                        'max_stock_level': 1000,
                     }
                 )
                 if not created:
@@ -262,6 +264,8 @@ def add_custom_products_to_inventory(request):
                     price=_safe_float(p.get('price', 0)),
                     original_price=_safe_float(p.get('original_price', p.get('price', 0))),
                     cost_price=_safe_float(p.get('cost_price', 0)),
+                    stock_quantity=1000,  # Set to max stock (availability managed by toggle)
+                    max_stock_level=1000,
                 )
                 added.append({
                     'id': inv.id,
