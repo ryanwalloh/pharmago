@@ -40,6 +40,76 @@ const SearchIcon = ({ size = 20, color = '#999999' }) => (
   </Svg>
 );
 
+// Close/X Icon
+const CloseIcon = ({ size = 14, color = '#666666' }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24">
+    <Path
+      d="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z"
+      fill={color}
+    />
+  </Svg>
+);
+
+// Medicine Chip Component
+const MedicineChip = ({ 
+  medicine, 
+  onRemove 
+}: { 
+  medicine: SelectedMedicine; 
+  onRemove: () => void;
+}) => {
+  const truncateName = (name: string, maxLength: number = 12) => {
+    if (name.length <= maxLength) return name;
+    return name.substring(0, maxLength) + '...';
+  };
+
+  return (
+    <View style={chipStyles.container}>
+      <Text style={chipStyles.text} numberOfLines={1}>
+        {truncateName(medicine.fullName)}
+      </Text>
+      <TouchableOpacity 
+        style={chipStyles.closeButton}
+        onPress={onRemove}
+        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+      >
+        <CloseIcon size={12} color="#666666" />
+      </TouchableOpacity>
+    </View>
+  );
+};
+
+const chipStyles = StyleSheet.create({
+  container: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E8F5E9',
+    borderRadius: 20,
+    paddingVertical: 6,
+    paddingLeft: 12,
+    paddingRight: 8,
+    marginRight: 8,
+    maxWidth: 140,
+    borderWidth: 1,
+    borderColor: '#00bf63',
+  },
+  text: {
+    fontSize: 13,
+    color: '#2E7D32',
+    fontWeight: '600',
+    marginRight: 6,
+    flex: 1,
+  },
+  closeButton: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+});
+
 interface Pharmacy {
   id: number;
   pharmacy_name: string;
@@ -71,9 +141,12 @@ interface SearchResult {
 }
 
 interface SelectedMedicine {
+  id: string; // Unique identifier: name+dosage+form
   name: string;
   dosage: string;
   form: string;
+  fullName: string; // Full display name
+  inventory_id?: number; // Optional: for tracking specific inventory items
 }
 
 export default function SuperSearch() {
@@ -98,13 +171,14 @@ export default function SuperSearch() {
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const [selectedMedicine, setSelectedMedicine] = useState<SelectedMedicine | null>(null);
+  const [selectedMedicines, setSelectedMedicines] = useState<SelectedMedicine[]>([]);
   const [showPharmacyModal, setShowPharmacyModal] = useState(false);
   const [pharmacyList, setPharmacyList] = useState<any[]>([]);
   const [pharmacyListLoading, setPharmacyListLoading] = useState(false);
   const [selectedPharmacy, setSelectedPharmacy] = useState<any | null>(null);
   const [showPharmacyShopModal, setShowPharmacyShopModal] = useState(false);
   const [pharmacyDistances, setPharmacyDistances] = useState<{[key: number]: any}>({});
+  const [sortBy, setSortBy] = useState<'open' | 'near' | 'price'>('open');
   
   const searchDebounceTimer = useRef<number | null>(null);
   
@@ -158,6 +232,16 @@ export default function SuperSearch() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoading]);
+
+  // Dynamically update pharmacy list when medicines are added/removed
+  useEffect(() => {
+    // Only update if modal is open and we have medicines selected
+    if (showPharmacyModal && selectedMedicines.length > 0) {
+      console.log('🔄 Medicine selection changed, updating pharmacy list...');
+      updatePharmacyList();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedMedicines]);
 
   const getCurrentLocation = async () => {
     try {
@@ -259,17 +343,19 @@ export default function SuperSearch() {
       
       // Search both medicines and pharmacies
       const [medicineResponse, pharmacyResponse] = await Promise.all([
-        apiService.searchMedicines(query, 5),
+        apiService.searchMedicines(query, 10), // Increased limit to account for filtering
         apiService.searchPharmacies(query, 5),
       ]);
       
       const combinedResults: SearchResult[] = [];
       
-      // Add medicine results - unwrap nested data structure
+      // Add medicine results - unwrap nested data structure and filter out selected medicines
       if (medicineResponse.success && medicineResponse.data) {
         const medicineData = (medicineResponse.data as any).data || medicineResponse.data;
         if (Array.isArray(medicineData)) {
-          combinedResults.push(...medicineData);
+          // Filter out already selected medicines
+          const filteredMedicines = medicineData.filter(med => !isMedicineSelected(med));
+          combinedResults.push(...filteredMedicines.slice(0, 5)); // Limit to 5 after filtering
         }
       }
       
@@ -283,7 +369,7 @@ export default function SuperSearch() {
       
       setSearchResults(combinedResults);
       setShowSuggestions(combinedResults.length > 0);
-      console.log(`✅ Found ${combinedResults.length} results`);
+      console.log(`✅ Found ${combinedResults.length} results (filtered out selected medicines)`);
     } catch (error) {
       console.error('💥 Search error:', error);
     } finally {
@@ -291,25 +377,64 @@ export default function SuperSearch() {
     }
   };
 
-  const handleMedicineSelect = (medicine: SearchResult) => {
-    // Extract base medicine name from full display name
-    // e.g., "Alaxan 200 mg/325 mg Tablet" -> "Alaxan"
+  // Utility functions for managing selected medicines
+  const generateMedicineId = (name: string, dosage: string, form: string) => {
+    return `${name}-${dosage}-${form}`.toLowerCase().replace(/\s+/g, '-');
+  };
+
+  const isMedicineSelected = (medicine: SearchResult) => {
+    const id = generateMedicineId(
+      medicine.name,
+      medicine.dosage || '',
+      medicine.form || ''
+    );
+    return selectedMedicines.some(m => m.id === id);
+  };
+
+  const addMedicine = (medicine: SearchResult) => {
     const nameParts = medicine.name.split(' ');
     const baseName = nameParts[0];
     
-    setSelectedMedicine({
+    const newMedicine: SelectedMedicine = {
+      id: generateMedicineId(medicine.name, medicine.dosage || '', medicine.form || ''),
       name: baseName,
       dosage: medicine.dosage || '',
       form: medicine.form || '',
-    });
-    setSearchQuery(medicine.name);
-    setShowSuggestions(false);
-    console.log('💊 Medicine selected:', {
       fullName: medicine.name,
-      baseName: baseName,
-      dosage: medicine.dosage,
-      form: medicine.form
-    });
+      inventory_id: medicine.id,
+    };
+
+    setSelectedMedicines(prev => [...prev, newMedicine]);
+    console.log('💊 Medicine added:', newMedicine);
+  };
+
+  const removeMedicine = (medicineId: string) => {
+    setSelectedMedicines(prev => prev.filter(m => m.id !== medicineId));
+    console.log('🗑️ Medicine removed:', medicineId);
+  };
+
+  const clearAllMedicines = () => {
+    setSelectedMedicines([]);
+    setSearchQuery('');
+    setSearchResults([]);
+    setShowSuggestions(false);
+    console.log('🧹 All medicines cleared');
+  };
+
+  const handleMedicineSelect = (medicine: SearchResult) => {
+    // Check if already selected
+    if (isMedicineSelected(medicine)) {
+      console.log('⚠️ Medicine already selected');
+      return;
+    }
+
+    // Add to selected medicines array
+    addMedicine(medicine);
+    
+    // Clear search query to allow searching for next medicine
+    setSearchQuery('');
+    setSearchResults([]);
+    setShowSuggestions(false);
   };
 
   const handlePharmacySelect = async (pharmacy: SearchResult) => {
@@ -344,11 +469,6 @@ export default function SuperSearch() {
     }
   };
 
-  const clearSelectedMedicine = () => {
-    setSelectedMedicine(null);
-    setSearchQuery('');
-    setSearchResults([]);
-  };
 
   const calculatePharmacyDistances = async (pharmacies: any[]) => {
     if (!userLocation) {
@@ -386,55 +506,110 @@ export default function SuperSearch() {
     setPharmacyDistances(distances);
   };
 
-  const handleAddMedication = async () => {
-    if (!selectedMedicine) return;
+  // Sort pharmacies based on selected criteria
+  const getSortedPharmacies = () => {
+    const sorted = [...pharmacyList];
+    
+    if (sortBy === 'near') {
+      // Sort by distance (nearest first)
+      sorted.sort((a, b) => {
+        const distA = pharmacyDistances[a.pharmacy_id]?.distance_km || Infinity;
+        const distB = pharmacyDistances[b.pharmacy_id]?.distance_km || Infinity;
+        return distA - distB;
+      });
+    } else if (sortBy === 'price') {
+      // Sort by price (lowest first)
+      sorted.sort((a, b) => (a.price || 0) - (b.price || 0));
+    }
+    // 'open' keeps original order (default)
+    
+    return sorted;
+  };
+
+  // Update pharmacy list based on selected medicines
+  const updatePharmacyList = async () => {
+    if (selectedMedicines.length === 0) {
+      setPharmacyList([]);
+      return;
+    }
     
     try {
       setPharmacyListLoading(true);
-      setShowPharmacyModal(true);
       
-      // Use the exact name, dosage, and form from the selected medicine
-      const queryParams = {
-        name: selectedMedicine.name,
-        dosage: selectedMedicine.dosage,
-        form: selectedMedicine.form.toLowerCase()
-      };
+      console.log(`🏥 Fetching pharmacies for ${selectedMedicines.length} medicine(s)...`);
       
-      console.log('🏥 Fetching pharmacies for medicine:', queryParams);
-      
-      const response = await apiService.getPharmaciesByMedicine(
-        queryParams.name,
-        queryParams.dosage,
-        queryParams.form
+      // Fetch pharmacies for each medicine
+      const pharmacyPromises = selectedMedicines.map(medicine => 
+        apiService.getPharmaciesByMedicine(
+          medicine.name,
+          medicine.dosage,
+          medicine.form.toLowerCase()
+        )
       );
       
-      console.log('📦 Pharmacies API Response:', {
-        success: response.success,
-        dataType: typeof response.data,
-        rawData: response.data
+      const responses = await Promise.all(pharmacyPromises);
+      
+      // Extract pharmacy arrays from responses
+      const pharmacyArrays = responses.map((response, index) => {
+        if (response.success && response.data) {
+          const pharmacyData = (response.data as any).data || response.data;
+          const pharmacyArray = Array.isArray(pharmacyData) ? pharmacyData : [];
+          console.log(`✅ Medicine ${index + 1} (${selectedMedicines[index].name}): ${pharmacyArray.length} pharmacies`);
+          return pharmacyArray;
+        }
+        console.warn(`⚠️ No pharmacies found for medicine ${index + 1}`);
+        return [];
       });
       
-      if (response.success && response.data) {
-        // Unwrap nested data structure
-        const pharmacyData = (response.data as any).data || response.data;
-        const pharmacyArray = Array.isArray(pharmacyData) ? pharmacyData : [];
-        setPharmacyList(pharmacyArray);
-        console.log(`✅ Found ${pharmacyArray.length} pharmacies for ${queryParams.name}`);
+      // Find pharmacies that have ALL selected medicines (intersection)
+      let commonPharmacies: any[] = [];
+      
+      if (pharmacyArrays.length === 1) {
+        // Only one medicine selected
+        commonPharmacies = pharmacyArrays[0];
+        console.log(`✅ Single medicine: ${commonPharmacies.length} pharmacies found`);
+      } else if (pharmacyArrays.length > 1) {
+        // Multiple medicines - find intersection
+        // Use pharmacy_id (not id) for comparison
+        commonPharmacies = pharmacyArrays[0].filter(pharmacy1 => 
+          pharmacyArrays.every(pharmacyArray => 
+            pharmacyArray.some(pharmacy2 => 
+              pharmacy2.pharmacy_id === pharmacy1.pharmacy_id
+            )
+          )
+        );
         
-        // Calculate distances for all pharmacies
-        if (pharmacyArray.length > 0) {
-          calculatePharmacyDistances(pharmacyArray);
+        console.log('🔍 Intersection Details:');
+        console.log(`  - Medicine 1 pharmacies: ${pharmacyArrays[0].map(p => p.pharmacy_name).join(', ')}`);
+        console.log(`  - Medicine 2 pharmacies: ${pharmacyArrays[1]?.map(p => p.pharmacy_name).join(', ')}`);
+        if (pharmacyArrays[2]) {
+          console.log(`  - Medicine 3 pharmacies: ${pharmacyArrays[2].map(p => p.pharmacy_name).join(', ')}`);
         }
-      } else {
-        console.error('❌ Failed to fetch pharmacies:', response.error);
-        setPharmacyList([]);
+        console.log(`  - Common pharmacies (ALL medicines): ${commonPharmacies.map(p => p.pharmacy_name).join(', ')}`);
       }
+      
+      console.log(`✅ Found ${commonPharmacies.length} pharmacies with ALL ${selectedMedicines.length} medicines`);
+      setPharmacyList(commonPharmacies);
+      
+      // Calculate distances for all pharmacies
+      if (commonPharmacies.length > 0) {
+        calculatePharmacyDistances(commonPharmacies);
+      }
+      
     } catch (error) {
       console.error('💥 Error fetching pharmacies:', error);
       setPharmacyList([]);
     } finally {
       setPharmacyListLoading(false);
     }
+  };
+
+  const handleAddMedication = async () => {
+    if (selectedMedicines.length === 0) return;
+    
+    // Open modal and fetch pharmacy list
+    setShowPharmacyModal(true);
+    await updatePharmacyList();
   };
 
   // Custom map style (minimal, hiding labels and POIs)
@@ -708,29 +883,55 @@ export default function SuperSearch() {
             },
           ]}
         >
+          {!showPharmacyModal && (
           <View style={styles.searchFieldContainer}>
             <View style={styles.searchField}>
-              <SearchIcon size={20} color="#999999" />
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Search for medicines, pharmacies..."
-                placeholderTextColor="#999999"
-                value={searchQuery}
-                onChangeText={handleSearchChange}
-                onFocus={() => {
-                  if (searchResults.length > 0) {
-                    setShowSuggestions(true);
+              {/* Medicine Chips - Horizontal ScrollView */}
+              {selectedMedicines.length > 0 && (
+                <ScrollView 
+                  horizontal 
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.chipsScrollView}
+                  contentContainerStyle={styles.chipsContainer}
+                >
+                  {selectedMedicines.map((medicine) => (
+                    <MedicineChip
+                      key={medicine.id}
+                      medicine={medicine}
+                      onRemove={() => removeMedicine(medicine.id)}
+                    />
+                  ))}
+                </ScrollView>
+              )}
+              
+              {/* Search Input Row */}
+              <View style={styles.searchInputRow}>
+                <SearchIcon size={20} color="#999999" />
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder={
+                    selectedMedicines.length > 0 
+                      ? "Add more medicines..." 
+                      : "Search for medicines, pharmacies..."
                   }
-                }}
-              />
-              {searchLoading && (
-                <ActivityIndicator size="small" color="#00bf63" style={styles.searchSpinner} />
-              )}
-              {selectedMedicine && (
-                <TouchableOpacity onPress={clearSelectedMedicine} style={styles.clearButton}>
-                  <Text style={styles.clearButtonText}>✕</Text>
-                </TouchableOpacity>
-              )}
+                  placeholderTextColor="#999999"
+                  value={searchQuery}
+                  onChangeText={handleSearchChange}
+                  onFocus={() => {
+                    if (searchResults.length > 0) {
+                      setShowSuggestions(true);
+                    }
+                  }}
+                />
+                {searchLoading && (
+                  <ActivityIndicator size="small" color="#00bf63" style={styles.searchSpinner} />
+                )}
+                {selectedMedicines.length > 0 && (
+                  <TouchableOpacity onPress={clearAllMedicines} style={styles.clearButton}>
+                    <Text style={styles.clearAllText}>Clear All</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
 
             {/* Search Suggestions Dropdown */}
@@ -780,21 +981,26 @@ export default function SuperSearch() {
             )}
 
             {/* ADD MEDICATION Button */}
-            {selectedMedicine && !showSuggestions && (
+            {selectedMedicines.length > 0 && !showSuggestions && (
               <View style={styles.addMedicationContainer}>
                 <TouchableOpacity
                   style={styles.addMedicationButton}
                   onPress={handleAddMedication}
                 >
-                  <Text style={styles.addMedicationText}>ADD MEDICATION</Text>
+                  <Text style={styles.addMedicationText}>
+                    {selectedMedicines.length === 1 
+                      ? 'ADD 1 MEDICATION' 
+                      : `ADD ${selectedMedicines.length} MEDICATIONS`}
+                  </Text>
                 </TouchableOpacity>
               </View>
             )}
           </View>
+          )}
         </Animated.View>
       </Animated.View>
 
-      {/* Pharmacy List Modal */}
+      {/* Pharmacy List Modal (Bottom) */}
       <Modal
         visible={showPharmacyModal}
         transparent={true}
@@ -808,6 +1014,156 @@ export default function SuperSearch() {
             activeOpacity={1}
             onPress={() => setShowPharmacyModal(false)}
           />
+          
+          {/* Top Filter Modal - Medicine Chips & Sort Options */}
+          <View style={styles.topFilterModal}>
+            <SafeAreaView style={styles.topFilterSafeArea}>
+              <View style={styles.topFilterContent}>
+                {/* Search Field with Chips */}
+                <View style={styles.topSearchFieldContainer}>
+                  <View style={styles.topSearchField}>
+                    {/* Medicine Chips - Horizontal ScrollView */}
+                    {selectedMedicines.length > 0 && (
+                      <ScrollView 
+                        horizontal 
+                        showsHorizontalScrollIndicator={false}
+                        style={styles.topChipsScrollView}
+                        contentContainerStyle={styles.topChipsContainer}
+                      >
+                        {selectedMedicines.map((medicine) => (
+                          <MedicineChip
+                            key={medicine.id}
+                            medicine={medicine}
+                            onRemove={() => removeMedicine(medicine.id)}
+                          />
+                        ))}
+                      </ScrollView>
+                    )}
+                    
+                    {/* Search Input Row */}
+                    <View style={styles.topSearchInputRow}>
+                      <SearchIcon size={18} color="#999999" />
+                      <TextInput
+                        style={styles.topSearchInput}
+                        placeholder={
+                          selectedMedicines.length > 0 
+                            ? "Add more medicines..." 
+                            : "Search for medicines..."
+                        }
+                        placeholderTextColor="#999999"
+                        value={searchQuery}
+                        onChangeText={handleSearchChange}
+                        onFocus={() => {
+                          if (searchResults.length > 0) {
+                            setShowSuggestions(true);
+                          }
+                        }}
+                      />
+                      {searchLoading && (
+                        <ActivityIndicator size="small" color="#00bf63" style={styles.topSearchSpinner} />
+                      )}
+                    </View>
+                  </View>
+
+                  {/* Search Suggestions Dropdown */}
+                  {showSuggestions && searchResults.length > 0 && (
+                    <View style={styles.topSuggestionsContainer}>
+                      <ScrollView 
+                        style={styles.topSuggestionsList}
+                        keyboardShouldPersistTaps="handled"
+                        nestedScrollEnabled={true}
+                      >
+                        {searchResults.map((result, index) => (
+                          <TouchableOpacity
+                            key={`${result.type}-${result.id}`}
+                            style={styles.topSuggestionItem}
+                            onPress={() => {
+                              if (result.type === 'medicine') {
+                                handleMedicineSelect(result);
+                              } else {
+                                handlePharmacySelect(result);
+                              }
+                            }}
+                          >
+                            <View style={styles.topSuggestionContent}>
+                              <Text style={styles.topSuggestionName}>{result.name || result.pharmacy_name}</Text>
+                              {result.type === 'medicine' && (
+                                <Text style={styles.topSuggestionSubtext}>
+                                  {result.category} • {result.pharmacy_count} {result.pharmacy_count === 1 ? 'pharmacy' : 'pharmacies'}
+                                </Text>
+                              )}
+                            </View>
+                            <View style={[
+                              styles.topSuggestionLabel,
+                              result.type === 'medicine' ? styles.topMedicineLabel : styles.topPharmacyLabel
+                            ]}>
+                              <Text style={styles.topSuggestionLabelText}>
+                                {result.type === 'medicine' ? 'Medicine' : 'Pharmacy'}
+                              </Text>
+                            </View>
+                          </TouchableOpacity>
+                        ))}
+                      </ScrollView>
+                    </View>
+                  )}
+                </View>
+
+                {/* Sort Buttons */}
+                <View style={styles.sortButtonsContainer}>
+                  <TouchableOpacity
+                    style={[styles.sortButton, sortBy === 'open' && styles.sortButtonActive]}
+                    onPress={() => setSortBy('open')}
+                  >
+                    <Image 
+                      source={require('../assets/open.png')} 
+                      style={[
+                        styles.sortButtonIcon,
+                        { tintColor: sortBy === 'open' ? '#FFFFFF' : '#C5C5C5' }
+                      ]}
+                      resizeMode="contain"
+                    />
+                    <Text style={[styles.sortButtonText, sortBy === 'open' && styles.sortButtonTextActive]}>
+                      Open
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.sortButton, sortBy === 'near' && styles.sortButtonActive]}
+                    onPress={() => setSortBy('near')}
+                  >
+                    <Image 
+                      source={require('../assets/near.png')} 
+                      style={[
+                        styles.sortButtonIcon,
+                        { tintColor: sortBy === 'near' ? '#FFFFFF' : '#666666' }
+                      ]}
+                      resizeMode="contain"
+                    />
+                    <Text style={[styles.sortButtonText, sortBy === 'near' && styles.sortButtonTextActive]}>
+                      Near
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.sortButton, sortBy === 'price' && styles.sortButtonActive]}
+                    onPress={() => setSortBy('price')}
+                  >
+                    <Image 
+                      source={require('../assets/price.png')} 
+                      style={[
+                        styles.sortButtonIcon,
+                        { tintColor: sortBy === 'price' ? '#FFFFFF' : '#666666' }
+                      ]}
+                      resizeMode="contain"
+                    />
+                    <Text style={[styles.sortButtonText, sortBy === 'price' && styles.sortButtonTextActive]}>
+                      Price
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </SafeAreaView>
+          </View>
           <View style={styles.modalContainer}>
             <View style={styles.modalContent}>
               {/* Modal Header */}
@@ -816,9 +1172,6 @@ export default function SuperSearch() {
                 <Text style={styles.modalTitle}>
                   Available at {pharmacyList.length} {pharmacyList.length === 1 ? 'Pharmacy' : 'Pharmacies'}
                 </Text>
-                {selectedMedicine && (
-                  <Text style={styles.modalSubtitle}>{selectedMedicine.name}</Text>
-                )}
               </View>
 
               {/* Pharmacy List */}
@@ -835,7 +1188,7 @@ export default function SuperSearch() {
                     </Text>
                   </View>
                 ) : (
-                  pharmacyList.map((pharmacy) => {
+                  getSortedPharmacies().map((pharmacy) => {
                     const distanceData = pharmacyDistances[pharmacy.pharmacy_id];
                     
                     return (
@@ -885,7 +1238,7 @@ export default function SuperSearch() {
                           onPress={() => {
                             console.log('Order from pharmacy:', pharmacy.pharmacy_name);
                             
-                            // Navigate to order page with medicine and pharmacy data
+                            // Navigate to order page with ALL selected medicines and pharmacy data
                             const orderData = {
                               pharmacy: {
                                 pharmacy_id: pharmacy.pharmacy_id,
@@ -897,14 +1250,14 @@ export default function SuperSearch() {
                                 longitude: pharmacy.longitude,
                                 storefront_image_url: pharmacy.storefront_image_url,
                               },
-                              selectedMedicine: {
-                                inventory_id: pharmacy.inventory_id,
-                                name: selectedMedicine?.name || '',
-                                dosage: selectedMedicine?.dosage || '',
-                                form: selectedMedicine?.form || '',
-                                price: pharmacy.price,
+                              selectedMedicines: selectedMedicines.map(med => ({
+                                inventory_id: med.inventory_id || pharmacy.inventory_id,
+                                name: med.name,
+                                dosage: med.dosage,
+                                form: med.form,
+                                price: pharmacy.price, // Note: This uses first medicine's price
                                 prescription_required: pharmacy.prescription_required,
-                              },
+                              })),
                               deliveryInfo: distanceData || null,
                             };
                             
@@ -912,7 +1265,7 @@ export default function SuperSearch() {
                               pathname: '/order' as any,
                               params: {
                                 pharmacy: JSON.stringify(orderData.pharmacy),
-                                selectedMedicine: JSON.stringify(orderData.selectedMedicine),
+                                selectedMedicines: JSON.stringify(orderData.selectedMedicines),
                                 deliveryInfo: JSON.stringify(orderData.deliveryInfo),
                               }
                             });
@@ -1086,12 +1439,11 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   searchField: {
-    flexDirection: 'row',
-    alignItems: 'center',
     backgroundColor: '#FFFFFF',
     borderRadius: 25,
-    paddingHorizontal: 20,
-    height: 45,
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    minHeight: 50,
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
@@ -1101,28 +1453,40 @@ const styles = StyleSheet.create({
     shadowRadius: 25,
     elevation: 5,
   },
+  chipsScrollView: {
+    maxHeight: 40,
+    marginBottom: 8,
+  },
+  chipsContainer: {
+    paddingVertical: 4,
+    alignItems: 'center',
+  },
+  searchInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: 36,
+  },
   searchInput: {
     flex: 1,
     fontSize: 16,
     color: '#333333',
     marginLeft: 10,
+    paddingVertical: 0,
   },
   searchSpinner: {
     marginLeft: 8,
   },
   clearButton: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#FF6B6B',
-    justifyContent: 'center',
-    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    backgroundColor: '#FFF3E0',
     marginLeft: 8,
   },
-  clearButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: 'bold',
+  clearAllText: {
+    color: '#FF6B6B',
+    fontSize: 12,
+    fontWeight: '600',
   },
   // Suggestions Dropdown
   suggestionsContainer: {
@@ -1274,6 +1638,157 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     backgroundColor: '#007AFF',
   },
+  // Top Filter Modal Styles
+  topFilterModal: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#FFFFFF',
+    zIndex: 2,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 10,
+  },
+  topFilterSafeArea: {
+    backgroundColor: '#FFFFFF',
+  },
+  topFilterContent: {
+    paddingHorizontal: 20,
+    paddingBottom: 15,
+  },
+  topSearchFieldContainer: {
+    marginTop: 10,
+    marginBottom: 15,
+  },
+  topSearchField: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 25,
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    minHeight: 50,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+  },
+  topChipsScrollView: {
+    maxHeight: 40,
+    marginBottom: 8,
+  },
+  topChipsContainer: {
+    paddingVertical: 4,
+    alignItems: 'center',
+  },
+  topSearchInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: 36,
+  },
+  topSearchInput: {
+    flex: 1,
+    fontSize: 15,
+    color: '#333333',
+    marginLeft: 10,
+    paddingVertical: 0,
+  },
+  topSearchSpinner: {
+    marginLeft: 8,
+  },
+  topSuggestionsContainer: {
+    marginTop: 8,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 15,
+    maxHeight: 200,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 5,
+    borderWidth: 1,
+    borderColor: '#F0F0F0',
+  },
+  topSuggestionsList: {
+    paddingVertical: 8,
+  },
+  topSuggestionItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F5F5F5',
+  },
+  topSuggestionContent: {
+    flex: 1,
+    marginRight: 10,
+  },
+  topSuggestionName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333333',
+    marginBottom: 4,
+  },
+  topSuggestionSubtext: {
+    fontSize: 12,
+    color: '#666666',
+  },
+  topSuggestionLabel: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  topMedicineLabel: {
+    backgroundColor: '#E8F5E9',
+  },
+  topPharmacyLabel: {
+    backgroundColor: '#E3F2FD',
+  },
+  topSuggestionLabelText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#00bf63',
+  },
+  sortButtonsContainer: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  sortButton: {
+    flex: 1,
+    flexDirection: 'row',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 25,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+  },
+  sortButtonIcon: {
+    width: 18,
+    height: 18,
+    marginRight: 6,
+  },
+  sortButtonActive: {
+    backgroundColor: '#00bf63',
+    borderColor: '#00bf63',
+  },
+  sortButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#777777',
+  },
+  sortButtonTextActive: {
+    color: '#FFFFFF',
+  },
   // Modal Styles
   modalOverlay: {
     flex: 1,
@@ -1286,10 +1801,12 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    zIndex: 1,
   },
   modalContainer: {
     justifyContent: 'flex-end',
     maxHeight: '70%',
+    zIndex: 2,
   },
   modalContent: {
     backgroundColor: '#FFFFFF',
@@ -1320,6 +1837,7 @@ const styles = StyleSheet.create({
   modalSubtitle: {
     fontSize: 14,
     color: '#666666',
+    marginBottom: 4,
   },
   pharmacyListScroll: {
     paddingHorizontal: 20,

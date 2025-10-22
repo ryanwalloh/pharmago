@@ -344,6 +344,40 @@ class ApiService {
     );
   }
 
+  async searchPharmacyInventory(pharmacyId: number, query: string, limit: number = 20): Promise<ApiResponse<any[]>> {
+    console.log('🔍 Searching pharmacy inventory:', { pharmacyId, query });
+    return this.makeDirectRequest(`/search-pharmacy-inventory/${pharmacyId}/?q=${encodeURIComponent(query)}&limit=${limit}`);
+  }
+
+  // Address Management Methods
+  async createOrUpdateAddress(addressData: any): Promise<ApiResponse<any>> {
+    console.log('📍 Creating/updating address:', addressData);
+    return this.makeDirectRequest('/create-or-update-address/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(addressData)
+    });
+  }
+
+  async getCustomerAddresses(customerId: number): Promise<ApiResponse<any>> {
+    console.log('📋 Getting customer addresses:', customerId);
+    return this.makeDirectRequest(`/customer-addresses/${customerId}/`);
+  }
+
+  async getDefaultAddress(customerId: number): Promise<ApiResponse<any>> {
+    console.log('🏠 Getting default address:', customerId);
+    return this.makeDirectRequest(`/default-address/${customerId}/`);
+  }
+
+  async updateAddress(addressId: number, addressData: any): Promise<ApiResponse<any>> {
+    console.log('✏️ Updating address:', addressId, addressData);
+    return this.makeDirectRequest(`/update-address/${addressId}/`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(addressData)
+    });
+  }
+
   // Order methods
   async createOrder(orderData: any): Promise<ApiResponse<any>> {
     console.log('📦 Creating order...');
