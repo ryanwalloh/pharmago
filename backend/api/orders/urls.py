@@ -3,6 +3,10 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     OrderViewSet, OrderLineViewSet, PrescriptionVerificationViewSet
 )
+from .senior_discount_views import (
+    pharmacy_review_senior_discount,
+    get_order_senior_discount_details
+)
 
 # Create router and register viewsets
 router = DefaultRouter()
@@ -48,6 +52,10 @@ urlpatterns = [
         path('pending/', PrescriptionVerificationViewSet.as_view({'get': 'pending'}), name='prescription-pending'),
         path('bulk-verify/', PrescriptionVerificationViewSet.as_view({'post': 'bulk_verify'}), name='prescription-bulk-verify'),
     ])),
+    
+    # Senior Citizen Discount endpoints
+    path('pharmacy-review-senior-discount/<int:order_id>/', pharmacy_review_senior_discount, name='pharmacy-review-senior-discount'),
+    path('senior-discount-details/<int:order_id>/', get_order_senior_discount_details, name='senior-discount-details'),
 ]
 
 # Add router URLs to main patterns

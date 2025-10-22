@@ -200,6 +200,52 @@ class Order(models.Model):
         help_text=_('Pharmacist notes about prescription')
     )
     
+    # Senior Citizen Discount Fields
+    senior_discount_requested = models.BooleanField(
+        default=False,
+        help_text=_('Whether customer requested senior citizen discount')
+    )
+    
+    senior_citizen_id_image = models.URLField(
+        max_length=500,
+        blank=True,
+        null=True,
+        help_text=_('Cloudinary URL for senior citizen ID photo')
+    )
+    
+    senior_discount_status = models.CharField(
+        max_length=20,
+        choices=[
+            ('not_requested', _('Not Requested')),
+            ('pending', _('Pending Review')),
+            ('approved', _('Approved')),
+            ('rejected', _('Rejected')),
+        ],
+        default='not_requested',
+        help_text=_('Pharmacy approval status for senior discount')
+    )
+    
+    senior_discount_reviewed_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='senior_discount_reviews',
+        help_text=_('Pharmacy user who reviewed the senior discount')
+    )
+    
+    senior_discount_review_date = models.DateTimeField(
+        blank=True,
+        null=True,
+        help_text=_('When senior discount was reviewed')
+    )
+    
+    senior_discount_notes = models.TextField(
+        blank=True,
+        null=True,
+        help_text=_('Pharmacy notes about senior discount verification')
+    )
+    
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
