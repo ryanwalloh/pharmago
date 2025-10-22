@@ -1,5 +1,6 @@
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_http_methods
 
 
 def test_api(request):
@@ -826,4 +827,74 @@ def calculate_distance_and_fee(request):
             'error': str(e)
         }, status=500)
 
+
+
+@require_http_methods(["GET"])
+def search_pharmacy_inventory(request, pharmacy_id):
+    """
+    Search pharmacy inventory by query string
+    Returns available products matching the search query for a specific pharmacy
+    """
+    from django.http import JsonResponse
+    from django.db.models import Q
+    from api.inventory.models import PharmacyInventory
+    from api.users.models import Pharmacy
+    
+    query = request.GET.get('q', '').strip()
+    limit = int(request.GET.get('limit', 20))
+    
+    if len(query) < 2:
+        return JsonResponse({
+            'success': False,
+            'error': 'Search query must be at least 2 characters'
+        }, status=400)
+    
+    try:
+        # Verify pharmacy exists
+        pharmacy = Pharmacy.objects.get(id=pharmacy_id)
+        
+        # Search pharmacy inventory
+        items = PharmacyInventory.objects.filter(
+            pharmacy=pharmacy,
+            is_available=True  # Only show available items
+        ).filter(
+            Q(name__icontains=query) |
+            Q(dosage__icontains=query) |
+            Q(form__icontains=query) |
+            Q(description__icontains=query)
+        ).select_related('category')[:limit]
+        
+        results = []
+        for item in items:
+            results.append({
+                'inventory_id': item.id,
+                'name': item.name,
+                'dosage': item.dosage,
+                'form': item.form,
+                'description': item.description,
+                'price': float(item.price) if item.price else 0.0,
+                'category': item.category.name if item.category else 'Uncategorized',
+                'prescription_required': bool(item.prescription_required),
+                'stock_quantity': item.stock_quantity,
+                'is_available': item.is_available,
+            })
+        
+        return JsonResponse({
+            'success': True,
+            'data': results,
+            'count': len(results),
+            'pharmacy_id': pharmacy_id,
+            'pharmacy_name': pharmacy.pharmacy_name
+        })
+        
+    except Pharmacy.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'error': f'Pharmacy with ID {pharmacy_id} not found'
+        }, status=404)
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
 

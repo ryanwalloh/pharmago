@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -7,11 +7,17 @@ import {
   TextInput,
   ScrollView,
   Image,
+  ActivityIndicator,
+  Switch,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import Svg, { Path } from 'react-native-svg';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as ImagePicker from 'expo-image-picker';
 import { fontFamily } from '../utils/fonts';
+import { apiService } from '../services/api';
 
 // Back Arrow Icon
 const BackArrowIcon = ({ size = 24, color = '#000000' }) => (
@@ -75,30 +81,74 @@ export default function OrderPage() {
   
   // Parse params - they come as strings from navigation
   const pharmacy = params.pharmacy ? JSON.parse(params.pharmacy as string) : null;
+  
+  // Support both single medicine (backwards compatibility) and multiple medicines
   const selectedMedicine = params.selectedMedicine ? JSON.parse(params.selectedMedicine as string) : null;
+  const selectedMedicines = params.selectedMedicines ? JSON.parse(params.selectedMedicines as string) : null;
+  
   const deliveryInfo = params.deliveryInfo ? JSON.parse(params.deliveryInfo as string) : null;
   
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isFavorite, setIsFavorite] = useState(false);
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  
+  // Senior Citizen Discount States
+  const [applySeniorDiscount, setApplySeniorDiscount] = useState(false);
+  const [seniorIdImage, setSeniorIdImage] = useState<string | null>(null);
+  const [uploadingSeniorId, setUploadingSeniorId] = useState(false);
+  
+  const searchDebounceTimer = useRef<number | null>(null);
 
   useEffect(() => {
-    // If a medicine was pre-selected, add it to cart
-    if (selectedMedicine && pharmacy) {
-      setCartItems([{
-        inventory_id: selectedMedicine.inventory_id,
-        name: selectedMedicine.name,
-        dosage: selectedMedicine.dosage,
-        form: selectedMedicine.form,
-        price: selectedMedicine.price,
-        quantity: 1,
-        prescription_required: selectedMedicine.prescription_required || false,
-      }]);
+    // If medicines were pre-selected, add them to cart
+    if (pharmacy) {
+      const initialCartItems: CartItem[] = [];
+      
+      // Handle multiple medicines (new feature)
+      if (selectedMedicines && Array.isArray(selectedMedicines)) {
+        selectedMedicines.forEach(medicine => {
+          initialCartItems.push({
+            inventory_id: medicine.inventory_id,
+            name: medicine.name,
+            dosage: medicine.dosage,
+            form: medicine.form,
+            price: medicine.price,
+            quantity: 1,
+            prescription_required: medicine.prescription_required || false,
+          });
+        });
+      } 
+      // Handle single medicine (backwards compatibility)
+      else if (selectedMedicine) {
+        initialCartItems.push({
+          inventory_id: selectedMedicine.inventory_id,
+          name: selectedMedicine.name,
+          dosage: selectedMedicine.dosage,
+          form: selectedMedicine.form,
+          price: selectedMedicine.price,
+          quantity: 1,
+          prescription_required: selectedMedicine.prescription_required || false,
+        });
+      }
+      
+      if (initialCartItems.length > 0) {
+        setCartItems(initialCartItems);
+      }
     }
+
+    // Cleanup function to clear AsyncStorage when component unmounts
+    return () => {
+      AsyncStorage.removeItem('temp_cart_items').catch((error: any) => {
+        console.error('Failed to clear cart items on unmount:', error);
+      });
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const updateQuantity = (index: number, change: number) => {
+  const updateQuantity = async (index: number, change: number) => {
     setCartItems(prev => {
       const newCart = [...prev];
       const newQuantity = newCart[index].quantity + change;
@@ -110,34 +160,329 @@ export default function OrderPage() {
         newCart[index] = { ...newCart[index], quantity: newQuantity };
       }
       
+      // Save to AsyncStorage
+      AsyncStorage.setItem('temp_cart_items', JSON.stringify(newCart)).catch((error: any) => {
+        console.error('Failed to save cart items:', error);
+      });
+      
       return newCart;
     });
+  };
+
+  const handleSearchChange = (text: string) => {
+    setSearchQuery(text);
+    
+    // Clear previous timer
+    if (searchDebounceTimer.current) {
+      clearTimeout(searchDebounceTimer.current);
+    }
+    
+    // If search is cleared, clear results
+    if (text.trim().length < 2) {
+      setSearchResults([]);
+      setShowSuggestions(false);
+      return;
+    }
+    
+    // Set debounce timer (500ms after user stops typing)
+    searchDebounceTimer.current = setTimeout(() => {
+      performSearch(text);
+    }, 500);
+  };
+
+  const performSearch = async (query: string) => {
+    if (!pharmacy || !pharmacy.pharmacy_id) {
+      console.log('⚠️ No pharmacy selected');
+      return;
+    }
+
+    try {
+      setSearchLoading(true);
+      console.log('🔍 Searching pharmacy inventory:', query);
+      
+      const response = await apiService.searchPharmacyInventory(pharmacy.pharmacy_id, query);
+      
+      if (response.success && response.data) {
+        // Unwrap nested data structure (response.data.data or response.data)
+        const responseData = (response.data as any).data || response.data;
+        const results = Array.isArray(responseData) ? responseData : [];
+        
+        setSearchResults(results);
+        setShowSuggestions(results.length > 0);
+        console.log(`✅ Found ${results.length} products`);
+      }
+    } catch (error) {
+      console.error('💥 Search error:', error);
+      setSearchResults([]);
+    } finally {
+      setSearchLoading(false);
+    }
+  };
+
+  const addToCart = async (item: any) => {
+    // Check if item already in cart
+    const existingIndex = cartItems.findIndex(cartItem => cartItem.inventory_id === item.inventory_id);
+    
+    if (existingIndex >= 0) {
+      // Increase quantity if already in cart
+      await updateQuantity(existingIndex, 1);
+    } else {
+      // Add new item to cart
+      const newItem: CartItem = {
+        inventory_id: item.inventory_id,
+        name: item.name,
+        dosage: item.dosage,
+        form: item.form,
+        price: item.price,
+        quantity: 1,
+        prescription_required: item.prescription_required || false,
+      };
+      
+      const updatedItems = [...cartItems, newItem];
+      setCartItems(updatedItems);
+      
+      // Save to AsyncStorage
+      try {
+        await AsyncStorage.setItem('temp_cart_items', JSON.stringify(updatedItems));
+      } catch (error: any) {
+        console.error('Failed to save cart items:', error);
+      }
+    }
+    
+    // Clear search
+    setSearchQuery('');
+    setSearchResults([]);
+    setShowSuggestions(false);
+    console.log('✅ Added to cart:', item.name);
+  };
+
+  // Senior Citizen ID Upload Functions
+  const handleUploadSeniorId = async () => {
+    // Show options: Camera or Gallery
+    Alert.alert(
+      'Upload Senior Citizen ID',
+      'Choose how you want to upload your ID',
+      [
+        {
+          text: 'Take Photo',
+          onPress: () => handleCameraUpload(),
+        },
+        {
+          text: 'Choose from Gallery',
+          onPress: () => handleGalleryUpload(),
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+      ]
+    );
+  };
+
+  const handleCameraUpload = async () => {
+    try {
+      setUploadingSeniorId(true);
+      
+      // Request camera permissions
+      const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permissionResult.granted) {
+        Alert.alert('Permission Required', 'Camera permission is required to take a photo!');
+        setUploadingSeniorId(false);
+        return;
+      }
+
+      // Launch camera
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        aspect: [16, 9],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        const imageUri = result.assets[0].uri;
+        
+        // Upload to Cloudinary
+        const cloudinaryUrl = await uploadToCloudinary(imageUri, 'senior-citizen-ids');
+        
+        if (cloudinaryUrl) {
+          setSeniorIdImage(cloudinaryUrl);
+          console.log('✅ Senior ID uploaded (camera):', cloudinaryUrl);
+        } else {
+          Alert.alert('Upload Failed', 'Failed to upload image. Please try again.');
+        }
+      }
+    } catch (error: any) {
+      console.error('Failed to upload Senior ID (camera):', error);
+      Alert.alert('Error', 'Failed to upload image. Please try again.');
+    } finally {
+      setUploadingSeniorId(false);
+    }
+  };
+
+  const handleGalleryUpload = async () => {
+    try {
+      setUploadingSeniorId(true);
+      
+      // Request gallery permissions
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permissionResult.granted) {
+        Alert.alert('Permission Required', 'Permission to access camera roll is required!');
+        setUploadingSeniorId(false);
+        return;
+      }
+
+      // Pick image from gallery
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [16, 9],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        const imageUri = result.assets[0].uri;
+        
+        // Upload to Cloudinary
+        const cloudinaryUrl = await uploadToCloudinary(imageUri, 'senior-citizen-ids');
+        
+        if (cloudinaryUrl) {
+          setSeniorIdImage(cloudinaryUrl);
+          console.log('✅ Senior ID uploaded (gallery):', cloudinaryUrl);
+        } else {
+          Alert.alert('Upload Failed', 'Failed to upload image. Please try again.');
+        }
+      }
+    } catch (error: any) {
+      console.error('Failed to upload Senior ID (gallery):', error);
+      Alert.alert('Error', 'Failed to upload image. Please try again.');
+    } finally {
+      setUploadingSeniorId(false);
+    }
+  };
+
+  const uploadToCloudinary = async (imageUri: string, folder: string): Promise<string | null> => {
+    // TEMPORARY: Mock upload for testing (comment out for production)
+    // return imageUri; // Use local URI for testing
+    
+    try {
+      console.log('📤 Starting Cloudinary upload...');
+      console.log('  Image URI:', imageUri);
+      console.log('  Folder:', folder);
+
+      const formData = new FormData();
+      formData.append('file', {
+        uri: imageUri,
+        type: 'image/jpeg',
+        name: 'senior_id.jpg',
+      } as any);
+      formData.append('upload_preset', 'pharmago-file-uploads'); // Your Cloudinary preset
+      formData.append('folder', folder);
+
+      console.log('  Cloud name: dwqrkobq1');
+      console.log('  Upload preset: pharmago-file-uploads');
+
+      const response = await fetch(
+        `https://api.cloudinary.com/v1_1/dwqrkobq1/image/upload`,
+        {
+          method: 'POST',
+          body: formData,
+        }
+      );
+
+      const data = await response.json();
+      
+      console.log('📥 Cloudinary response status:', response.status);
+      console.log('📥 Cloudinary response data:', JSON.stringify(data, null, 2));
+
+      // Check if upload was successful
+      if (!response.ok) {
+        console.error('❌ Cloudinary upload failed:', data.error?.message || 'Unknown error');
+        Alert.alert(
+          'Upload Error',
+          data.error?.message || 'Failed to upload image to cloud storage. Please try again.'
+        );
+        return null;
+      }
+
+      if (data.secure_url) {
+        console.log('✅ Upload successful! URL:', data.secure_url);
+        return data.secure_url;
+      } else {
+        console.error('❌ No secure_url in response');
+        return null;
+      }
+    } catch (error: any) {
+      console.error('❌ Cloudinary upload error:', error);
+      console.error('  Error message:', error.message);
+      console.error('  Error stack:', error.stack);
+      return null;
+    }
   };
 
   const calculateSubtotal = () => {
     return cartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
   };
 
+  const calculateSeniorDiscount = () => {
+    if (applySeniorDiscount && seniorIdImage) {
+      const subtotal = calculateSubtotal();
+      return subtotal * 0.20; // 20% discount
+    }
+    return 0;
+  };
+
   const calculateTotal = () => {
     const subtotal = calculateSubtotal();
     const deliveryFee = deliveryInfo?.delivery_fee || 0;
-    return subtotal + deliveryFee;
+    const seniorDiscount = calculateSeniorDiscount();
+    return subtotal + deliveryFee - seniorDiscount;
   };
 
-  const handlePlaceOrder = () => {
+  const handlePlaceOrder = async () => {
     if (cartItems.length === 0) {
-      alert('Please add at least one item to your order');
+      Alert.alert('Empty Cart', 'Please add at least one item to your order');
       return;
     }
     
-    // TODO: Navigate to address selection or create order
-    console.log('Placing order:', {
-      pharmacy,
-      cartItems,
-      subtotal: calculateSubtotal(),
-      deliveryFee: deliveryInfo?.delivery_fee || 0,
-      total: calculateTotal()
-    });
+    // Validate senior discount requirements
+    if (applySeniorDiscount && !seniorIdImage) {
+      Alert.alert(
+        'Senior Discount',
+        'Please upload your Senior Citizen ID to apply the discount',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+    
+    try {
+      const orderData = {
+        pharmacy_id: pharmacy.pharmacy_id,
+        pharmacy: JSON.stringify(pharmacy),
+        cartItems: JSON.stringify(cartItems),
+        subtotal: calculateSubtotal(),
+        deliveryFee: deliveryInfo?.delivery_fee || 0,
+        deliveryInfo: deliveryInfo ? JSON.stringify(deliveryInfo) : null,
+        total: calculateTotal(),
+        
+        // Senior discount data
+        apply_senior_discount: applySeniorDiscount,
+        senior_id_image_url: seniorIdImage,
+        senior_discount_status: applySeniorDiscount && seniorIdImage ? 'pending' : 'not_requested',
+        potential_discount: calculateSeniorDiscount(),
+      };
+      
+      console.log('📦 Storing order data and navigating to checkout...');
+      
+      // Store order data in AsyncStorage
+      await AsyncStorage.setItem('pending_order', JSON.stringify(orderData));
+      
+      // Navigate to checkout page
+      router.push('/checkout' as any);
+      
+    } catch (error: any) {
+      console.error('Failed to proceed to checkout:', error);
+      Alert.alert('Error', 'Failed to proceed to checkout. Please try again.');
+    }
   };
 
   if (!pharmacy) {
@@ -164,8 +509,10 @@ export default function OrderPage() {
                 style={styles.headerBackButton}
                 onPress={() => router.back()}
               >
-                <BackArrowIcon size={24} color="#000000" />
+                <BackArrowIcon size={24} color="#00bf63" />
               </TouchableOpacity>
+              
+              <Text style={styles.headerTitle}>Cart</Text>
             </View>
 
             {/* Pharmacy Details */}
@@ -192,7 +539,7 @@ export default function OrderPage() {
                 </Text>
                 {deliveryInfo && (
                   <Text style={styles.pharmacyDeliveryInfo}>
-                    {deliveryInfo.distance_km?.toFixed(2)} km • Delivery: ₱{deliveryInfo.delivery_fee?.toFixed(2)}
+                    {deliveryInfo.distance_km?.toFixed(2)} km away • Delivery: ₱{deliveryInfo.delivery_fee?.toFixed(2)}
                   </Text>
                 )}
               </View>
@@ -217,12 +564,52 @@ export default function OrderPage() {
               <SearchIcon size={20} color="#999999" />
               <TextInput
                 style={styles.searchInput}
-                placeholder="Search pharmacy products..."
+                placeholder="Search to add more products"
                 placeholderTextColor="#999999"
                 value={searchQuery}
-                onChangeText={setSearchQuery}
+                onChangeText={handleSearchChange}
+                onFocus={() => {
+                  if (searchResults.length > 0) {
+                    setShowSuggestions(true);
+                  }
+                }}
               />
+              {searchLoading && (
+                <ActivityIndicator size="small" color="#00bf63" style={styles.searchSpinner} />
+              )}
             </View>
+
+            {/* Search Suggestions Dropdown */}
+            {showSuggestions && searchResults.length > 0 && (
+              <View style={styles.suggestionsContainer}>
+                <ScrollView 
+                  style={styles.suggestionsList}
+                  keyboardShouldPersistTaps="handled"
+                  nestedScrollEnabled={true}
+                >
+                  {searchResults.map((result, index) => (
+                    <TouchableOpacity
+                      key={`${result.inventory_id}-${index}`}
+                      style={styles.suggestionItem}
+                      onPress={() => addToCart(result)}
+                    >
+                      <View style={styles.suggestionContent}>
+                        <Text style={styles.suggestionName}>{result.name}</Text>
+                        <Text style={styles.suggestionSubtext}>
+                          {result.dosage} • {result.form}
+                        </Text>
+                      </View>
+                      <View style={styles.suggestionPriceContainer}>
+                        <Text style={styles.suggestionPrice}>₱{result.price.toFixed(2)}</Text>
+                        <View style={styles.addButton}>
+                          <Text style={styles.addButtonText}>+</Text>
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
           </View>
 
           {/* Selected Products Container */}
@@ -274,6 +661,60 @@ export default function OrderPage() {
             )}
           </View>
 
+          {/* Senior Citizen Discount Section */}
+          <View style={styles.seniorDiscountSection}>
+            <View style={styles.seniorDiscountHeader}>
+              <View>
+                <Text style={styles.seniorDiscountTitle}>Senior Citizen Discount</Text>
+                <Text style={styles.seniorDiscountSubtitle}>Get 20% off on medicines</Text>
+              </View>
+              <Switch
+                value={applySeniorDiscount}
+                onValueChange={setApplySeniorDiscount}
+                trackColor={{ false: '#E0E0E0', true: '#00bf63' }}
+                thumbColor={applySeniorDiscount ? '#FFFFFF' : '#F4F4F4'}
+              />
+            </View>
+            
+            {applySeniorDiscount && (
+              <View style={styles.seniorIdUploadSection}>
+                {!seniorIdImage ? (
+                  <TouchableOpacity 
+                    style={styles.uploadSeniorIdButton}
+                    onPress={handleUploadSeniorId}
+                    disabled={uploadingSeniorId}
+                  >
+                    {uploadingSeniorId ? (
+                      <ActivityIndicator color="#00bf63" />
+                    ) : (
+                      <>
+                        <Text style={styles.uploadIcon}>📄</Text>
+                        <Text style={styles.uploadButtonText}>Upload Senior Citizen ID</Text>
+                        <Text style={styles.uploadSubtext}>Required for discount verification</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                ) : (
+                  <View style={styles.seniorIdPreview}>
+                    <Image source={{ uri: seniorIdImage }} style={styles.seniorIdThumbnail} />
+                    <View style={styles.seniorIdInfo}>
+                      <Text style={styles.seniorIdUploadedText}>✓ Senior ID Uploaded</Text>
+                      <TouchableOpacity onPress={() => setSeniorIdImage(null)}>
+                        <Text style={styles.changeIdText}>Change Photo</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
+                
+                <View style={styles.seniorDiscountNote}>
+                  <Text style={styles.noteText}>
+                    ⓘ Discount subject to pharmacy verification
+                  </Text>
+                </View>
+              </View>
+            )}
+          </View>
+
           {/* Order Summary */}
           {cartItems.length > 0 && (
             <View style={styles.summaryContainer}>
@@ -281,6 +722,16 @@ export default function OrderPage() {
                 <Text style={styles.summaryLabel}>Subtotal:</Text>
                 <Text style={styles.summaryValue}>₱{calculateSubtotal().toFixed(2)}</Text>
               </View>
+              
+              {applySeniorDiscount && seniorIdImage && (
+                <View style={styles.summaryRow}>
+                  <Text style={[styles.summaryLabel, styles.discountLabel]}>Senior Discount (20%)*:</Text>
+                  <Text style={[styles.summaryValue, styles.discountValue]}>
+                    -₱{calculateSeniorDiscount().toFixed(2)}
+                  </Text>
+                </View>
+              )}
+              
               {deliveryInfo && (
                 <View style={styles.summaryRow}>
                   <Text style={styles.summaryLabel}>Delivery Fee:</Text>
@@ -289,8 +740,17 @@ export default function OrderPage() {
               )}
               <View style={[styles.summaryRow, styles.summaryTotal]}>
                 <Text style={styles.summaryTotalLabel}>Total:</Text>
-                <Text style={styles.summaryTotalValue}>₱{calculateTotal().toFixed(2)}</Text>
+                <Text style={styles.summaryTotalValue}>
+                  ₱{calculateTotal().toFixed(2)}
+                  {applySeniorDiscount && seniorIdImage && '*'}
+                </Text>
               </View>
+              
+              {applySeniorDiscount && seniorIdImage && (
+                <Text style={styles.pendingNote}>
+                  * Pending pharmacy approval
+                </Text>
+              )}
             </View>
           )}
         </ScrollView>
@@ -306,7 +766,7 @@ export default function OrderPage() {
             disabled={cartItems.length === 0}
           >
             <Text style={styles.placeOrderButtonText}>
-              {cartItems.length === 0 ? 'Add Items to Order' : 'Place Order'}
+              {cartItems.length === 0 ? 'Add Items to Order' : 'Review payment and address'}
             </Text>
           </TouchableOpacity>
         </View>
@@ -344,9 +804,16 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#F8F8F8',
+    backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#000000',
+    marginLeft: 15,
+    fontFamily: fontFamily.heavy,
   },
   // Pharmacy Details Content
   pharmacyDetailsContent: {
@@ -419,6 +886,74 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#333333',
     marginLeft: 10,
+  },
+  searchSpinner: {
+    marginLeft: 8,
+  },
+  suggestionsContainer: {
+    marginTop: 8,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 15,
+    maxHeight: 300,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 5,
+    borderWidth: 1,
+    borderColor: '#F0F0F0',
+  },
+  suggestionsList: {
+    paddingVertical: 8,
+  },
+  suggestionItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F5F5F5',
+  },
+  suggestionContent: {
+    flex: 1,
+    marginRight: 10,
+  },
+  suggestionName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#333333',
+    marginBottom: 4,
+  },
+  suggestionSubtext: {
+    fontSize: 13,
+    color: '#666666',
+  },
+  suggestionPriceContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  suggestionPrice: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#00bf63',
+    marginRight: 12,
+  },
+  addButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#00bf63',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  addButtonText: {
+    fontSize: 20,
+    color: '#FFFFFF',
+    fontWeight: 'bold',
   },
   // Products Container
   productsContainer: {
@@ -525,6 +1060,20 @@ const styles = StyleSheet.create({
     color: '#333333',
     fontWeight: '500',
   },
+  discountLabel: {
+    color: '#00bf63',
+  },
+  discountValue: {
+    color: '#00bf63',
+    fontWeight: '600',
+  },
+  pendingNote: {
+    fontSize: 11,
+    color: '#996600',
+    textAlign: 'center',
+    marginTop: 8,
+    fontStyle: 'italic',
+  },
   summaryTotal: {
     borderTopWidth: 1,
     borderTopColor: '#E0E0E0',
@@ -590,6 +1139,100 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: fontFamily.heavy,
     color: '#FFFFFF',
+  },
+  // Senior Citizen Discount Styles
+  seniorDiscountSection: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 15,
+    padding: 20,
+    marginHorizontal: 20,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+  },
+  seniorDiscountHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 15,
+    
+  },
+  seniorDiscountTitle: {
+    fontSize: 16,
+    fontFamily: fontFamily.heavy,
+    color: '#333333',
+  },
+  seniorDiscountSubtitle: {
+    fontSize: 12,
+    color: '#00bf63',
+    marginTop: 4,
+  },
+  seniorIdUploadSection: {
+    marginTop: 10,
+  },
+  uploadSeniorIdButton: {
+    backgroundColor: '#F0F9F4',
+    borderRadius: 12,
+    paddingVertical: 20,
+    paddingHorizontal: 15,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#00bf63',
+    borderStyle: 'dashed',
+  },
+  uploadIcon: {
+    fontSize: 32,
+    marginBottom: 8,
+  },
+  uploadButtonText: {
+    fontSize: 14,
+    fontFamily: fontFamily.heavy,
+    color: '#00bf63',
+    marginBottom: 4,
+  },
+  uploadSubtext: {
+    fontSize: 12,
+    color: '#666666',
+  },
+  seniorIdPreview: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0F9F4',
+    borderRadius: 12,
+    padding: 15,
+    borderWidth: 1,
+    borderColor: '#00bf63',
+  },
+  seniorIdThumbnail: {
+    width: 80,
+    height: 50,
+    borderRadius: 8,
+    backgroundColor: '#E0E0E0',
+  },
+  seniorIdInfo: {
+    flex: 1,
+    marginLeft: 15,
+  },
+  seniorIdUploadedText: {
+    fontSize: 14,
+    fontFamily: fontFamily.heavy,
+    color: '#00bf63',
+    marginBottom: 4,
+  },
+  changeIdText: {
+    fontSize: 12,
+    color: '#666666',
+  },
+  seniorDiscountNote: {
+    marginTop: 12,
+    padding: 10,
+    backgroundColor: '#FFF9E6',
+    borderRadius: 8,
+  },
+  noteText: {
+    fontSize: 12,
+    color: '#996600',
+    textAlign: 'center',
   },
 });
 
