@@ -1,6 +1,7 @@
 from django.urls import path
 from . import views_read as views
 from . import views_ops as ops
+from . import address_views
 
 app_name = 'direct'
 
@@ -35,9 +36,12 @@ urlpatterns = [
     path('search-medicines/', views.direct_search_medicines),
     path('search-pharmacies/', views.direct_search_pharmacies),
     path('pharmacies-by-medicine/', views.direct_pharmacies_by_medicine),
-    path('calculate-distance-fee/', views.calculate_distance_and_fee),
-    # Inventory management
-    path('bulk-set-max-stock/', views.bulk_set_inventory_max_stock),
+    path('calculate-distance-and-fee/', views.calculate_distance_and_fee),
+    path('search-pharmacy-inventory/<int:pharmacy_id>/', views.search_pharmacy_inventory),
+    path('bulk-set-inventory-max-stock/', views.bulk_set_inventory_max_stock),
+    # Address endpoints
+    path('create-or-update-address/', address_views.create_or_update_address),
+    path('customer-addresses/<int:customer_id>/', address_views.get_customer_addresses),
+    path('default-address/<int:customer_id>/', address_views.get_default_address),
+    path('update-address/<int:address_id>/', address_views.update_address),
 ]
-
-
