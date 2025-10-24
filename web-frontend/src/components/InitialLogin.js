@@ -138,10 +138,22 @@ const InitialLogin = () => {
           };
           const base = (process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
           const loginResp = await axios.post(`${base}/api/pharmacy-login/`, loginPayload);
-          const accessToken = loginResp?.data?.tokens?.access;
+          const loginData = loginResp?.data || {};
+          
+          // Store token
+          const accessToken = loginData.tokens?.access;
           if (accessToken) {
-            // Reuse existing interceptor key expected by api.js
             localStorage.setItem('pharmago_admin_token', accessToken);
+          }
+          
+          // Update pharmacy_info with full data from login response (includes profile_picture)
+          if (loginData.pharmacy) {
+            localStorage.setItem('pharmacy_info', JSON.stringify(loginData.pharmacy));
+          }
+          
+          // Update user info if provided
+          if (loginData.user) {
+            localStorage.setItem('pharmacy_user', JSON.stringify(loginData.user));
           }
         } catch (e) {
           console.warn('Post-setup login failed (continuing without token):', e?.response?.data || e?.message);
