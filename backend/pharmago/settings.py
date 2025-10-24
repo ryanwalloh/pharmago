@@ -399,7 +399,7 @@ EMAIL_PORT = 587
 EMAIL_USE_TLS = True
 EMAIL_HOST_USER = 'sotidelivery@gmail.com'
 EMAIL_HOST_PASSWORD = 'lbhl lwyt kjlc cxby'
-DEFAULT_FROM_EMAIL = 'PharmaGo Admin <sotidelivery@gmail.com>'
+DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'PharmGo <noreply@pharmago.com>')
 FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:3000')
 
 # In development, avoid SMTP latency by default

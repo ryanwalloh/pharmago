@@ -118,8 +118,17 @@ if not DEBUG_MODE:
     CORS_ALLOW_ALL_ORIGINS = False
 
 # Email configuration for production
+# Use Brevo API instead of SMTP (Railway-friendly)
+# Brevo: 300 emails/day FREE, no domain verification needed
 if not DEBUG_MODE and not os.getenv('EMAIL_CONSOLE', '0') == '1':
-    EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+    if os.getenv('BREVO_API_KEY'):
+        EMAIL_BACKEND = 'api.utils.brevo_backend.BrevoEmailBackend'
+        # DEFAULT_FROM_EMAIL already set in settings.py
+    else:
+        # Fallback to console for testing
+        EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+        import logging
+        logging.warning("BREVO_API_KEY not set. Emails will print to console.")
 
 # Cloudinary is configured in settings.py
 
