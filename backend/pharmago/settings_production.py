@@ -49,7 +49,9 @@ if os.getenv('REDIS_URL'):
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 # Security settings for production
-if not DEBUG:
+# Check DEBUG from environment variable instead of relying on settings.py
+DEBUG_MODE = os.getenv('DEBUG', 'False').lower() == 'true'
+if not DEBUG_MODE:
     # HTTPS/SSL settings
     SECURE_SSL_REDIRECT = True
     SESSION_COOKIE_SECURE = True
@@ -124,11 +126,11 @@ if os.getenv('ADDITIONAL_CORS_ORIGINS'):
     CORS_ALLOWED_ORIGINS.extend(additional_origins)
 
 # In production, don't allow all origins
-if not DEBUG:
+if not DEBUG_MODE:
     CORS_ALLOW_ALL_ORIGINS = False
 
 # Email configuration for production
-if not DEBUG and not os.getenv('EMAIL_CONSOLE'):
+if not DEBUG_MODE and not os.getenv('EMAIL_CONSOLE'):
     EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 
 # Cloudinary settings for production file uploads
