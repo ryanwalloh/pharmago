@@ -8,5 +8,5 @@ cmds = ["npm ci --legacy-peer-deps"]
 cmds = ["npm run build"]
 
 [start]
-cmd = "npx serve -s build -l $PORT"
+cmd = "npx serve -s build -l tcp://0.0.0.0:$PORT"
 
