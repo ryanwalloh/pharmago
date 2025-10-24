@@ -36,7 +36,8 @@ const AdminLogin = () => {
 
     try {
       // API call to Django backend
-      const response = await fetch('http://127.0.0.1:8000/api/v1/pharmago-admin/login/', {
+      const base = (process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
+      const response = await fetch(`${base}/api/v1/pharmago-admin/login/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
