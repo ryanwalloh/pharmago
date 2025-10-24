@@ -121,7 +121,8 @@ const AdminDashboard = () => {
       setLoading(true);
       setError(null);
       console.log('Fetching rider statistics (no auth required)...');
-      const response = await axios.get('http://127.0.0.1:8000/api/rider-stats/');
+      const base = (process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
+      const response = await axios.get(`${base}/api/rider-stats/`);
       console.log('Rider stats API response:', response.data);
       setRiderStats(response.data);
       if (response.data.pendingRidersData) {
@@ -218,7 +219,8 @@ const AdminDashboard = () => {
       setLoadingPendingRiders(true);
       setError(null);
       console.log('Fetching pending riders...');
-      const response = await axios.get('http://127.0.0.1:8000/api/rider-stats/');
+      const base = (process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
+      const response = await axios.get(`${base}/api/rider-stats/`);
       console.log('Pending riders API response:', response.data);
       if (response.data.pendingRidersData) {
         setPendingRiders(response.data.pendingRidersData);
@@ -239,7 +241,8 @@ const AdminDashboard = () => {
       setLoadingPendingRiders(true);
       setError(null);
       console.log('Fetching active riders...');
-      const response = await axios.get('http://127.0.0.1:8000/api/rider-stats/');
+      const base = (process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
+      const response = await axios.get(`${base}/api/rider-stats/`);
       console.log('Active riders from stats API:', response.data?.activeRidersData);
       setActiveRiders(Array.isArray(response.data?.activeRidersData) ? response.data.activeRidersData : []);
     } catch (err) {
@@ -256,7 +259,8 @@ const AdminDashboard = () => {
       setLoadingPendingRiders(true);
       setError(null);
       console.log('Fetching suspended riders...');
-      const response = await axios.get('http://127.0.0.1:8000/api/rider-stats/');
+      const base = (process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
+      const response = await axios.get(`${base}/api/rider-stats/`);
       console.log('Suspended riders from stats API:', response.data?.suspendedRidersData);
       setSuspendedRiders(Array.isArray(response.data?.suspendedRidersData) ? response.data.suspendedRidersData : []);
     } catch (err) {
@@ -273,7 +277,8 @@ const AdminDashboard = () => {
       setLoadingPendingRiders(true);
       setError(null);
       console.log('Fetching all riders...');
-      const response = await axios.get('http://127.0.0.1:8000/api/rider-stats/');
+      const base = (process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
+      const response = await axios.get(`${base}/api/rider-stats/`);
       console.log('All riders from stats API:', response.data?.allRidersData);
       setAllRiders(Array.isArray(response.data?.allRidersData) ? response.data.allRidersData : []);
     } catch (err) {
