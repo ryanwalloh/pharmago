@@ -121,21 +121,21 @@ class BrevoEmailBackend(BaseEmailBackend):
         
         # Add reply-to if present
         if email_message.reply_to:
-            email_data["replyTo"] = {"email": email_message.reply_to[0]}
+            email_data["reply_to"] = {"email": email_message.reply_to[0]}
         
-        # Handle HTML vs plain text
+        # Handle HTML vs plain text (Brevo uses snake_case)
         if isinstance(email_message, EmailMultiAlternatives) and email_message.alternatives:
             # Has HTML content
             for content, mimetype in email_message.alternatives:
                 if mimetype == 'text/html':
-                    email_data["htmlContent"] = content
+                    email_data["html_content"] = content
                     break
             # Include plain text as fallback
             if email_message.body:
-                email_data["textContent"] = email_message.body
+                email_data["text_content"] = email_message.body
         else:
             # Plain text only
-            email_data["textContent"] = email_message.body
+            email_data["text_content"] = email_message.body
         
         try:
             # Create SendSmtpEmail object
