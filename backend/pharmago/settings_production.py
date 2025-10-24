@@ -44,7 +44,8 @@ if os.getenv('REDIS_URL'):
     }
 
 # WhiteNoise for static files
-MIDDLEWARE.insert(1, 'whitenoise.middleware.WhiteNoiseMiddleware')
+# Note: WhiteNoise middleware should be added to MIDDLEWARE in settings.py
+# For now, we'll use WhiteNoise storage backend only
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 # Security settings for production
