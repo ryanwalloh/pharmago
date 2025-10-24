@@ -373,7 +373,7 @@ if DEBUG and DISABLE_FILE_LOG:
     if 'api' in LOGGING.get('loggers', {}):
         LOGGING['loggers']['api']['handlers'] = ['console']
 
-# AWS S3 Settings
+# AWS S3 Settings (Optional - only if using S3 instead of Cloudinary)
 AWS_ACCESS_KEY_ID = os.getenv('AWS_ACCESS_KEY_ID')
 AWS_SECRET_ACCESS_KEY = os.getenv('AWS_SECRET_ACCESS_KEY')
 AWS_STORAGE_BUCKET_NAME = os.getenv('AWS_STORAGE_BUCKET_NAME')
