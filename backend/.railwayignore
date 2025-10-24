@@ -1,0 +1,65 @@
+# Railway Ignore File
+# Files and directories to exclude from Railway deployment
+
+# Virtual environments
+venv/
+env/
+ENV/
+*.pyc
+__pycache__/
+
+# Development files
+*.sqlite3
+db.sqlite3
+*.log
+logs/
+
+# Test files
+test_*.py
+*_test.py
+tests/
+.pytest_cache/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment files (use Railway variables instead)
+.env
+.env.local
+.env.*.local
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Media files (use S3 instead)
+media/
+# But keep the directory structure
+!media/.gitkeep
+
+# Static files (will be collected during build)
+staticfiles/
+
+# Windows files
+Thumbs.db
+desktop.ini
+
+# Mac files
+.DS_Store
+
+# Batch files
+*.bat
+
+# Large data files
+*.csv
+drug_products.csv
+data/
+
+# Backup files
+*.bak
+*.backup
+
