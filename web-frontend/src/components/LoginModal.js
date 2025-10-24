@@ -26,7 +26,8 @@ const LoginModal = ({ isOpen, onClose }) => {
     
     try {
       // Create a direct pharmacy login endpoint following the database access pattern
-      const response = await axios.post('http://127.0.0.1:8000/api/pharmacy-login/', {
+      const base = (process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
+      const response = await axios.post(`${base}/api/pharmacy-login/`, {
         username: formData.username,
         password: formData.password
       });
