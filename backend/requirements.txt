@@ -12,9 +12,9 @@ djangorestframework-simplejwt==5.3.0
 django-filter==23.5
 
 # Additional packages for enhanced features
-boto3==1.34.0                    # AWS S3 integration for file storage
-django-storages==1.14.2          # Django storage backends (S3, etc.)
-Pillow==10.1.0                   # Image processing for profile pictures
+django-cloudinary-storage==0.3.0  # Cloudinary integration for file storage
+cloudinary==1.36.0                # Cloudinary Python SDK
+Pillow==10.1.0                    # Image processing for profile pictures
 django-phonenumber-field==7.3.0  # Phone number validation and formatting
 phonenumbers==8.13.25            # Phone number parsing and validation
 googlemaps==4.10.0               # Google Maps Distance Matrix API for order batching
@@ -31,3 +31,5 @@ watchdog==4.0.2                        # Reliable file watching on Windows
 channels==4.0.0                        # Django Channels for WebSocket
 channels-redis==4.1.0                  # Redis channel layer backend
 daphne==4.0.0                          # ASGI server for Channels
+dj-database-url==2.1.0                 # Database URL parser for Railway
+whitenoise==6.6.0                      # Static file serving for production
