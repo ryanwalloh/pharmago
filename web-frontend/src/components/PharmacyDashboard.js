@@ -146,7 +146,8 @@ const PharmacyDashboard = () => {
     try {
       setOrdersLoading(true);
       console.log(`Fetching orders for pharmacy ID: ${pharmacyId}`);
-      const response = await fetch(`http://127.0.0.1:8000/api/pharmacy-orders/${pharmacyId}/`);
+      const base = (process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
+      const response = await fetch(`${base}/api/pharmacy-orders/${pharmacyId}/`);
       
       if (response.ok) {
         const data = await response.json();
@@ -193,7 +194,8 @@ const PharmacyDashboard = () => {
     const poll = async () => {
       if (!pid) return;
       try {
-        const resp = await fetch(`http://127.0.0.1:8000/api/cache-version/?key=${encodeURIComponent(`orders:version:pharmacy:${pid}`)}`);
+        const base = (process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
+        const resp = await fetch(`${base}/api/cache-version/?key=${encodeURIComponent(`orders:version:pharmacy:${pid}`)}`);
         if (!resp.ok) {
           if (intervalId) {
             clearInterval(intervalId);
@@ -359,7 +361,8 @@ const PharmacyDashboard = () => {
       };
       console.log('📤 Attach payload', payload);
 
-      const response = await fetch('http://127.0.0.1:8000/api/attach-prescription-items/', {
+      const base = (process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
+      const response = await fetch(`${base}/api/attach-prescription-items/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -403,7 +406,8 @@ const PharmacyDashboard = () => {
       if (chatFetchInFlightRef.current) return;
       chatFetchInFlightRef.current = true;
       if (!silent) setChatMessagesLoading(true);
-      const resp = await fetch(`http://127.0.0.1:8000/api/order-chat-messages/?room_id=${roomId}&limit=100`);
+      const base = (process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
+      const resp = await fetch(`${base}/api/order-chat-messages/?room_id=${roomId}&limit=100`);
       const data = await resp.json();
       if (!resp.ok || !data.success) {
         console.error('Fetch messages failed', data);
@@ -421,7 +425,8 @@ const PharmacyDashboard = () => {
       try {
         const storedPharmacyInfo = localStorage.getItem('pharmacy_info');
         const pharmacy = storedPharmacyInfo ? JSON.parse(storedPharmacyInfo) : null;
-        fetch('http://127.0.0.1:8000/api/order-chat-mark-read/', {
+        const base = (process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
+        fetch(`${base}/api/order-chat-mark-read/`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ room_id: roomId, pharmacy_id: pharmacy?.id }),
@@ -446,7 +451,8 @@ const PharmacyDashboard = () => {
       try {
         const storedPharmacyInfo = localStorage.getItem('pharmacy_info');
         const pharmacy = storedPharmacyInfo ? JSON.parse(storedPharmacyInfo) : null;
-        await fetch('http://127.0.0.1:8000/api/order-chat-typing/', {
+        const base = (process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
+        await fetch(`${base}/api/order-chat-typing/`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ room_id: roomId, pharmacy_id: pharmacy?.id, is_typing: !!isTyping }),
@@ -461,7 +467,8 @@ const PharmacyDashboard = () => {
 
   const pollTypingStatus = async (roomId) => {
     try {
-      const resp = await fetch(`http://127.0.0.1:8000/api/order-chat-typing-status/?room_id=${roomId}`);
+      const base = (process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
+      const resp = await fetch(`${base}/api/order-chat-typing-status/?room_id=${roomId}`);
       const data = await resp.json();
       if (resp.ok && data.success && data.typing) {
         setChatTyping(data.typing);
@@ -496,7 +503,8 @@ const PharmacyDashboard = () => {
     
     try {
       // Fetch medicines from the direct API endpoint (bypasses authentication)
-      const response = await fetch('http://127.0.0.1:8000/api/medicine-catalog/?limit=200');
+      const base = (process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
+      const response = await fetch(`${base}/api/medicine-catalog/?limit=200`);
       if (response.ok) {
         const data = await response.json();
         console.log('API Response:', data);
@@ -542,7 +550,8 @@ const PharmacyDashboard = () => {
       // Try backend search first if we have a substantial query
       if (query.length >= 3) {
         try {
-          const response = await fetch(`http://127.0.0.1:8000/api/medicine-catalog/?search=${encodeURIComponent(query)}&limit=100`);
+          const base = (process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
+          const response = await fetch(`${base}/api/medicine-catalog/?search=${encodeURIComponent(query)}&limit=100`);
           if (response.ok) {
             const data = await response.json();
             if (data.success && Array.isArray(data.medicines)) {
@@ -616,7 +625,8 @@ const PharmacyDashboard = () => {
   // Fetch medicine categories
   const fetchMedicineCategories = async () => {
     try {
-      const response = await fetch('http://127.0.0.1:8000/api/medicine-categories/');
+      const base = (process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
+      const response = await fetch(`${base}/api/medicine-categories/`);
       const data = await response.json();
       if (data.success) {
         setMedicineCategories(data.categories);
@@ -650,7 +660,8 @@ const PharmacyDashboard = () => {
     setInventoryError(null);
 
     try {
-      const response = await fetch(`http://127.0.0.1:8000/api/pharmacy-inventory/${pharmacyInfo.id}/`);
+      const base = (process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
+      const response = await fetch(`${base}/api/pharmacy-inventory/${pharmacyInfo.id}/`);
       const data = await response.json();
       
       if (data.success) {
@@ -702,7 +713,8 @@ const PharmacyDashboard = () => {
     }
     
     try {
-      const response = await fetch(`http://127.0.0.1:8000/api/toggle-availability/${pharmacyInfo.id}/${itemId}/`, {
+      const base = (process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
+      const response = await fetch(`${base}/api/toggle-availability/${pharmacyInfo.id}/${itemId}/`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -824,7 +836,8 @@ const PharmacyDashboard = () => {
     setEditError(null);
 
     try {
-      const response = await fetch(`http://127.0.0.1:8000/api/update-inventory-item/${pharmacyInfo.id}/${itemId}/`, {
+      const base = (process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
+      const response = await fetch(`${base}/api/update-inventory-item/${pharmacyInfo.id}/${itemId}/`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -904,7 +917,8 @@ const PharmacyDashboard = () => {
     setEditError(null);
 
     try {
-      const response = await fetch(`http://127.0.0.1:8000/api/update-inventory-item/${pharmacyInfo.id}/${editingItem.id}/`, {
+      const base = (process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
+      const response = await fetch(`${base}/api/update-inventory-item/${pharmacyInfo.id}/${editingItem.id}/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1069,7 +1083,8 @@ const PharmacyDashboard = () => {
       };
 
       // Call the API
-      const response = await fetch('http://127.0.0.1:8000/api/add-custom-products-to-inventory/', {
+      const base = (process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
+      const response = await fetch(`${base}/api/add-custom-products-to-inventory/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1167,7 +1182,8 @@ const PharmacyDashboard = () => {
       };
 
       // Call the API
-      const response = await fetch('http://127.0.0.1:8000/api/add-medicines-to-inventory/', {
+      const base = (process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
+      const response = await fetch(`${base}/api/add-medicines-to-inventory/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -2406,7 +2422,8 @@ const PharmacyDashboard = () => {
                                         }
                                       });
                                       // Send
-                                      const resp = await fetch('http://127.0.0.1:8000/api/order-chat-send/', {
+                                      const base = (process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
+                                      const resp = await fetch(`${base}/api/order-chat-send/`, {
                                         method: 'POST',
                                         headers: { 'Content-Type': 'application/json' },
                                         body: JSON.stringify(payload)
@@ -2587,7 +2604,8 @@ const PharmacyDashboard = () => {
                                   const pharmacy = storedPharmacyInfo ? JSON.parse(storedPharmacyInfo) : null;
                                   const payload = { order_id: selectedOrder.id };
                                   if (pharmacy?.id) payload.pharmacy_id = pharmacy.id;
-                                  const resp = await fetch('http://127.0.0.1:8000/api/order-chat-room/', {
+                                  const base = (process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
+                                  const resp = await fetch(`${base}/api/order-chat-room/`, {
                                     method: 'POST',
                                     headers: { 'Content-Type': 'application/json' },
                                     body: JSON.stringify(payload)
@@ -2609,7 +2627,8 @@ const PharmacyDashboard = () => {
                                   // Try to include quoted total in message
                                   let quotedTotal = null;
                                   try {
-                                    const statusResp = await fetch(`http://127.0.0.1:8000/api/order-status/${selectedOrder.id}/`);
+                                    const base = (process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
+                                    const statusResp = await fetch(`${base}/api/order-status/${selectedOrder.id}/`);
                                     const statusJson = await statusResp.json();
                                     if (statusResp.ok && statusJson.success) {
                                       const payload = statusJson.data || statusJson;
@@ -2627,7 +2646,8 @@ const PharmacyDashboard = () => {
                                   }, 4000);
                                   // Persist/refresh totals first so the breakdown is accurate
                                   try {
-                                    await fetch('http://127.0.0.1:8000/api/prepare-price-quote/', {
+                                    const base = (process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
+                                    await fetch(`${base}/api/prepare-price-quote/`, {
                                       method: 'POST',
                                       headers: { 'Content-Type': 'application/json' },
                                       body: JSON.stringify({ order_id: selectedOrder.id })
@@ -2639,12 +2659,13 @@ const PharmacyDashboard = () => {
                                     let subtotal = null, delivery = null, serviceFee = null, total = quotedTotal, itemLines = [];
                                     try {
                                       // Force totals refresh, then read status
-                                      await fetch('http://127.0.0.1:8000/api/prepare-price-quote/', {
+                                      const base = (process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
+                                      await fetch(`${base}/api/prepare-price-quote/`, {
                                         method: 'POST',
                                         headers: { 'Content-Type': 'application/json' },
                                         body: JSON.stringify({ order_id: selectedOrder.id })
                                       });
-                                      const statusResp2 = await fetch(`http://127.0.0.1:8000/api/order-status/${selectedOrder.id}/`);
+                                      const statusResp2 = await fetch(`${base}/api/order-status/${selectedOrder.id}/`);
                                       const statusJson2 = await statusResp2.json();
                                       const p = statusJson2?.data || statusJson2;
                                       subtotal = typeof p?.subtotal === 'number' ? p.subtotal : null;
@@ -2692,7 +2713,8 @@ const PharmacyDashboard = () => {
                                       }
                                     });
 
-                                    const sendResp = await fetch('http://127.0.0.1:8000/api/order-chat-send/', {
+                                    const base = (process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
+                                    const sendResp = await fetch(`${base}/api/order-chat-send/`, {
                                       method: 'POST',
                                       headers: { 'Content-Type': 'application/json' },
                                       body: JSON.stringify({ room_id: roomId, pharmacy_id: pharmacy?.id, content: msgContent })
