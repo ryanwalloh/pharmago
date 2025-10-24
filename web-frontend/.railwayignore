@@ -1,0 +1,50 @@
+# Railway Ignore File for Frontend
+# Files and directories to exclude from Railway deployment
+
+# Dependencies (will be installed during build)
+node_modules/
+
+# Build output (will be generated during build)
+build/
+.cache/
+
+# Environment files (use Railway variables instead)
+.env
+.env.local
+.env.*.local
+
+# Test files
+**/*.test.js
+**/*.test.jsx
+**/*.test.ts
+**/*.test.tsx
+**/*.spec.js
+src/setupTests.js
+coverage/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Windows files
+Thumbs.db
+desktop.ini
+
+# Mac files
+.DS_Store
+
+# Source maps in production
+*.map
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+

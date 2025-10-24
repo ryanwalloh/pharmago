@@ -1,0 +1,18 @@
+{
+  "NOTE": "Add 'serve' to dependencies for Railway deployment",
+  "dependencies_to_add": {
+    "serve": "^14.2.1"
+  },
+  "scripts_to_verify": {
+    "start": "react-scripts start",
+    "build": "react-scripts build",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject"
+  },
+  "instructions": [
+    "Run: npm install serve --save",
+    "This allows Railway to serve the built React app using 'npx serve -s build -l $PORT'",
+    "The command is already configured in web-frontend/railway.json"
+  ]
+}
+

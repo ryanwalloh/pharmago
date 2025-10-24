@@ -454,3 +454,10 @@ SPECTACULAR_SETTINGS = {
         {'name': 'global-api', 'description': 'Global API infrastructure endpoints'},
     ],
 }
+
+# Import production settings if in production mode
+if not DEBUG and os.path.exists(os.path.join(BASE_DIR, 'pharmago', 'settings_production.py')):
+    try:
+        from .settings_production import *
+    except ImportError:
+        pass
