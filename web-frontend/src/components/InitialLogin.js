@@ -39,7 +39,8 @@ const InitialLogin = () => {
       console.log('Validating token:', token);
       
       // Call the backend to validate token and get pharmacy info
-      const response = await axios.get(`http://127.0.0.1:8000/api/validate-login-token/${token}/`);
+      const base = (process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
+      const response = await axios.get(`${base}/api/validate-login-token/${token}/`);
       console.log('Token validation response:', response.data);
       
       if (response.data.success) {
@@ -111,7 +112,8 @@ const InitialLogin = () => {
       });
 
       // Call the backend API to complete user setup
-      const response = await axios.post(`http://127.0.0.1:8000/api/complete-user-setup/${token}/`, {
+      const base = (process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
+      const response = await axios.post(`${base}/api/complete-user-setup/${token}/`, {
         username: formData.username,
         password: formData.password
       });
@@ -134,7 +136,8 @@ const InitialLogin = () => {
             username: formData.username || undefined,
             password: formData.password,
           };
-          const loginResp = await axios.post(`http://127.0.0.1:8000/api/pharmacy-login/`, loginPayload);
+          const base = (process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
+          const loginResp = await axios.post(`${base}/api/pharmacy-login/`, loginPayload);
           const accessToken = loginResp?.data?.tokens?.access;
           if (accessToken) {
             // Reuse existing interceptor key expected by api.js
