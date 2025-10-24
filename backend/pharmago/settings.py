@@ -69,6 +69,8 @@ INSTALLED_APPS = [
     'corsheaders',
     'drf_spectacular',
     'channels',  # WebSocket support for dispatch system
+    'cloudinary_storage',  # Cloudinary for file storage
+    'cloudinary',
     
     # Local apps
     'api.apps.ApiConfig',
@@ -379,6 +381,16 @@ AWS_S3_REGION_NAME = os.getenv('AWS_S3_REGION_NAME', 'ap-southeast-2')
 
 # Google Maps API Configuration
 GOOGLE_MAPS_API_KEY = os.getenv('GOOGLE_MAPS_API_KEY')
+
+# Cloudinary Configuration
+if os.getenv('CLOUDINARY_CLOUD_NAME'):
+    CLOUDINARY_STORAGE = {
+        'CLOUD_NAME': os.getenv('CLOUDINARY_CLOUD_NAME'),
+        'API_KEY': os.getenv('CLOUDINARY_API_KEY'),
+        'API_SECRET': os.getenv('CLOUDINARY_API_SECRET')
+    }
+    # Use Cloudinary for media file storage in production
+    DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
 
 # Email settings (Gmail SMTP with new app password)
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
