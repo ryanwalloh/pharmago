@@ -998,8 +998,18 @@ def admin_login(request):
         print(f"DEBUG: Received username: {username}")
         print(f"DEBUG: Received password: {password}")
         
-        # Try to authenticate with database user first
+        # Try to authenticate with database user first (username or email)
         user = authenticate(request, username=username, password=password)
+        
+        # If authentication failed and input looks like email, try with email
+        if not user and '@' in username:
+            try:
+                user_by_email = User.objects.get(email=username)
+                if user_by_email.username:
+                    user = authenticate(request, username=user_by_email.username, password=password)
+                    print(f"DEBUG: Tried authentication with username from email: {user_by_email.username}")
+            except User.DoesNotExist:
+                pass
         
         if user and user.is_staff and user.role == User.UserRole.ADMIN:
             # Generate a simple token (in production, use proper JWT)
