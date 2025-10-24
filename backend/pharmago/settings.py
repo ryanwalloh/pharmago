@@ -293,6 +293,20 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:8081",  # Expo web development server
 ]
 
+# Add production frontend URLs if specified
+if os.getenv('FRONTEND_URL'):
+    frontend_url = os.getenv('FRONTEND_URL')
+    if frontend_url not in CORS_ALLOWED_ORIGINS:
+        CORS_ALLOWED_ORIGINS.append(frontend_url)
+
+# Add additional CORS origins from environment (comma-separated)
+additional_origins = os.getenv('CORS_ALLOWED_ORIGINS', '')
+if additional_origins:
+    for origin in additional_origins.split(','):
+        origin = origin.strip()
+        if origin and origin not in CORS_ALLOWED_ORIGINS:
+            CORS_ALLOWED_ORIGINS.append(origin)
+
 CORS_ALLOW_CREDENTIALS = True
 
 # Additional CORS settings for mobile app development
