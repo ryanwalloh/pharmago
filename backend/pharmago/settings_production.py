@@ -7,6 +7,9 @@ Import this at the end of settings.py for production environments.
 import os
 import dj_database_url
 
+# Get DEBUG status from environment
+DEBUG_MODE = os.getenv('DEBUG', 'False').lower() == 'true'
+
 # Database - Use Railway DATABASE_URL if available
 if os.getenv('DATABASE_URL'):
     DATABASES = {
@@ -43,14 +46,10 @@ if os.getenv('REDIS_URL'):
         },
     }
 
-# WhiteNoise for static files
-# Note: WhiteNoise middleware should be added to MIDDLEWARE in settings.py
-# For now, we'll use WhiteNoise storage backend only
+# WhiteNoise for static files (middleware already added in settings.py)
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 # Security settings for production
-# Check DEBUG from environment variable instead of relying on settings.py
-DEBUG_MODE = os.getenv('DEBUG', 'False').lower() == 'true'
 if not DEBUG_MODE:
     # HTTPS/SSL settings
     SECURE_SSL_REDIRECT = True
@@ -114,38 +113,15 @@ LOGGING = {
     },
 }
 
-# CORS settings for production
-# Add frontend Railway domain to allowed origins
-FRONTEND_DOMAIN = os.getenv('FRONTEND_URL', '').replace('https://', '').replace('http://', '')
-if FRONTEND_DOMAIN and os.getenv('FRONTEND_URL') not in CORS_ALLOWED_ORIGINS:
-    CORS_ALLOWED_ORIGINS.append(os.getenv('FRONTEND_URL'))
-
-# Additional CORS origins from environment
-if os.getenv('ADDITIONAL_CORS_ORIGINS'):
-    additional_origins = os.getenv('ADDITIONAL_CORS_ORIGINS').split(',')
-    CORS_ALLOWED_ORIGINS.extend(additional_origins)
-
 # In production, don't allow all origins
 if not DEBUG_MODE:
     CORS_ALLOW_ALL_ORIGINS = False
 
 # Email configuration for production
-if not DEBUG_MODE and not os.getenv('EMAIL_CONSOLE'):
+if not DEBUG_MODE and not os.getenv('EMAIL_CONSOLE', '0') == '1':
     EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 
-# Cloudinary settings for production file uploads
-if os.getenv('CLOUDINARY_CLOUD_NAME'):
-    # Use Cloudinary for media files
-    INSTALLED_APPS.append('cloudinary_storage')
-    INSTALLED_APPS.append('cloudinary')
-    
-    CLOUDINARY_STORAGE = {
-        'CLOUD_NAME': os.getenv('CLOUDINARY_CLOUD_NAME'),
-        'API_KEY': os.getenv('CLOUDINARY_API_KEY'),
-        'API_SECRET': os.getenv('CLOUDINARY_API_SECRET')
-    }
-    
-    DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
+# Cloudinary is configured in settings.py
 
 # Sentry error tracking
 if os.getenv('SENTRY_DSN'):
@@ -159,4 +135,3 @@ if os.getenv('SENTRY_DSN'):
         send_default_pii=False,
         environment=os.getenv('RAILWAY_ENVIRONMENT', 'production'),
     )
-
