@@ -1,7 +1,8 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import (
-    OrderViewSet, OrderLineViewSet, PrescriptionVerificationViewSet
+    OrderViewSet, OrderLineViewSet, PrescriptionVerificationViewSet,
+    cancel_order
 )
 from .senior_discount_views import (
     pharmacy_review_senior_discount,
@@ -56,6 +57,9 @@ urlpatterns = [
     # Senior Citizen Discount endpoints
     path('pharmacy-review-senior-discount/<int:order_id>/', pharmacy_review_senior_discount, name='pharmacy-review-senior-discount'),
     path('senior-discount-details/<int:order_id>/', get_order_senior_discount_details, name='senior-discount-details'),
+    
+    # Order Cancellation endpoint
+    path('cancel/<int:order_id>/', cancel_order, name='cancel-order'),
 ]
 
 # Add router URLs to main patterns

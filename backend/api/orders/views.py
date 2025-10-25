@@ -5,8 +5,11 @@ from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Q, Count, Avg, Sum, F
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from django.views.decorators.csrf import csrf_exempt
+from django.http import JsonResponse
 from datetime import datetime, timedelta
 import json
+import logging
 
 from .models import Order, OrderLine
 from .serializers import (
@@ -690,3 +693,80 @@ class PrescriptionVerificationViewSet(viewsets.ViewSet):
                 })
         
         return Response({'results': results})
+
+
+@csrf_exempt
+def cancel_order(request, order_id):
+    """
+    Cancel an order (customer cancellation)
+    
+    POST /api/orders/cancel/<order_id>/
+    {
+        "customer_id": 10,
+        "reason": "Senior discount rejected, customer cancelled"
+    }
+    """
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
+    
+    try:
+        logger = logging.getLogger(__name__)
+        
+        data = json.loads(request.body or '{}')
+        customer_id = data.get('customer_id')
+        reason = data.get('reason', 'Customer requested cancellation')
+        
+        # Get order
+        try:
+            order = Order.objects.select_related('customer').get(id=order_id)
+        except Order.DoesNotExist:
+            return JsonResponse({
+                'success': False,
+                'error': f'Order with ID {order_id} not found'
+            }, status=404)
+        
+        # Verify customer owns this order (if customer_id provided)
+        if customer_id and order.customer_id != customer_id:
+            return JsonResponse({
+                'success': False,
+                'error': 'You can only cancel your own orders'
+            }, status=403)
+        
+        # Verify order can be cancelled (not already delivered/cancelled)
+        if order.order_status in ['delivered', 'cancelled']:
+            return JsonResponse({
+                'success': False,
+                'error': f'Order is {order.order_status} and cannot be cancelled'
+            }, status=400)
+        
+        # Cancel the order
+        order.update_status(
+            Order.OrderStatus.CANCELLED,
+            notes=reason
+        )
+        
+        logger.info(f"🚫 Order cancelled: {order.order_number} (ID: {order_id}) - Reason: {reason}")
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Order cancelled successfully',
+            'order_id': order.id,
+            'order_number': order.order_number,
+            'order_status': order.order_status,
+            'cancellation_reason': reason
+        })
+        
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'success': False,
+            'error': 'Invalid JSON in request body'
+        }, status=400)
+    except Exception as e:
+        logger.error(f"❌ Error cancelling order: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({
+            'success': False,
+            'error': 'Failed to cancel order',
+            'message': str(e)
+        }, status=500)
