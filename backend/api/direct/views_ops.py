@@ -384,8 +384,17 @@ def direct_pharmacy_orders(request, pharmacy_id):
             .distinct()
         )
         def serialize(order):
-            is_rx = bool(getattr(order, 'prescription_image_url', '') or getattr(order, 'prescription_status', ''))
+            # Better detection: Check if prescription image URL is actually set (not None/empty)
+            # Prescription orders have an image URL, cart orders don't
             raw_img = getattr(order, 'prescription_image_url', '') or ''
+            has_prescription_image = bool(raw_img and str(raw_img).strip())
+            
+            # Cart orders have items from the start, prescription orders start with 0 items
+            has_items = order.order_lines.count() > 0
+            
+            # It's a prescription order if it has a prescription image OR has no items yet
+            is_rx = has_prescription_image or not has_items
+            
             img_url = raw_img
             try:
                 if raw_img and not str(raw_img).startswith('http'):
