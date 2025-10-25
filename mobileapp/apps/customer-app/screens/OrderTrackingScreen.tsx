@@ -987,9 +987,8 @@ const OrderTrackingScreen: React.FC = () => {
                     marginLeft: 8, 
                     paddingHorizontal: 12, 
                     paddingVertical: 12, 
-                    backgroundColor: '#00bf63', 
-                    borderRadius: 50, 
-                    opacity: chatSending || !chatInput.trim() ? 0.6 : 1,
+                    
+                  
                     alignItems: 'center',
                     justifyContent: 'center',
                     width: 48,
@@ -1032,7 +1031,7 @@ const OrderTrackingScreen: React.FC = () => {
                   ) : (
                     <Image 
                       source={require('../assets/send.png')} 
-                      style={{ width: 24, height: 24, tintColor: 'white' }}
+                      style={{ width: 32, height: 32, }}
                       resizeMode="contain"
                     />
                   )}
@@ -1170,9 +1169,7 @@ const OrderTrackingScreen: React.FC = () => {
                       
                       setActionButtonsHidden(true); // Hide the action buttons
                       setShowProceedConfirmModal(false);
-                      setTimeout(() => {
-                        Alert.alert('Message Sent', 'The pharmacy has been notified that you will proceed with the order.');
-                      }, 300);
+                      console.log('✅ Proceed message sent to pharmacy successfully');
                     } else {
                       setShowProceedConfirmModal(false);
                       setTimeout(() => {
