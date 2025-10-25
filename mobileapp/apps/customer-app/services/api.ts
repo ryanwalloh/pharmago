@@ -365,6 +365,15 @@ class ApiService {
     return this.makeDirectRequest(`/customer-addresses/${customerId}/`);
   }
 
+  async createCartOrder(orderData: any): Promise<ApiResponse<any>> {
+    console.log('🛒 Creating cart order:', orderData);
+    return this.makeDirectRequest('/create-cart-order/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(orderData)
+    });
+  }
+
   async getDefaultAddress(customerId: number): Promise<ApiResponse<any>> {
     console.log('🏠 Getting default address:', customerId);
     return this.makeDirectRequest(`/default-address/${customerId}/`);
