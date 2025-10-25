@@ -42,7 +42,7 @@ export default function CreateAccountPage({ onBack, onRegistrationSuccess }: Cre
   useEffect(() => {
     console.log('📱 CreateAccountPage mounted');
     console.log('🔧 API Configuration:', {
-      baseURL: 'http://localhost:8000/api/v1',
+      baseURL: (apiService as any).baseURL || 'Not configured',
       timestamp: new Date().toISOString()
     });
     console.log('📋 Available API methods:', {
