@@ -569,6 +569,15 @@ class ApiService {
     return this.makeDirectRequest(`/order-status/${orderId}/`);
   }
 
+  async cancelOrder(orderId: number, data: { customer_id: number; reason: string }): Promise<ApiResponse<any>> {
+    console.log('🚫 Cancelling order:', orderId, data);
+    return this.makeRequest(`/orders/cancel/${orderId}/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+  }
+
   async approvePricing(orderId: number, approve: boolean = true, notes?: string): Promise<ApiResponse<any>> {
     try {
       const body: any = { order_id: orderId, approve };

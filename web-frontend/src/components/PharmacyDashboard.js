@@ -10,6 +10,12 @@ const PharmacyDashboard = () => {
   const [showAddProductModal, setShowAddProductModal] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [showQuickAdd, setShowQuickAdd] = useState(false);
+  
+  // Rejection modal state
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [selectedRejectReason, setSelectedRejectReason] = useState('');
+  const [customRejectReason, setCustomRejectReason] = useState('');
+  const [rejectingDiscount, setRejectingDiscount] = useState(false);
   const [medicines, setMedicines] = useState([]);
   const [filteredMedicines, setFilteredMedicines] = useState([]);
   const [catalogSearchQuery, setCatalogSearchQuery] = useState('');
@@ -409,18 +415,45 @@ const PharmacyDashboard = () => {
     }
   };
 
-  const handleRejectSeniorDiscount = async (orderId) => {
+  const handleRejectSeniorDiscount = (orderId) => {
+    // Show rejection modal
+    setShowRejectModal(true);
+    setSelectedRejectReason('');
+    setCustomRejectReason('');
+  };
+
+  const handleSubmitRejection = async () => {
     if (!userInfo?.id) {
       alert('User information not found. Please log in again.');
       return;
     }
 
-    const reason = prompt('Reason for rejecting senior discount (optional):');
-    if (reason === null) return; // User cancelled
+    if (!selectedRejectReason) {
+      alert('Please select a reason for rejection');
+      return;
+    }
+
+    if (selectedRejectReason === 'other' && !customRejectReason.trim()) {
+      alert('Please specify the reason');
+      return;
+    }
 
     try {
+      setRejectingDiscount(true);
+      
+      const REJECTION_MESSAGES = {
+        'unclear_image': "We're sorry, but we couldn't verify your senior citizen ID because the image is unclear.",
+        'expired_id': "We're sorry, but the senior citizen ID appears to be expired.",
+        'mismatch_info': "We're sorry, but the ID information doesn't match your order details.",
+        'age_verification': "We're sorry, but we couldn't verify senior citizen eligibility.",
+        'other': `We're sorry, but we couldn't verify your senior citizen ID. ${customRejectReason}.`
+      };
+
+      const selectedMessage = REJECTION_MESSAGES[selectedRejectReason] || REJECTION_MESSAGES['other'];
+      const notes = selectedRejectReason === 'other' ? customRejectReason : selectedRejectReason;
+
       const base = (process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
-      const response = await fetch(`${base}/api/orders/pharmacy-review-senior-discount/${orderId}/`, {
+      const response = await fetch(`${base}/api/orders/pharmacy-review-senior-discount/${selectedOrder.id}/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -428,14 +461,14 @@ const PharmacyDashboard = () => {
         body: JSON.stringify({
           pharmacy_user_id: userInfo.id,
           action: 'reject',
-          notes: reason || 'Senior ID not verified'
+          notes: notes
         })
       });
 
       const data = await response.json();
       
       if (data.success) {
-        console.log('❌ Senior discount rejected:', data);
+        console.log('Senior discount rejected:', data);
         
         // Update selected order
         setSelectedOrder(prev => ({
@@ -445,12 +478,40 @@ const PharmacyDashboard = () => {
           totalAmount: data.new_total
         }));
         
+        // Send friendly rejection message to customer via chat
+        if (chatRoom) {
+          try {
+            const storedPharmacyInfo = localStorage.getItem('pharmacy_info');
+            const pharmacy = storedPharmacyInfo ? JSON.parse(storedPharmacyInfo) : null;
+            
+            const rejectionMessage = `${selectedMessage}\n\nYour order total is now ₱${data.new_total.toFixed(2)} (regular price).\n\nWould you like to proceed with your order at the regular price?`;
+            
+            await fetch(`${base}/api/order-chat-send/`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ 
+                room_id: chatRoom.id, 
+                pharmacy_id: pharmacy?.id, 
+                content: rejectionMessage 
+              })
+            });
+            
+            // Refresh chat messages
+            await fetchChatMessages(chatRoom.id, { silent: true });
+          } catch (chatError) {
+            console.error('Error sending rejection message:', chatError);
+          }
+        }
+        
         // Refresh orders
         if (pharmacyInfo?.id) {
           fetchOrders(pharmacyInfo.id);
         }
         
-        alert(`Senior discount rejected. Total: ₱${data.new_total.toFixed(2)}`);
+        // Close rejection modal
+        setShowRejectModal(false);
+        
+        alert(`Senior discount rejected. New total: ₱${data.new_total.toFixed(2)}`);
       } else {
         console.error('Failed to reject senior discount:', data);
         alert(data.error || 'Failed to reject senior discount');
@@ -458,6 +519,8 @@ const PharmacyDashboard = () => {
     } catch (error) {
       console.error('Error rejecting senior discount:', error);
       alert('Failed to reject senior discount. Please try again.');
+    } finally {
+      setRejectingDiscount(false);
     }
   };
 
@@ -485,6 +548,39 @@ const PharmacyDashboard = () => {
       if (data.success) {
         console.log('✅ Cart order accepted:', data);
         
+        // Send confirmation message to customer via chat
+        if (chatRoom) {
+          try {
+            const storedPharmacyInfo = localStorage.getItem('pharmacy_info');
+            const pharmacy = storedPharmacyInfo ? JSON.parse(storedPharmacyInfo) : null;
+            
+            let confirmMessage;
+            if (data.senior_discount_auto_approved) {
+              // Senior discount was auto-approved
+              confirmMessage = data.senior_discount_message || 
+                `Your order has been accepted! Your senior citizen discount of ₱${data.discount_amount.toFixed(2)} has been approved. Total: ₱${data.total_amount.toFixed(2)}`;
+            } else {
+              // Regular acceptance message
+              confirmMessage = "Your order has been accepted and is being prepared!";
+            }
+            
+            await fetch(`${base}/api/order-chat-send/`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ 
+                room_id: chatRoom.id, 
+                pharmacy_id: pharmacy?.id, 
+                content: confirmMessage 
+              })
+            });
+            
+            // Refresh chat messages
+            await fetchChatMessages(chatRoom.id, { silent: true });
+          } catch (chatError) {
+            console.error('Error sending confirmation message:', chatError);
+          }
+        }
+        
         // Move order from pending to preparing
         const orderToMove = orders.pending.find(order => order.id === orderId);
         if (orderToMove) {
@@ -498,7 +594,10 @@ const PharmacyDashboard = () => {
         // Close modal
         handleCloseModal();
         
-        alert('Order accepted successfully! Moving to preparing queue.');
+        const message = data.senior_discount_auto_approved 
+          ? `Order accepted with senior discount approved! Total: ₱${data.total_amount.toFixed(2)}`
+          : 'Order accepted successfully! Moving to preparing queue.';
+        alert(message);
       } else {
         console.error('Failed to accept cart order:', data);
         alert(data.error || 'Failed to accept cart order');
@@ -3171,26 +3270,18 @@ const PharmacyDashboard = () => {
                                 Customer has requested senior citizen discount
                               </p>
                               <p className="text-xs text-gray-600">
-                                Potential discount: ₱{((selectedOrder.subtotal || 0) * 0.20).toFixed(2)} (20% off)
+                                Discount will be automatically approved when you accept the order
                               </p>
                               <p className="text-xs text-gray-600">
-                                Service fee already waived: ₱19.00
+                                Potential discount: ₱{((selectedOrder.subtotal || 0) * 0.20).toFixed(2)} (20% off) + ₱19.00 service fee waived
                               </p>
                             </div>
-                            <div className="flex gap-2">
-                              <button
-                                onClick={() => handleApproveSeniorDiscount(selectedOrder.id)}
-                                className="flex-1 bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors"
-                              >
-                                Approve Discount
-                              </button>
-                              <button
-                                onClick={() => handleRejectSeniorDiscount(selectedOrder.id)}
-                                className="flex-1 bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-700 transition-colors"
-                              >
-                                Reject Discount
-                              </button>
-                            </div>
+                            <button
+                              onClick={() => handleRejectSeniorDiscount(selectedOrder.id)}
+                              className="w-full bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-700 transition-colors"
+                            >
+                              Reject Discount (if ID is invalid)
+                            </button>
                           </div>
                         )}
 
@@ -3211,44 +3302,160 @@ const PharmacyDashboard = () => {
                           </div>
                         )}
 
-                        {/* Order Actions */}
-                        <div className="mt-auto space-y-2">
-                          {selectedOrder.order_status === 'pending' && (
-                            <>
-                              <button
-                                onClick={() => handleAcceptCartOrder(selectedOrder.id)}
-                                className="w-full bg-[#2c786c] text-white px-4 py-3 rounded-lg text-base font-semibold hover:bg-[#1e5a52] transition-colors"
-                              >
-                                Accept & Start Preparing Order
-                              </button>
-                              
-                              <button
-                                onClick={() => {
-                                  if (window.confirm('Are you sure you want to reject this order?')) {
-                                    // TODO: Implement reject order endpoint
-                                    alert('Reject order functionality coming soon');
-                                  }
-                                }}
-                                className="w-full bg-gray-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-600 transition-colors"
-                              >
-                                Reject Order
-                              </button>
-                            </>
-                          )}
-                          
-                          {selectedOrder.order_status === 'accepted' && (
-                            <button
-                              onClick={() => handleReadyOrder(selectedOrder.id)}
-                              className="w-full bg-orange-500 text-white px-4 py-3 rounded-lg text-base font-semibold hover:bg-orange-600 transition-colors"
+                        {/* Cancelled Order Display */}
+                        {selectedOrder.order_status === 'cancelled' && (
+                          <div className="bg-red-50 border border-red-200 p-4 rounded-lg">
+                            <h3 className="text-red-700 font-semibold mb-2">Order Cancelled</h3>
+                            <p className="text-sm text-red-600">
+                              This order has been cancelled by the customer.
+                            </p>
+                            <button 
+                              onClick={handleCloseModal}
+                              className="mt-3 w-full bg-red-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-red-700 transition-colors"
                             >
-                              Mark as Ready for Pickup
+                              Close
                             </button>
-                          )}
-                        </div>
+                          </div>
+                        )}
+
+                        {/* Order Actions */}
+                        {selectedOrder.order_status !== 'cancelled' && (
+                          <div className="mt-auto space-y-2">
+                            {selectedOrder.order_status === 'pending' && (
+                              <>
+                                <button
+                                  onClick={() => handleAcceptCartOrder(selectedOrder.id)}
+                                  className="w-full bg-[#2c786c] text-white px-4 py-3 rounded-lg text-base font-semibold hover:bg-[#1e5a52] transition-colors"
+                                >
+                                  Accept & Start Preparing Order
+                                </button>
+                                
+                                <button
+                                  onClick={() => {
+                                    if (window.confirm('Are you sure you want to reject this order?')) {
+                                      // TODO: Implement reject order endpoint
+                                      alert('Reject order functionality coming soon');
+                                    }
+                                  }}
+                                  className="w-full bg-gray-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-600 transition-colors"
+                                >
+                                  Reject Order
+                                </button>
+                              </>
+                            )}
+                            
+                            {selectedOrder.order_status === 'accepted' && (
+                              <button
+                                onClick={() => handleReadyOrder(selectedOrder.id)}
+                                className="w-full bg-orange-500 text-white px-4 py-3 rounded-lg text-base font-semibold hover:bg-orange-600 transition-colors"
+                              >
+                                Mark as Ready for Pickup
+                              </button>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </>
                   )}
                 </div>
+
+                {/* Rejection Reason Modal */}
+                {showRejectModal && (
+                  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setShowRejectModal(false)}>
+                    <div className="bg-white p-6 rounded-lg max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
+                      <h3 className="text-lg font-semibold mb-4">Reason for Rejecting Senior Discount</h3>
+                      
+                      <div className="space-y-2 mb-4">
+                        <label className="flex items-start cursor-pointer hover:bg-gray-50 p-2 rounded">
+                          <input 
+                            type="radio" 
+                            name="rejectReason"
+                            value="unclear_image"
+                            checked={selectedRejectReason === 'unclear_image'}
+                            onChange={(e) => setSelectedRejectReason(e.target.value)}
+                            className="mt-1 mr-3"
+                          />
+                          <span className="text-sm">ID image is unclear or unreadable</span>
+                        </label>
+                        
+                        <label className="flex items-start cursor-pointer hover:bg-gray-50 p-2 rounded">
+                          <input 
+                            type="radio" 
+                            name="rejectReason"
+                            value="expired_id"
+                            checked={selectedRejectReason === 'expired_id'}
+                            onChange={(e) => setSelectedRejectReason(e.target.value)}
+                            className="mt-1 mr-3"
+                          />
+                          <span className="text-sm">ID appears to be expired</span>
+                        </label>
+                        
+                        <label className="flex items-start cursor-pointer hover:bg-gray-50 p-2 rounded">
+                          <input 
+                            type="radio" 
+                            name="rejectReason"
+                            value="mismatch_info"
+                            checked={selectedRejectReason === 'mismatch_info'}
+                            onChange={(e) => setSelectedRejectReason(e.target.value)}
+                            className="mt-1 mr-3"
+                          />
+                          <span className="text-sm">ID does not match customer information</span>
+                        </label>
+                        
+                        <label className="flex items-start cursor-pointer hover:bg-gray-50 p-2 rounded">
+                          <input 
+                            type="radio" 
+                            name="rejectReason"
+                            value="age_verification"
+                            checked={selectedRejectReason === 'age_verification'}
+                            onChange={(e) => setSelectedRejectReason(e.target.value)}
+                            className="mt-1 mr-3"
+                          />
+                          <span className="text-sm">Customer does not appear to be 60 years or older</span>
+                        </label>
+                        
+                        <label className="flex items-start cursor-pointer hover:bg-gray-50 p-2 rounded">
+                          <input 
+                            type="radio" 
+                            name="rejectReason"
+                            value="other"
+                            checked={selectedRejectReason === 'other'}
+                            onChange={(e) => setSelectedRejectReason(e.target.value)}
+                            className="mt-1 mr-3"
+                          />
+                          <span className="text-sm">Other reason (please specify)</span>
+                        </label>
+                      </div>
+                      
+                      {selectedRejectReason === 'other' && (
+                        <textarea
+                          className="w-full border border-gray-300 p-3 rounded-lg mb-4 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+                          placeholder="Please specify the reason..."
+                          value={customRejectReason}
+                          onChange={(e) => setCustomRejectReason(e.target.value)}
+                          rows="3"
+                        />
+                      )}
+                      
+                      <div className="flex gap-3">
+                        <button 
+                          onClick={() => setShowRejectModal(false)}
+                          className="flex-1 bg-gray-300 text-gray-700 px-4 py-2 rounded-lg font-medium hover:bg-gray-400 transition-colors"
+                          disabled={rejectingDiscount}
+                        >
+                          Cancel
+                        </button>
+                        <button 
+                          onClick={handleSubmitRejection}
+                          className="flex-1 bg-red-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-red-700 transition-colors disabled:opacity-50"
+                          disabled={rejectingDiscount || !selectedRejectReason}
+                        >
+                          {rejectingDiscount ? 'Submitting...' : 'Submit Rejection'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Prescription Image Fullscreen Preview */}
                 {isPrescriptionImagePreviewOpen && prescriptionImagePreviewUrl && (

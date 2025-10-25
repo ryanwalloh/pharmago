@@ -1,5 +1,8 @@
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def _safe_float(value, default=0.0):
@@ -574,6 +577,7 @@ def prepare_price_quote(request):
 def accept_cart_order(request, order_id):
     """
     Pharmacy accepts a cart order (non-prescription order with items already priced)
+    Auto-approves pending senior discount if applicable
     
     POST /api/accept-cart-order/<order_id>/
     {
@@ -588,6 +592,9 @@ def accept_cart_order(request, order_id):
         import json
         from api.orders.models import Order
         from api.users.models import User
+        from decimal import Decimal
+        from django.utils import timezone
+        from django.db import transaction
         
         data = json.loads(request.body or '{}')
         pharmacy_user_id = data.get('pharmacy_user_id')
@@ -617,22 +624,57 @@ def accept_cart_order(request, order_id):
             except User.DoesNotExist:
                 pass
         
-        # Update order status to accepted
-        order.update_status(
-            Order.OrderStatus.ACCEPTED,
-            notes=notes or 'Cart order accepted by pharmacy'
-        )
+        # Auto-approve senior discount if pending
+        senior_discount_auto_approved = False
+        discount_amount = 0
+        senior_discount_message = None
+        
+        with transaction.atomic():
+            if order.senior_discount_requested and order.senior_discount_status == 'pending':
+                # Calculate 20% discount on subtotal
+                subtotal = order.subtotal or Decimal('0.00')
+                discount = subtotal * Decimal('0.20')
+                
+                # Update order with approved senior discount
+                order.senior_discount_status = 'approved'
+                order.discount_amount = discount
+                if pharmacy_user:
+                    order.senior_discount_reviewed_by = pharmacy_user
+                order.senior_discount_review_date = timezone.now()
+                order.senior_discount_notes = 'Auto-approved when order was accepted'
+                
+                # Recalculate totals (this will also waive service fee)
+                order.calculate_totals()
+                
+                senior_discount_auto_approved = True
+                discount_amount = float(discount)
+                senior_discount_message = f"Your order has been accepted! Your senior citizen discount of ₱{discount_amount:.2f} has been approved. Total: ₱{float(order.total_amount):.2f}"
+                
+                logger.info(f"💚 Auto-approved senior discount for Order #{order.order_number}: ₱{discount}")
+            
+            # Update order status to accepted
+            order.update_status(
+                Order.OrderStatus.ACCEPTED,
+                notes=notes or 'Cart order accepted by pharmacy'
+            )
         
         logger.info(f"✅ Cart order accepted: {order.order_number} (ID: {order_id})")
         
-        return JsonResponse({
+        response_data = {
             'success': True,
             'message': 'Order accepted successfully',
             'order_id': order.id,
             'order_number': order.order_number,
             'order_status': order.order_status,
-            'total_amount': float(order.total_amount)
-        })
+            'total_amount': float(order.total_amount),
+            'senior_discount_auto_approved': senior_discount_auto_approved
+        }
+        
+        if senior_discount_auto_approved:
+            response_data['discount_amount'] = discount_amount
+            response_data['senior_discount_message'] = senior_discount_message
+        
+        return JsonResponse(response_data)
         
     except json.JSONDecodeError:
         return JsonResponse({
