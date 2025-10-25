@@ -10,6 +10,7 @@ import {
   Image,
   TextInput,
   Modal,
+  Alert,
   NativeModules,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -97,6 +98,10 @@ const OrderTrackingScreen: React.FC = () => {
   const mapInitialized = useRef(false);
   const [storefrontImageError, setStorefrontImageError] = useState(false);
   const [showChatModal, setShowChatModal] = useState(false);
+  const [showCancelConfirmModal, setShowCancelConfirmModal] = useState(false);
+  const [showProceedConfirmModal, setShowProceedConfirmModal] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [actionButtonsHidden, setActionButtonsHidden] = useState(false);
   const [chatRoom, setChatRoom] = useState<any | null>(null);
   const [chatMessages, setChatMessages] = useState<any[]>([]);
   const [chatLoading, setChatLoading] = useState(false);
@@ -128,6 +133,17 @@ const OrderTrackingScreen: React.FC = () => {
       if (msgs.success && (msgs.data as any)?.messages) {
         if (!isMountedRef.current) return;
         setChatMessages((msgs.data as any).messages);
+        
+        // Check if action buttons should be hidden based on recent messages
+        const messages = (msgs.data as any).messages;
+        const hasCancellationMessage = messages.some((msg: any) => 
+          msg.content && typeof msg.content === 'string' && 
+          (msg.content.includes('cancelled this order') || msg.content.includes('proceed with the order'))
+        );
+        if (hasCancellationMessage) {
+          setActionButtonsHidden(true);
+        }
+        
         // After fetching, mark others' messages as read (customer context)
         try {
           await apiService.markOrderChatRead(targetRoomId);
@@ -410,6 +426,13 @@ const OrderTrackingScreen: React.FC = () => {
       setAutoOpenedChat(false);
     }
   }, [showChatModal]);
+
+  // Reset action buttons state when order data changes
+  useEffect(() => {
+    if (orderData) {
+      setActionButtonsHidden(false);
+    }
+  }, [orderData]);
 
   // Start/stop typing polling with modal
   useEffect(() => {
@@ -806,7 +829,7 @@ const OrderTrackingScreen: React.FC = () => {
                       ) : null}
                       
                       {/* Senior Discount Rejection - Action Buttons */}
-                      {isPharmacy && typeof m.content === 'string' && /proceed with your order at the regular price/i.test(m.content) && orderData?.order_status === 'pending' && (
+                      {isPharmacy && typeof m.content === 'string' && /proceed with your order at the regular price/i.test(m.content) && orderData?.order_status === 'pending' && !actionButtonsHidden && (
                         <View style={{ flexDirection: 'row', marginTop: 12, gap: 8 }}>
                           <TouchableOpacity
                             style={{
@@ -817,52 +840,7 @@ const OrderTrackingScreen: React.FC = () => {
                               borderRadius: 8,
                               alignItems: 'center'
                             }}
-                            onPress={async () => {
-                              Alert.alert(
-                                'Cancel Order',
-                                'Are you sure you want to cancel this order?',
-                                [
-                                  { text: 'No', style: 'cancel' },
-                                  {
-                                    text: 'Yes, Cancel',
-                                    style: 'destructive',
-                                    onPress: async () => {
-                                      try {
-                                        const customerId = await AsyncStorage.getItem('customer_id');
-                                        if (!customerId) {
-                                          Alert.alert('Error', 'Customer ID not found');
-                                          return;
-                                        }
-                                        
-                                        const response = await apiService.cancelOrder(orderData.id, {
-                                          customer_id: parseInt(customerId),
-                                          reason: 'Senior discount rejected, customer cancelled'
-                                        });
-                                        
-                                        if (response.success) {
-                                          // Send cancellation message to pharmacy
-                                          if (chatRoom?.id) {
-                                            await apiService.sendOrderChatMessage(
-                                              chatRoom.id,
-                                              "I have cancelled this order."
-                                            );
-                                          }
-                                          
-                                          Alert.alert('Order Cancelled', 'Your order has been cancelled.', [
-                                            { text: 'OK', onPress: () => router.back() }
-                                          ]);
-                                        } else {
-                                          Alert.alert('Error', response.error || 'Failed to cancel order');
-                                        }
-                                      } catch (error) {
-                                        console.error('Cancel order error:', error);
-                                        Alert.alert('Error', 'Failed to cancel order. Please try again.');
-                                      }
-                                    }
-                                  }
-                                ]
-                              );
-                            }}
+                            onPress={() => setShowCancelConfirmModal(true)}
                           >
                             <Text style={{ color: 'white', fontWeight: '600', fontSize: 14 }}>
                               Cancel Order
@@ -878,32 +856,10 @@ const OrderTrackingScreen: React.FC = () => {
                               borderRadius: 8,
                               alignItems: 'center'
                             }}
-                            onPress={async () => {
-                              try {
-                                if (chatRoom?.id) {
-                                  await apiService.sendOrderChatMessage(
-                                    chatRoom.id,
-                                    "I will proceed with the order at the regular price."
-                                  );
-                                  
-                                  Alert.alert('Message Sent', 'The pharmacy has been notified that you will proceed with the order.');
-                                  
-                                  // Refresh messages
-                                  const msgs = await apiService.getOrderChatMessages(chatRoom.id);
-                                  if (msgs.success) {
-                                    setChatMessages(msgs.data?.messages || msgs.data || []);
-                                  }
-                                } else {
-                                  Alert.alert('Error', 'Chat room not available');
-                                }
-                              } catch (error) {
-                                console.error('Proceed order error:', error);
-                                Alert.alert('Error', 'Failed to send message. Please try again.');
-                              }
-                            }}
+                            onPress={() => setShowProceedConfirmModal(true)}
                           >
                             <Text style={{ color: 'white', fontWeight: '600', fontSize: 14 }}>
-                              Proceed with Order
+                              Proceed
                             </Text>
                           </TouchableOpacity>
                         </View>
@@ -1027,7 +983,18 @@ const OrderTrackingScreen: React.FC = () => {
                   }}
                 />
                 <TouchableOpacity
-                  style={{ marginLeft: 8, paddingHorizontal: 16, paddingVertical: 10, backgroundColor: '#00bf63', borderRadius: 8, opacity: chatSending || !chatInput.trim() ? 0.6 : 1 }}
+                  style={{ 
+                    marginLeft: 8, 
+                    paddingHorizontal: 12, 
+                    paddingVertical: 12, 
+                    backgroundColor: '#00bf63', 
+                    borderRadius: 50, 
+                    opacity: chatSending || !chatInput.trim() ? 0.6 : 1,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: 48,
+                    height: 48,
+                  }}
                   disabled={chatSending || !chatInput.trim() || !chatRoom?.id}
                   onPress={async () => {
                     if (!chatRoom?.id || !chatInput.trim() || chatSending) return;
@@ -1060,9 +1027,176 @@ const OrderTrackingScreen: React.FC = () => {
                     }
                   }}
                 >
-                  <Text style={{ color: '#FFFFFF', fontWeight: '600' }}>{chatSending ? 'Sending…' : 'Send'}</Text>
+                  {chatSending ? (
+                    <ActivityIndicator size="small" color="white" />
+                  ) : (
+                    <Image 
+                      source={require('../assets/send.png')} 
+                      style={{ width: 24, height: 24, tintColor: 'white' }}
+                      resizeMode="contain"
+                    />
+                  )}
                 </TouchableOpacity>
               </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Cancel Order Confirmation Modal */}
+      <Modal
+        visible={showCancelConfirmModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowCancelConfirmModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.customModalContainer}>
+            <Text style={styles.customModalTitle}>Cancel Order</Text>
+            <Text style={styles.customModalMessage}>
+              Are you sure you want to cancel this order? This action cannot be undone.
+            </Text>
+            
+            <View style={styles.customModalButtons}>
+              <TouchableOpacity
+                style={[styles.customModalButton, styles.modalButtonSecondary]}
+                onPress={() => setShowCancelConfirmModal(false)}
+                disabled={actionLoading}
+              >
+                <Text style={styles.modalButtonSecondaryText}>No, Keep Order</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[styles.customModalButton, styles.modalButtonDanger]}
+                onPress={async () => {
+                  setActionLoading(true);
+                  try {
+                    const customerId = await AsyncStorage.getItem('customer_id');
+                    if (!customerId) {
+                      setShowCancelConfirmModal(false);
+                      Alert.alert('Error', 'Customer ID not found');
+                      return;
+                    }
+                    
+                    const response = await apiService.cancelOrder(orderData.order_id, {
+                      customer_id: parseInt(customerId),
+                      reason: 'Senior discount rejected, customer cancelled'
+                    });
+                    
+                    if (response.success) {
+                      // Send cancellation message to pharmacy
+                      if (chatRoom?.id) {
+                        await apiService.sendOrderChatMessage(
+                          chatRoom.id,
+                          "I have cancelled this order."
+                        );
+                      }
+                      
+                      setActionButtonsHidden(true); // Hide the action buttons
+                      setShowCancelConfirmModal(false);
+                      setTimeout(() => {
+                        Alert.alert('Order Cancelled', 'Your order has been cancelled.', [
+                          { text: 'OK', onPress: () => router.back() }
+                        ]);
+                      }, 300);
+                    } else {
+                      setShowCancelConfirmModal(false);
+                      setTimeout(() => {
+                        Alert.alert('Error', response.error || 'Failed to cancel order');
+                      }, 300);
+                    }
+                  } catch (error) {
+                    console.error('Cancel order error:', error);
+                    setShowCancelConfirmModal(false);
+                    setTimeout(() => {
+                      Alert.alert('Error', 'Failed to cancel order. Please try again.');
+                    }, 300);
+                  } finally {
+                    setActionLoading(false);
+                  }
+                }}
+                disabled={actionLoading}
+              >
+                {actionLoading ? (
+                  <ActivityIndicator size="small" color="white" />
+                ) : (
+                  <Text style={styles.modalButtonDangerText}>Yes, Cancel Order</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Proceed with Order Confirmation Modal */}
+      <Modal
+        visible={showProceedConfirmModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowProceedConfirmModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.customModalContainer}>
+            <Text style={styles.customModalTitle}>Proceed with Order</Text>
+            <Text style={styles.customModalMessage}>
+              You will proceed with this order at the regular price (without senior discount).
+            </Text>
+            
+            <View style={styles.customModalButtons}>
+              <TouchableOpacity
+                style={[styles.customModalButton, styles.modalButtonSecondary]}
+                onPress={() => setShowProceedConfirmModal(false)}
+                disabled={actionLoading}
+              >
+                <Text style={styles.modalButtonSecondaryText}>Cancel</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[styles.customModalButton, styles.modalButtonPrimary]}
+                onPress={async () => {
+                  setActionLoading(true);
+                  try {
+                    if (chatRoom?.id) {
+                      await apiService.sendOrderChatMessage(
+                        chatRoom.id,
+                        "I will proceed with the order at the regular price."
+                      );
+                      
+                      // Refresh messages
+                      const msgs = await apiService.getOrderChatMessages(chatRoom.id);
+                      if (msgs.success) {
+                        setChatMessages(msgs.data?.messages || msgs.data || []);
+                      }
+                      
+                      setActionButtonsHidden(true); // Hide the action buttons
+                      setShowProceedConfirmModal(false);
+                      setTimeout(() => {
+                        Alert.alert('Message Sent', 'The pharmacy has been notified that you will proceed with the order.');
+                      }, 300);
+                    } else {
+                      setShowProceedConfirmModal(false);
+                      setTimeout(() => {
+                        Alert.alert('Error', 'Chat room not available');
+                      }, 300);
+                    }
+                  } catch (error) {
+                    console.error('Proceed order error:', error);
+                    setShowProceedConfirmModal(false);
+                    setTimeout(() => {
+                      Alert.alert('Error', 'Failed to send message. Please try again.');
+                    }, 300);
+                  } finally {
+                    setActionLoading(false);
+                  }
+                }}
+                disabled={actionLoading}
+              >
+                {actionLoading ? (
+                  <ActivityIndicator size="small" color="white" />
+                ) : (
+                  <Text style={styles.modalButtonPrimaryText}>Confirm</Text>
+                )}
+              </TouchableOpacity>
             </View>
           </View>
         </View>
@@ -1423,6 +1557,83 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     fontFamily: fontFamily.light,
+  },
+  // Custom Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  customModalContainer: {
+    backgroundColor: 'white',
+    borderRadius: 16,
+    padding: 24,
+    width: '100%',
+    maxWidth: 400,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 10,
+  },
+  customModalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 12,
+    textAlign: 'center',
+    fontFamily: fontFamily.heavy,
+  },
+  customModalMessage: {
+    fontSize: 15,
+    color: '#666',
+    marginBottom: 24,
+    textAlign: 'center',
+    lineHeight: 22,
+    fontFamily: fontFamily.light,
+  },
+  customModalButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  customModalButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 48,
+  },
+  modalButtonPrimary: {
+    backgroundColor: '#10B981',
+  },
+  modalButtonPrimaryText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+    fontFamily: fontFamily.heavy,
+  },
+  modalButtonSecondary: {
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  modalButtonSecondaryText: {
+    color: '#6B7280',
+    fontSize: 16,
+    fontWeight: '600',
+    fontFamily: fontFamily.heavy,
+  },
+  modalButtonDanger: {
+    backgroundColor: '#EF4444',
+  },
+  modalButtonDangerText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+    fontFamily: fontFamily.heavy,
   },
 });
 
