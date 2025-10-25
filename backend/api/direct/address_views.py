@@ -80,36 +80,67 @@ def create_or_update_address(request):
         is_default = payload.get('is_default', True)
         
         with transaction.atomic():
-            # If setting as default, unset other default addresses
-            if is_default:
-                Address.objects.filter(
+            # Check if address with this label already exists for this customer
+            try:
+                address = Address.objects.get(customer=customer, label=label)
+                # Update existing address
+                address.street_address = street_address
+                address.barangay = barangay
+                address.building_name = building_name
+                address.floor_number = floor_number
+                address.unit_number = unit_number
+                address.landmark = landmark
+                address.city = city
+                address.province = province
+                address.postal_code = postal_code
+                address.latitude = latitude
+                address.longitude = longitude
+                
+                # If setting as default, unset other default addresses
+                if is_default and not address.is_default:
+                    Address.objects.filter(
+                        customer=customer,
+                        is_default=True
+                    ).exclude(id=address.id).update(is_default=False)
+                    address.is_default = True
+                
+                address.save()
+                logger.info(f"✅ Address updated successfully: ID {address.id}, Label: {label}")
+                action = 'updated'
+                
+            except Address.DoesNotExist:
+                # If setting as default, unset other default addresses
+                if is_default:
+                    Address.objects.filter(
+                        customer=customer,
+                        is_default=True
+                    ).update(is_default=False)
+                
+                # Create new address
+                address = Address.objects.create(
                     customer=customer,
-                    is_default=True
-                ).update(is_default=False)
-            
-            # Create new address
-            address = Address.objects.create(
-                customer=customer,
-                label=label,
-                street_address=street_address,
-                barangay=barangay,
-                building_name=building_name,
-                floor_number=floor_number,
-                unit_number=unit_number,
-                landmark=landmark,
-                city=city,
-                province=province,
-                postal_code=postal_code,
-                latitude=latitude,
-                longitude=longitude,
-                is_default=is_default,
-            )
-            
-            logger.info(f"✅ Address created successfully: ID {address.id}")
+                    label=label,
+                    street_address=street_address,
+                    barangay=barangay,
+                    building_name=building_name,
+                    floor_number=floor_number,
+                    unit_number=unit_number,
+                    landmark=landmark,
+                    city=city,
+                    province=province,
+                    postal_code=postal_code,
+                    latitude=latitude,
+                    longitude=longitude,
+                    is_default=is_default,
+                )
+                
+                logger.info(f"✅ Address created successfully: ID {address.id}, Label: {label}")
+                action = 'created'
             
             return JsonResponse({
                 'success': True,
-                'message': 'Address created successfully',
+                'message': f'Address {action} successfully',
+                'action': action,
                 'address': {
                     'id': address.id,
                     'label': address.label,

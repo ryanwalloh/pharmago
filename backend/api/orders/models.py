@@ -349,16 +349,23 @@ class Order(models.Model):
             total=Sum(F('unit_price') * F('quantity'))
         )['total'] or 0
         
-        # Service fee: prefer existing tax_amount if set (>0), otherwise default to 19.00 in dev
-        try:
-            existing_tax = float(self.tax_amount)
-        except Exception:
-            existing_tax = 0.0
-        if existing_tax and existing_tax > 0:
-            tax_amount = self.tax_amount
+        # Service fee: waived for approved senior citizens, otherwise 19.00
+        from decimal import Decimal
+        
+        # Check if senior discount is approved - waive service fee as community benefit
+        if self.senior_discount_status == 'approved' and self.senior_discount_requested:
+            tax_amount = Decimal('0.00')  # Waive service fee for senior citizens
+            logger.info(f"💚 Service fee waived for senior citizen order {self.order_number}")
         else:
-            from decimal import Decimal
-            tax_amount = Decimal('19.00')
+            # Use existing tax_amount if set (>0), otherwise default to 19.00
+            try:
+                existing_tax = float(self.tax_amount)
+            except Exception:
+                existing_tax = 0.0
+            if existing_tax and existing_tax > 0:
+                tax_amount = self.tax_amount
+            else:
+                tax_amount = Decimal('19.00')
         
         # Apply discount
         discount_amount = self.discount_amount
