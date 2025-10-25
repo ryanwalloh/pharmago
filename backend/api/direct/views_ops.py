@@ -431,6 +431,7 @@ def direct_pharmacy_orders(request, pharmacy_id):
                 'id': order.id,
                 'order_number': getattr(order, 'order_number', order.id),
                 'order_status': getattr(order, 'order_status', ''),
+                'payment_method': getattr(order, 'payment_method', 'COD'),
                 'total_amount': _safe_float(getattr(order, 'total_amount', 0)),
                 'subtotal': _safe_float(getattr(order, 'subtotal', 0)),
                 'tax_amount': _safe_float(getattr(order, 'tax_amount', 0)),
