@@ -374,7 +374,7 @@ const PharmacyDashboard = () => {
 
     try {
       const base = (process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
-      const response = await fetch(`${base}/api/orders/pharmacy-review-senior-discount/${orderId}/`, {
+      const response = await fetch(`${base}/api/pharmacy-review-senior-discount/${orderId}/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
