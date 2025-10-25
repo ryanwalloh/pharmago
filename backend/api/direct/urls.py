@@ -2,6 +2,7 @@ from django.urls import path
 from . import views_read as views
 from . import views_ops as ops
 from . import address_views
+from . import cart_order_views
 
 app_name = 'direct'
 
@@ -31,6 +32,7 @@ urlpatterns = [
     path('customer-approve-pricing/', ops.customer_approve_pricing),
     # Mobile app direct endpoints
     path('create-prescription-order/', views.direct_prescription_order_creation),
+    path('create-cart-order/', cart_order_views.create_cart_order),
     path('order-status/<int:order_id>/', views.get_order_status),
     # Search endpoints
     path('search-medicines/', views.direct_search_medicines),

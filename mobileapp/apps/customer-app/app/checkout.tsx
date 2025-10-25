@@ -368,48 +368,123 @@ export default function CheckoutScreen() {
   };
 
   const handlePlaceOrder = async () => {
-    if (!orderData) return;
+    if (!orderData) {
+      Alert.alert('Error', 'Order data not found. Please try again.');
+      return;
+    }
+
+    if (!userLocation) {
+      Alert.alert('Error', 'Delivery location not found. Please enable location services.');
+      return;
+    }
 
     setPlacingOrder(true);
     try {
-      // TODO: Call API to create order
-      // const response = await apiService.createOrder({
-      //   ...orderData,
-      //   payment_method: selectedPaymentMethod,
-      //   delivery_location: userLocation,
-      //   delivery_address: address,
-      // });
+      // Get customer ID from AsyncStorage
+      const userData = await AsyncStorage.getItem('user');
+      if (!userData) {
+        Alert.alert('Error', 'User not found. Please log in again.');
+        setPlacingOrder(false);
+        return;
+      }
+      
+      const user = JSON.parse(userData);
+      const customerId = user.customer_id || user.id || user.user_id;
+      
+      if (!customerId) {
+        Alert.alert('Error', 'Customer ID not found. Please log in again.');
+        setPlacingOrder(false);
+        return;
+      }
 
-      console.log('🛒 Placing order:', {
-        ...orderData,
+      // Get or create delivery address
+      let addressId = null;
+      
+      // Try to get existing address
+      const addressResponse = await apiService.getCustomerAddresses(customerId);
+      if (addressResponse.success && addressResponse.data?.addresses?.length > 0) {
+        // Use default address or first address
+        const defaultAddress = addressResponse.data.addresses.find((addr: any) => addr.is_default);
+        addressId = defaultAddress?.id || addressResponse.data.addresses[0].id;
+        console.log('📍 Using existing address ID:', addressId);
+      } else {
+        // Create new address if none exists
+        const newAddressData = {
+          customer_id: customerId,
+          label: 'home',
+          street_address: address || 'Address not set',
+          barangay: 'Default Barangay',
+          city: 'Iligan City',
+          province: 'Lanao del Norte',
+          latitude: userLocation.latitude,
+          longitude: userLocation.longitude,
+          is_default: true,
+        };
+        
+        const createAddressResponse = await apiService.createOrUpdateAddress(newAddressData);
+        if (createAddressResponse.success && createAddressResponse.data?.address) {
+          addressId = createAddressResponse.data.address.id;
+          console.log('📍 Created new address ID:', addressId);
+        } else {
+          throw new Error('Failed to create delivery address');
+        }
+      }
+
+      // Parse pharmacy and cart items
+      const pharmacy = typeof orderData.pharmacy === 'string' 
+        ? JSON.parse(orderData.pharmacy) 
+        : orderData.pharmacy;
+      
+      const cartItems = typeof orderData.cartItems === 'string'
+        ? JSON.parse(orderData.cartItems)
+        : orderData.cartItems;
+
+      // Prepare order data for API
+      const apiOrderData = {
+        customer_id: customerId,
+        pharmacy_id: pharmacy.pharmacy_id,
+        delivery_address_id: addressId,
+        cart_items: cartItems.map((item: any) => ({
+          inventory_id: item.inventory_id,
+          quantity: item.quantity
+        })),
+        delivery_fee: orderData.deliveryFee || 0,
         payment_method: selectedPaymentMethod,
-        delivery_location: userLocation,
-        delivery_address: address,
-      });
+        senior_discount_requested: orderData.apply_senior_discount || false,
+        senior_id_image_url: orderData.senior_id_image_url || '',
+        notes: ''
+      };
 
-      // Clear pending order from storage
-      await AsyncStorage.removeItem('pending_order');
-      await AsyncStorage.removeItem('temp_cart_items');
+      console.log('🛒 Creating cart order via API:', apiOrderData);
 
-      // Show success message
-      Alert.alert(
-        'Order Placed Successfully!',
-        orderData.apply_senior_discount 
-          ? 'Your order has been placed! The senior citizen discount is pending pharmacy approval.' 
-          : 'Your order has been placed successfully!',
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              // Navigate to orders list or home
-              router.replace('/' as any);
-            },
-          },
-        ]
-      );
+      // Call API to create order
+      const response = await apiService.createCartOrder(apiOrderData);
+      
+      if (response.success && response.data?.order) {
+        const createdOrder = response.data.order;
+        console.log('✅ Order created successfully:', createdOrder.order_number);
+        
+        // Clear pending order from storage
+        await AsyncStorage.removeItem('pending_order');
+        await AsyncStorage.removeItem('temp_cart_items');
+        await AsyncStorage.removeItem('temp_cart_pharmacy_id');
+        
+        // Save order to AsyncStorage for tracking page
+        await AsyncStorage.setItem('currentOrder', JSON.stringify(createdOrder));
+        console.log('💾 Order saved to AsyncStorage for tracking');
+        
+        // Navigate to order tracking page
+        router.replace(`/order-tracking/${createdOrder.order_id}` as any);
+      } else {
+        throw new Error(response.error || 'Failed to create order');
+      }
     } catch (error: any) {
-      console.error('Failed to place order:', error);
-      Alert.alert('Error', 'Failed to place order. Please try again.');
+      console.error('❌ Failed to place order:', error);
+      Alert.alert(
+        'Error', 
+        `Failed to place order: ${error.message || 'Please try again.'}`,
+        [{ text: 'OK' }]
+      );
     } finally {
       setPlacingOrder(false);
     }
