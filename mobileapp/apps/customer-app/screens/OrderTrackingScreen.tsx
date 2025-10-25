@@ -76,8 +76,9 @@ const getBackendBaseUrl = (): string => {
     }
   } catch {}
 
-  // Fallback
-  return 'http://192.168.254.103:8000';
+  // Fallback: Use Railway backend for production/testing
+  // For local development, set EXPO_PUBLIC_API_BASE environment variable
+  return 'https://pharmago-backend-production.up.railway.app';
 };
 
 const OrderTrackingScreen: React.FC = () => {
