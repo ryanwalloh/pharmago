@@ -45,7 +45,7 @@ def get_order_chat_messages(request):
             return JsonResponse({'success': False, 'error': 'room_id is required'}, status=400)
 
         room = ChatRoom.objects.select_related('order').get(id=int(room_id))
-        messages_qs = ChatMessage.objects.filter(room=room).order_by('-timestamp')
+        messages_qs = ChatMessage.objects.filter(room=room).order_by('timestamp')  # Oldest first
         messages = list(messages_qs[:limit])
 
         def serialize(msg):

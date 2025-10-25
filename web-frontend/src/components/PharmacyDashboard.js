@@ -404,7 +404,7 @@ const PharmacyDashboard = () => {
           fetchOrders(pharmacyInfo.id);
         }
         
-        alert(`Senior discount approved! New total: ₱${data.new_total.toFixed(2)}`);
+        console.log(`✅ Senior discount approved! New total: ₱${data.new_total.toFixed(2)}`);
       } else {
         console.error('Failed to approve senior discount:', data);
         alert(data.error || 'Failed to approve senior discount');
@@ -511,7 +511,7 @@ const PharmacyDashboard = () => {
         // Close rejection modal
         setShowRejectModal(false);
         
-        alert(`Senior discount rejected. New total: ₱${data.new_total.toFixed(2)}`);
+        console.log(`✅ Senior discount rejected. New total: ₱${data.new_total.toFixed(2)}`);
       } else {
         console.error('Failed to reject senior discount:', data);
         alert(data.error || 'Failed to reject senior discount');
@@ -597,7 +597,7 @@ const PharmacyDashboard = () => {
         const message = data.senior_discount_auto_approved 
           ? `Order accepted with senior discount approved! Total: ₱${data.total_amount.toFixed(2)}`
           : 'Order accepted successfully! Moving to preparing queue.';
-        alert(message);
+        console.log(`✅ ${message}`);
       } else {
         console.error('Failed to accept cart order:', data);
         alert(data.error || 'Failed to accept cart order');
