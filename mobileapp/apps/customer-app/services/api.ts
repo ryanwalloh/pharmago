@@ -571,7 +571,7 @@ class ApiService {
 
   async cancelOrder(orderId: number, data: { customer_id: number; reason: string }): Promise<ApiResponse<any>> {
     console.log('🚫 Cancelling order:', orderId, data);
-    return this.makeRequest(`/orders/cancel/${orderId}/`, {
+    return this.makeRequest(`/cancel/${orderId}/`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
