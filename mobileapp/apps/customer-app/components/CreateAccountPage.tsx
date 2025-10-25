@@ -265,15 +265,27 @@ export default function CreateAccountPage({ onBack, onRegistrationSuccess }: Cre
       if (response.success) {
         console.log('🎉 Registration successful!');
         
-        // Store user data in session
+        // Store user data in session (including customer_id from response)
         try {
-          await login({
+          // Extract user ID from nested response structure
+          const userId = response.data?.user?.id || response.data?.customer_id || response.data?.id;
+          
+          const userData = {
             username: username.trim(),
             email: email.trim(),
             firstName: firstName.trim(),
             lastName: lastName.trim(),
             phone: normalizedPhone,
-          });
+            // Save customer_id from API response for address management
+            customer_id: userId,
+            id: userId,
+            user_id: userId,
+          };
+          
+          console.log('💾 Saving complete user data including customer_id:', userData);
+          console.log('🆔 Extracted user ID:', userId, 'from response.data.user.id');
+          
+          await login(userData);
           console.log('✅ User data stored in session');
         } catch (error) {
           console.error('❌ Error storing user data:', error);
