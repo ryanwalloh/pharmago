@@ -103,50 +103,94 @@ export default function OrderPage() {
   const searchDebounceTimer = useRef<number | null>(null);
 
   useEffect(() => {
-    // If medicines were pre-selected, add them to cart
-    if (pharmacy) {
-      const initialCartItems: CartItem[] = [];
-      
-      // Handle multiple medicines (new feature)
-      if (selectedMedicines && Array.isArray(selectedMedicines)) {
-        selectedMedicines.forEach(medicine => {
-          initialCartItems.push({
-            inventory_id: medicine.inventory_id,
-            name: medicine.name,
-            dosage: medicine.dosage,
-            form: medicine.form,
-            price: medicine.price,
-            quantity: 1,
-            prescription_required: medicine.prescription_required || false,
+    // Initialize cart from AsyncStorage or navigation params
+    const initializeCart = async () => {
+      try {
+        // Try to restore cart from AsyncStorage first
+        const savedCart = await AsyncStorage.getItem('temp_cart_items');
+        const savedPharmacyId = await AsyncStorage.getItem('temp_cart_pharmacy_id');
+        
+        // If we have a saved cart AND it's for the same pharmacy, use it
+        if (savedCart && savedPharmacyId === String(pharmacy?.pharmacy_id)) {
+          const restoredItems = JSON.parse(savedCart);
+          console.log('🛒 Restored cart from storage:', restoredItems.length, 'items');
+          setCartItems(restoredItems);
+          return; // Don't initialize from params if we have saved cart
+        }
+      } catch (error) {
+        console.error('Failed to restore cart from storage:', error);
+      }
+
+      // If no saved cart or different pharmacy, initialize from navigation params
+      if (pharmacy) {
+        const initialCartItems: CartItem[] = [];
+        
+        // Handle multiple medicines (new feature)
+        if (selectedMedicines && Array.isArray(selectedMedicines)) {
+          selectedMedicines.forEach(medicine => {
+            initialCartItems.push({
+              inventory_id: medicine.inventory_id,
+              name: medicine.name,
+              dosage: medicine.dosage,
+              form: medicine.form,
+              price: medicine.price,
+              quantity: 1,
+              prescription_required: medicine.prescription_required || false,
+            });
           });
-        });
-      } 
-      // Handle single medicine (backwards compatibility)
-      else if (selectedMedicine) {
-        initialCartItems.push({
-          inventory_id: selectedMedicine.inventory_id,
-          name: selectedMedicine.name,
-          dosage: selectedMedicine.dosage,
-          form: selectedMedicine.form,
-          price: selectedMedicine.price,
-          quantity: 1,
-          prescription_required: selectedMedicine.prescription_required || false,
-        });
+        } 
+        // Handle single medicine (backwards compatibility)
+        else if (selectedMedicine) {
+          initialCartItems.push({
+            inventory_id: selectedMedicine.inventory_id,
+            name: selectedMedicine.name,
+            dosage: selectedMedicine.dosage,
+            form: selectedMedicine.form,
+            price: selectedMedicine.price,
+            quantity: 1,
+            prescription_required: selectedMedicine.prescription_required || false,
+          });
+        }
+        
+        if (initialCartItems.length > 0) {
+          setCartItems(initialCartItems);
+          // Save to AsyncStorage immediately
+          await AsyncStorage.setItem('temp_cart_items', JSON.stringify(initialCartItems));
+          await AsyncStorage.setItem('temp_cart_pharmacy_id', String(pharmacy.pharmacy_id));
+        }
       }
-      
-      if (initialCartItems.length > 0) {
-        setCartItems(initialCartItems);
-      }
-    }
+    };
+
+    initializeCart();
 
     // Cleanup function to clear AsyncStorage when component unmounts
     return () => {
       AsyncStorage.removeItem('temp_cart_items').catch((error: any) => {
         console.error('Failed to clear cart items on unmount:', error);
       });
+      AsyncStorage.removeItem('temp_cart_pharmacy_id').catch((error: any) => {
+        console.error('Failed to clear pharmacy ID on unmount:', error);
+      });
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Save cart to AsyncStorage whenever it changes
+  useEffect(() => {
+    const saveCart = async () => {
+      if (cartItems.length > 0 && pharmacy?.pharmacy_id) {
+        try {
+          await AsyncStorage.setItem('temp_cart_items', JSON.stringify(cartItems));
+          await AsyncStorage.setItem('temp_cart_pharmacy_id', String(pharmacy.pharmacy_id));
+          console.log('💾 Cart saved to storage:', cartItems.length, 'items');
+        } catch (error) {
+          console.error('Failed to save cart to storage:', error);
+        }
+      }
+    };
+    
+    saveCart();
+  }, [cartItems, pharmacy?.pharmacy_id]);
 
   const updateQuantity = async (index: number, change: number) => {
     setCartItems(prev => {
@@ -431,11 +475,23 @@ export default function OrderPage() {
     return 0;
   };
 
+  // Service fee matches backend default (backend/api/orders/models.py line 361)
+  const BASE_SERVICE_FEE = 19.00;
+
+  // Calculate service fee - waived for senior citizens
+  const calculateServiceFee = () => {
+    if (applySeniorDiscount && seniorIdImage) {
+      return 0; // Waive service fee for senior citizens
+    }
+    return BASE_SERVICE_FEE;
+  };
+
   const calculateTotal = () => {
     const subtotal = calculateSubtotal();
+    const serviceFee = calculateServiceFee();
     const deliveryFee = deliveryInfo?.delivery_fee || 0;
     const seniorDiscount = calculateSeniorDiscount();
-    return subtotal + deliveryFee - seniorDiscount;
+    return subtotal + serviceFee + deliveryFee - seniorDiscount;
   };
 
   const handlePlaceOrder = async () => {
@@ -728,6 +784,22 @@ export default function OrderPage() {
                   <Text style={[styles.summaryLabel, styles.discountLabel]}>Senior Discount (20%)*:</Text>
                   <Text style={[styles.summaryValue, styles.discountValue]}>
                     -₱{calculateSeniorDiscount().toFixed(2)}
+                  </Text>
+                </View>
+              )}
+              
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Small Order Fee:</Text>
+                <Text style={[styles.summaryValue, applySeniorDiscount && seniorIdImage && styles.strikethroughText]}>
+                  ₱{BASE_SERVICE_FEE.toFixed(2)}
+                </Text>
+              </View>
+              
+              {applySeniorDiscount && seniorIdImage && (
+                <View style={styles.summaryRow}>
+                  <Text style={[styles.summaryLabel, styles.seniorBenefitLabel]}>No order fee for seniors*:</Text>
+                  <Text style={[styles.summaryValue, styles.seniorBenefitValue]}>
+                    -₱{BASE_SERVICE_FEE.toFixed(2)}
                   </Text>
                 </View>
               )}
@@ -1066,6 +1138,18 @@ const styles = StyleSheet.create({
   discountValue: {
     color: '#00bf63',
     fontWeight: '600',
+  },
+  strikethroughText: {
+    textDecorationLine: 'line-through',
+    color: '#999999',
+  },
+  seniorBenefitLabel: {
+    color: '#00bf63',
+    fontSize: 13,
+  },
+  seniorBenefitValue: {
+    color: '#00bf63',
+    fontWeight: '700',
   },
   pendingNote: {
     fontSize: 11,

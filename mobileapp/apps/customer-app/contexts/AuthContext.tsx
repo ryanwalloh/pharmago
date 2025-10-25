@@ -8,6 +8,9 @@ interface User {
   lastName: string;
   phone: string;
   hasCompletedOnboarding?: boolean;
+  customer_id?: number;
+  id?: number;
+  user_id?: number;
 }
 
 interface AuthContextType {

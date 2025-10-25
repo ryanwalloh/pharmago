@@ -11,6 +11,7 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -31,30 +32,94 @@ const BackArrowIcon = ({ size = 24, color = '#000000' }) => (
   </Svg>
 );
 
-// Payment Method Icons
+// Payment Method Icons using custom assets
 const VisaIcon = () => (
-  <View style={styles.paymentIconPlaceholder}>
-    <Text style={styles.paymentIconText}>VISA</Text>
-  </View>
+  <Image source={require('../assets/visa.png')} style={styles.paymentIcon} resizeMode="contain" />
 );
 
-const GCashIcon = () => (
-  <View style={[styles.paymentIconPlaceholder, { backgroundColor: '#007AFF' }]}>
-    <Text style={styles.paymentIconText}>GCash</Text>
-  </View>
+const BankTransferIcon = () => (
+  <Image source={require('../assets/bank.png')} style={styles.paymentIcon} resizeMode="contain" />
 );
 
 const PayPalIcon = () => (
-  <View style={[styles.paymentIconPlaceholder, { backgroundColor: '#0070BA' }]}>
-    <Text style={styles.paymentIconText}>PayPal</Text>
-  </View>
+  <Image source={require('../assets/paypal.png')} style={styles.paymentIcon} resizeMode="contain" />
 );
 
 const CODIcon = () => (
-  <View style={[styles.paymentIconPlaceholder, { backgroundColor: '#00bf63' }]}>
-    <Text style={styles.paymentIconText}>COD</Text>
-  </View>
+  <Image source={require('../assets/cod.png')} style={styles.paymentIcon} resizeMode="contain" />
 );
+
+// Custom Map Style - Clean, minimal design
+const customMapStyle = [
+  {
+    "featureType": "administrative.land_parcel",
+    "stylers": [
+      {
+        "visibility": "off"
+      }
+    ]
+  },
+  {
+    "featureType": "administrative.neighborhood",
+    "stylers": [
+      {
+        "visibility": "off"
+      }
+    ]
+  },
+  {
+    "featureType": "poi",
+    "elementType": "labels.text",
+    "stylers": [
+      {
+        "visibility": "off"
+      }
+    ]
+  },
+  {
+    "featureType": "poi.business",
+    "stylers": [
+      {
+        "visibility": "off"
+      }
+    ]
+  },
+  {
+    "featureType": "road",
+    "elementType": "labels",
+    "stylers": [
+      {
+        "visibility": "off"
+      }
+    ]
+  },
+  {
+    "featureType": "road",
+    "elementType": "labels.icon",
+    "stylers": [
+      {
+        "visibility": "off"
+      }
+    ]
+  },
+  {
+    "featureType": "transit",
+    "stylers": [
+      {
+        "visibility": "off"
+      }
+    ]
+  },
+  {
+    "featureType": "water",
+    "elementType": "labels.text",
+    "stylers": [
+      {
+        "visibility": "off"
+      }
+    ]
+  }
+];
 
 export default function CheckoutScreen() {
   const [loading, setLoading] = useState(true);
@@ -63,6 +128,34 @@ export default function CheckoutScreen() {
   const [userLocation, setUserLocation] = useState<any>(null);
   const [address, setAddress] = useState<string>('');
   const [placingOrder, setPlacingOrder] = useState(false);
+
+  // Small Order Fee - matches backend default
+  const BASE_SERVICE_FEE = 19.00;
+
+  // Calculate service fee - waived for senior citizens
+  const calculateServiceFee = () => {
+    if (orderData?.apply_senior_discount && orderData?.senior_id_image_url) {
+      return 0; // Waive service fee for senior citizens
+    }
+    return BASE_SERVICE_FEE;
+  };
+
+  // Payment method expansion state
+  const [paymentMethodExpanded, setPaymentMethodExpanded] = useState(false);
+
+  // Check if senior discount is pending
+  const hasPendingSeniorDiscount = orderData?.apply_senior_discount && orderData?.senior_id_image_url;
+
+  // Get payment method display name
+  const getPaymentMethodName = (method: string) => {
+    switch (method) {
+      case 'visa': return 'Visa';
+      case 'bank_transfer': return 'Bank Transfer';
+      case 'paypal': return 'PayPal';
+      case 'cod': return 'Cash on Delivery';
+      default: return 'Cash on Delivery';
+    }
+  };
 
   // Address Edit Modal States
   const [showAddressModal, setShowAddressModal] = useState(false);
@@ -150,23 +243,33 @@ export default function CheckoutScreen() {
       setMapRegion({
         latitude: userLocation.latitude,
         longitude: userLocation.longitude,
-        latitudeDelta: 0.01,
-        longitudeDelta: 0.01,
+        latitudeDelta: 0.002,  // Tight zoom on customer address (smaller = more zoom)
+        longitudeDelta: 0.002, // Tight zoom on customer address (smaller = more zoom)
       });
       setSelectedLocation(userLocation);
     }
     setShowAddressModal(true);
   };
 
-  const handleMapPress = async (event: any) => {
-    const { latitude, longitude } = event.nativeEvent.coordinate;
-    setSelectedLocation({ latitude, longitude });
+  // Handle map region change (when user pans the map)
+  const handleRegionChangeComplete = async (region: Region) => {
+    // Update map region state
+    setMapRegion(region);
+    
+    // Update selected location to map center
+    const centerLocation = {
+      latitude: region.latitude,
+      longitude: region.longitude,
+    };
+    setSelectedLocation(centerLocation);
+    
+    console.log('📍 Location updated:', centerLocation);
     
     // Reverse geocode to get address details
     try {
       const geocode = await Location.reverseGeocodeAsync({
-        latitude,
-        longitude,
+        latitude: region.latitude,
+        longitude: region.longitude,
       });
 
       if (geocode.length > 0) {
@@ -176,6 +279,7 @@ export default function CheckoutScreen() {
           street_address: `${addr.street || ''} ${addr.name || ''}`.trim(),
           barangay: addr.district || addr.subregion || '',
         }));
+        console.log('📍 Address updated:', addr.street, addr.district);
       }
     } catch (error) {
       console.error('Failed to reverse geocode:', error);
@@ -190,9 +294,36 @@ export default function CheckoutScreen() {
 
     setSavingAddress(true);
     try {
+      // Get customer ID from AsyncStorage
+      const userData = await AsyncStorage.getItem('user');
+      if (!userData) {
+        Alert.alert('Error', 'User not found. Please log in again.');
+        setSavingAddress(false);
+        return;
+      }
+      
+      const user = JSON.parse(userData);
+      console.log('👤 User data from AsyncStorage:', user);
+      
+      // Try multiple possible field names for customer ID
+      const customerId = user.customer_id || user.id || user.user_id || user.customer?.id;
+      
+      console.log('🔍 Customer ID found:', customerId);
+      
+      if (!customerId) {
+        console.error('❌ No customer ID found in user data:', user);
+        Alert.alert(
+          'Setup Required',
+          'Please complete your profile setup first. Your customer ID could not be found.',
+          [{ text: 'OK' }]
+        );
+        setSavingAddress(false);
+        return;
+      }
+
       // Prepare address data for API
       const addressData = {
-        customer_id: 24, // TODO: Get actual customer ID from auth context
+        customer_id: customerId,
         label: addressForm.label,
         street_address: addressForm.street_address,
         barangay: addressForm.barangay,
@@ -207,24 +338,30 @@ export default function CheckoutScreen() {
         is_default: true,
       };
 
-      console.log('📍 Saving address:', addressData);
+      console.log('📍 Saving address to database:', addressData);
 
-      // Call API to save address
+      // Call API to save address to database
       const response = await apiService.createOrUpdateAddress(addressData);
       
       if (response.success) {
+        console.log('✅ Address saved successfully to database:', response.data);
+        
         // Update local state with saved address
         setUserLocation(selectedLocation);
         setAddress(`${addressForm.street_address}, ${addressForm.barangay}, Iligan City, Lanao del Norte`);
         
+        // Close modal
         setShowAddressModal(false);
-        Alert.alert('Success', 'Address updated successfully!');
       } else {
         throw new Error(response.error || 'Failed to save address');
       }
     } catch (error: any) {
-      console.error('Failed to save address:', error);
-      Alert.alert('Error', `Failed to save address: ${error.message}`);
+      console.error('❌ Failed to save address:', error);
+      Alert.alert(
+        'Error', 
+        `Failed to save address: ${error.message || 'Please try again.'}`,
+        [{ text: 'OK' }]
+      );
     } finally {
       setSavingAddress(false);
     }
@@ -329,11 +466,12 @@ export default function CheckoutScreen() {
                 <MapView
                   style={styles.map}
                   provider={PROVIDER_GOOGLE}
+                  customMapStyle={customMapStyle}
                   initialRegion={{
                     latitude: userLocation.latitude,
                     longitude: userLocation.longitude,
-                    latitudeDelta: 0.005,
-                    longitudeDelta: 0.005,
+                    latitudeDelta: 0.002,
+                    longitudeDelta: 0.002,
                   }}
                   scrollEnabled={false}
                   zoomEnabled={false}
@@ -346,6 +484,7 @@ export default function CheckoutScreen() {
                       longitude: userLocation.longitude,
                     }}
                     title="Delivery Location"
+                    pinColor="#00bf63"
                   />
                 </MapView>
               </View>
@@ -366,69 +505,127 @@ export default function CheckoutScreen() {
 
           {/* Payment Method Container */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Payment Method</Text>
-
-            <View style={styles.paymentMethods}>
-              {/* Visa */}
-              <TouchableOpacity
-                style={[
-                  styles.paymentOption,
-                  selectedPaymentMethod === 'visa' && styles.paymentOptionActive,
-                ]}
-                onPress={() => setSelectedPaymentMethod('visa')}
-              >
-                <VisaIcon />
-                <Text style={styles.paymentLabel}>Visa</Text>
-                <View style={styles.radioOuter}>
-                  {selectedPaymentMethod === 'visa' && <View style={styles.radioInner} />}
-                </View>
-              </TouchableOpacity>
-
-              {/* GCash */}
-              <TouchableOpacity
-                style={[
-                  styles.paymentOption,
-                  selectedPaymentMethod === 'gcash' && styles.paymentOptionActive,
-                ]}
-                onPress={() => setSelectedPaymentMethod('gcash')}
-              >
-                <GCashIcon />
-                <Text style={styles.paymentLabel}>GCash</Text>
-                <View style={styles.radioOuter}>
-                  {selectedPaymentMethod === 'gcash' && <View style={styles.radioInner} />}
-                </View>
-              </TouchableOpacity>
-
-              {/* PayPal */}
-              <TouchableOpacity
-                style={[
-                  styles.paymentOption,
-                  selectedPaymentMethod === 'paypal' && styles.paymentOptionActive,
-                ]}
-                onPress={() => setSelectedPaymentMethod('paypal')}
-              >
-                <PayPalIcon />
-                <Text style={styles.paymentLabel}>PayPal</Text>
-                <View style={styles.radioOuter}>
-                  {selectedPaymentMethod === 'paypal' && <View style={styles.radioInner} />}
-                </View>
-              </TouchableOpacity>
-
-              {/* COD */}
-              <TouchableOpacity
-                style={[
-                  styles.paymentOption,
-                  selectedPaymentMethod === 'cod' && styles.paymentOptionActive,
-                ]}
-                onPress={() => setSelectedPaymentMethod('cod')}
-              >
-                <CODIcon />
-                <Text style={styles.paymentLabel}>Cash on Delivery</Text>
-                <View style={styles.radioOuter}>
-                  {selectedPaymentMethod === 'cod' && <View style={styles.radioInner} />}
-                </View>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Payment Method</Text>
+              <TouchableOpacity onPress={() => setPaymentMethodExpanded(!paymentMethodExpanded)}>
+                <Text style={styles.editButton}>{paymentMethodExpanded ? 'Done' : 'Edit'}</Text>
               </TouchableOpacity>
             </View>
+
+            {!paymentMethodExpanded ? (
+              // Collapsed view - show only selected method + total
+              <View style={styles.paymentSummary}>
+                <View style={styles.paymentSummaryLeft}>
+                  {selectedPaymentMethod === 'visa' && <VisaIcon />}
+                  {selectedPaymentMethod === 'bank_transfer' && <BankTransferIcon />}
+                  {selectedPaymentMethod === 'paypal' && <PayPalIcon />}
+                  {selectedPaymentMethod === 'cod' && <CODIcon />}
+                  <Text style={styles.paymentSummaryLabel}>{getPaymentMethodName(selectedPaymentMethod)}</Text>
+                </View>
+                <Text style={styles.paymentSummaryTotal}>₱{orderData?.total?.toFixed(2)}</Text>
+              </View>
+            ) : (
+              // Expanded view - show all payment options
+              <View style={styles.paymentMethods}>
+                {/* Visa */}
+                <TouchableOpacity
+                  style={[
+                    styles.paymentOption,
+                    selectedPaymentMethod === 'visa' && styles.paymentOptionActive,
+                    hasPendingSeniorDiscount && selectedPaymentMethod !== 'visa' && styles.paymentOptionDisabled,
+                  ]}
+                  onPress={() => {
+                    if (!hasPendingSeniorDiscount) {
+                      setSelectedPaymentMethod('visa');
+                    }
+                  }}
+                  disabled={hasPendingSeniorDiscount && selectedPaymentMethod !== 'visa'}
+                >
+                  <VisaIcon />
+                  <View style={styles.paymentLabelContainer}>
+                    <Text style={[styles.paymentLabel, hasPendingSeniorDiscount && selectedPaymentMethod !== 'visa' && styles.paymentLabelDisabled]}>Visa</Text>
+                    {hasPendingSeniorDiscount && selectedPaymentMethod !== 'visa' && (
+                      <Text style={styles.paymentRestrictionText}>Not available for pending senior discount</Text>
+                    )}
+                  </View>
+                  <View style={styles.radioOuter}>
+                    {selectedPaymentMethod === 'visa' && <View style={styles.radioInner} />}
+                  </View>
+                </TouchableOpacity>
+
+                {/* Bank Transfer */}
+                <TouchableOpacity
+                  style={[
+                    styles.paymentOption,
+                    selectedPaymentMethod === 'bank_transfer' && styles.paymentOptionActive,
+                    hasPendingSeniorDiscount && selectedPaymentMethod !== 'bank_transfer' && styles.paymentOptionDisabled,
+                  ]}
+                  onPress={() => {
+                    if (!hasPendingSeniorDiscount) {
+                      setSelectedPaymentMethod('bank_transfer');
+                    }
+                  }}
+                  disabled={hasPendingSeniorDiscount && selectedPaymentMethod !== 'bank_transfer'}
+                >
+                  <BankTransferIcon />
+                  <View style={styles.paymentLabelContainer}>
+                    <Text style={[styles.paymentLabel, hasPendingSeniorDiscount && selectedPaymentMethod !== 'bank_transfer' && styles.paymentLabelDisabled]}>Bank Transfer</Text>
+                    {hasPendingSeniorDiscount && selectedPaymentMethod !== 'bank_transfer' && (
+                      <Text style={styles.paymentRestrictionText}>Not available for pending senior discount</Text>
+                    )}
+                  </View>
+                  <View style={styles.radioOuter}>
+                    {selectedPaymentMethod === 'bank_transfer' && <View style={styles.radioInner} />}
+                  </View>
+                </TouchableOpacity>
+
+                {/* PayPal */}
+                <TouchableOpacity
+                  style={[
+                    styles.paymentOption,
+                    selectedPaymentMethod === 'paypal' && styles.paymentOptionActive,
+                    hasPendingSeniorDiscount && selectedPaymentMethod !== 'paypal' && styles.paymentOptionDisabled,
+                  ]}
+                  onPress={() => {
+                    if (!hasPendingSeniorDiscount) {
+                      setSelectedPaymentMethod('paypal');
+                    }
+                  }}
+                  disabled={hasPendingSeniorDiscount && selectedPaymentMethod !== 'paypal'}
+                >
+                  <PayPalIcon />
+                  <View style={styles.paymentLabelContainer}>
+                    <Text style={[styles.paymentLabel, hasPendingSeniorDiscount && selectedPaymentMethod !== 'paypal' && styles.paymentLabelDisabled]}>PayPal</Text>
+                    {hasPendingSeniorDiscount && selectedPaymentMethod !== 'paypal' && (
+                      <Text style={styles.paymentRestrictionText}>Not available for pending senior discount</Text>
+                    )}
+                  </View>
+                  <View style={styles.radioOuter}>
+                    {selectedPaymentMethod === 'paypal' && <View style={styles.radioInner} />}
+                  </View>
+                </TouchableOpacity>
+
+                {/* COD */}
+                <TouchableOpacity
+                  style={[
+                    styles.paymentOption,
+                    selectedPaymentMethod === 'cod' && styles.paymentOptionActive,
+                  ]}
+                  onPress={() => setSelectedPaymentMethod('cod')}
+                >
+                  <CODIcon />
+                  <View style={styles.paymentLabelContainer}>
+                    <Text style={styles.paymentLabel}>Cash on Delivery</Text>
+                    {hasPendingSeniorDiscount && (
+                      <Text style={styles.paymentAvailableText}>✓ Available for senior discount</Text>
+                    )}
+                  </View>
+                  <View style={styles.radioOuter}>
+                    {selectedPaymentMethod === 'cod' && <View style={styles.radioInner} />}
+                  </View>
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
 
           {/* Order Summary Container */}
@@ -436,6 +633,21 @@ export default function CheckoutScreen() {
             <Text style={styles.sectionTitle}>Order Summary</Text>
 
             <View style={styles.summaryContent}>
+              {/* Medicine Items List */}
+              {orderData?.cartItems && orderData.cartItems.length > 0 && (
+                <>
+                  {orderData.cartItems.map((item: any, index: number) => (
+                    <View key={index} style={styles.medicineItemRow}>
+                      <Text style={styles.medicineItemText}>
+                        {item.quantity}x {item.name}
+                      </Text>
+                      <Text style={styles.medicineItemPrice}>₱{(item.price * item.quantity).toFixed(2)}</Text>
+                    </View>
+                  ))}
+                  <View style={styles.separatorLine} />
+                </>
+              )}
+
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Subtotal:</Text>
                 <Text style={styles.summaryValue}>₱{orderData.subtotal?.toFixed(2)}</Text>
@@ -448,6 +660,22 @@ export default function CheckoutScreen() {
                   </Text>
                   <Text style={[styles.summaryValue, styles.discountValue]}>
                     -₱{orderData.potential_discount?.toFixed(2)}
+                  </Text>
+                </View>
+              )}
+
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Small Order Fee:</Text>
+                <Text style={[styles.summaryValue, orderData.apply_senior_discount && orderData.senior_id_image_url && styles.strikethroughText]}>
+                  ₱{BASE_SERVICE_FEE.toFixed(2)}
+                </Text>
+              </View>
+
+              {orderData.apply_senior_discount && orderData.senior_id_image_url && (
+                <View style={styles.summaryRow}>
+                  <Text style={[styles.summaryLabel, styles.seniorBenefitLabel]}>No order fee for seniors*:</Text>
+                  <Text style={[styles.summaryValue, styles.seniorBenefitValue]}>
+                    -₱{BASE_SERVICE_FEE.toFixed(2)}
                   </Text>
                 </View>
               )}
@@ -474,10 +702,10 @@ export default function CheckoutScreen() {
           {/* Terms and Conditions */}
           <View style={styles.termsContainer}>
             <Text style={styles.termsText}>
-              By placing this order, you agree to our terms of service and privacy policy. 
+              By placing this order, you agree to our <Text style={styles.termsHighlight}>terms of service</Text> and <Text style={styles.termsHighlight}>privacy policy</Text>. 
               Your payment will be processed securely. For Cash on Delivery orders, please 
               have the exact amount ready for our delivery partner. We&apos;re committed to 
-              delivering your medicines safely and on time! 🚚💊
+              delivering your medicines safely and on time!
             </Text>
           </View>
 
@@ -528,24 +756,52 @@ export default function CheckoutScreen() {
             {/* Map Section */}
             <View style={styles.modalMapContainer}>
               {mapRegion ? (
-                <MapView
-                  style={styles.modalMap}
-                  provider={PROVIDER_GOOGLE}
-                  initialRegion={mapRegion}
-                  onPress={handleMapPress}
-                  showsUserLocation={true}
-                  showsMyLocationButton={true}
-                >
-                  {selectedLocation && (
-                    <Marker
-                      coordinate={{
-                        latitude: selectedLocation.latitude,
-                        longitude: selectedLocation.longitude,
-                      }}
-                      title="Selected Location"
-                    />
-                  )}
-                </MapView>
+                <>
+                  <MapView
+                    style={styles.modalMap}
+                    provider={PROVIDER_GOOGLE}
+                    region={mapRegion}
+                    customMapStyle={customMapStyle}
+                    onRegionChangeComplete={handleRegionChangeComplete}
+                    showsUserLocation={true}
+                    showsMyLocationButton={true}
+                    zoomEnabled={true}
+                    zoomControlEnabled={true}
+                    zoomTapEnabled={true}
+                    scrollEnabled={true}
+                    pitchEnabled={false}
+                    rotateEnabled={false}
+                    minZoomLevel={10}
+                    maxZoomLevel={20}
+                  />
+                  
+                  {/* Fixed center marker overlay */}
+                  <View style={styles.centerMarkerContainer}>
+                    {/* Shadow circle under pin */}
+                    <View style={styles.markerShadow} />
+                    
+                    {/* Pin icon */}
+                    <View style={styles.centerMarker}>
+                      <Svg width={40} height={50} viewBox="0 0 40 50">
+                        {/* Pin shadow */}
+                        <Path
+                          d="M20 46 C20 46, 12 38, 12 28 C12 22, 15 18, 20 18 C25 18, 28 22, 28 28 C28 38, 20 46, 20 46"
+                          fill="rgba(0,0,0,0.2)"
+                        />
+                        {/* Pin body */}
+                        <Path
+                          d="M20 2 C11 2, 4 9, 4 18 C4 28, 20 42, 20 42 C20 42, 36 28, 36 18 C36 9, 29 2, 20 2 Z"
+                          fill="#00bf63"
+                        />
+                        {/* Pin center dot */}
+                        <Path
+                          d="M20 12 C17 12, 14 15, 14 18 C14 21, 17 24, 20 24 C23 24, 26 21, 26 18 C26 15, 23 12, 20 12 Z"
+                          fill="#FFFFFF"
+                        />
+                      </Svg>
+                    </View>
+                  </View>
+                </>
               ) : (
                 <View style={styles.mapPlaceholder}>
                   <ActivityIndicator color="#00bf63" />
@@ -563,7 +819,7 @@ export default function CheckoutScreen() {
                   {[
                     { value: 'home', label: 'Home' },
                     { value: 'work', label: 'Work' },
-                    { value: 'parent_house', label: 'Parent\'s House' },
+                    { value: 'parent_house', label: 'Parents' },
                     { value: 'other', label: 'Other' },
                   ].map((option) => (
                     <TouchableOpacity
@@ -791,42 +1047,77 @@ const styles = StyleSheet.create({
   paymentMethods: {
     marginTop: 15,
   },
+  paymentSummary: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 10,
+    backgroundColor: '#F8F8F8',
+    borderRadius: 12,
+    marginTop: 15,
+  },
+  paymentSummaryLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  paymentSummaryLabel: {
+    fontSize: 14,
+    color: '#333333',
+    fontWeight: '500',
+  },
+  paymentSummaryTotal: {
+    fontSize: 18,
+    fontFamily: fontFamily.heavy,
+    color: '#00bf63',
+  },
   paymentOption: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 15,
+    padding: 10,
     borderRadius: 12,
-    borderWidth: 2,
-    borderColor: '#E0E0E0',
     marginBottom: 12,
   },
   paymentOptionActive: {
     borderColor: '#00bf63',
     backgroundColor: '#F0F9F4',
+    
   },
-  paymentIconPlaceholder: {
+  paymentOptionDisabled: {
+    opacity: 0.5,
+    backgroundColor: '#F5F5F5',
+  },
+  paymentIcon: {
     width: 50,
     height: 32,
-    backgroundColor: '#1434CB',
-    borderRadius: 6,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 15,
+    opacity: 0.7,
   },
-  paymentIconText: {
-    fontSize: 10,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
+  paymentLabelContainer: {
+    flex: 1,
   },
   paymentLabel: {
-    flex: 1,
     fontSize: 16,
     color: '#333333',
     fontWeight: '500',
   },
+  paymentLabelDisabled: {
+    color: '#999999',
+  },
+  paymentRestrictionText: {
+    fontSize: 11,
+    color: '#FF6B6B',
+    marginTop: 2,
+    fontStyle: 'italic',
+  },
+  paymentAvailableText: {
+    fontSize: 11,
+    color: '#00bf63',
+    marginTop: 2,
+    fontWeight: '600',
+  },
   radioOuter: {
-    width: 24,
-    height: 24,
+    width: 18,
+    height: 18,
     borderRadius: 12,
     borderWidth: 2,
     borderColor: '#00bf63',
@@ -834,14 +1125,38 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   radioInner: {
-    width: 12,
-    height: 12,
+    width: 6,
+    height: 6,
     borderRadius: 6,
     backgroundColor: '#00bf63',
   },
   // Order Summary
   summaryContent: {
     marginTop: 15,
+  },
+  medicineItemRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 10,
+    paddingVertical: 4,
+  },
+  medicineItemText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#333333',
+    lineHeight: 20,
+    paddingRight: 10,
+  },
+  medicineItemPrice: {
+    fontSize: 14,
+    color: '#333333',
+    fontWeight: '500',
+  },
+  separatorLine: {
+    height: 1,
+    backgroundColor: '#E0E0E0',
+    marginVertical: 15,
   },
   summaryRow: {
     flexDirection: 'row',
@@ -863,6 +1178,18 @@ const styles = StyleSheet.create({
   discountValue: {
     color: '#00bf63',
     fontWeight: '600',
+  },
+  strikethroughText: {
+    textDecorationLine: 'line-through',
+    color: '#999999',
+  },
+  seniorBenefitLabel: {
+    color: '#00bf63',
+    fontSize: 13,
+  },
+  seniorBenefitValue: {
+    color: '#00bf63',
+    fontWeight: '700',
   },
   totalRow: {
     borderTopWidth: 1,
@@ -899,7 +1226,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#666666',
     lineHeight: 18,
-    textAlign: 'center',
+    textAlign: 'justify',
+  },
+  termsHighlight: {
+    color: '#00bf63',
+    fontWeight: '600',
   },
   // Bottom Container
   bottomContainer: {
@@ -929,6 +1260,7 @@ const styles = StyleSheet.create({
   modalContainer: {
     flex: 1,
     backgroundColor: '#FFFFFF',
+    paddingBottom: 20,
   },
   modalHeader: {
     flexDirection: 'row',
@@ -960,11 +1292,33 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   modalMapContainer: {
-    height: 300,
+    height: 200,
+    position: 'relative',
   },
   modalMap: {
     width: '100%',
     height: '100%',
+  },
+  centerMarkerContainer: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    marginLeft: -20,
+    marginTop: -50,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  centerMarker: {
+    width: 40,
+    height: 50,
+  },
+  markerShadow: {
+    position: 'absolute',
+    bottom: 0,
+    width: 20,
+    height: 8,
+    borderRadius: 10,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
   },
   modalForm: {
     flex: 1,
