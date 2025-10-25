@@ -213,7 +213,6 @@ urlpatterns = [
         
         # Chat (delegated)
         path('', include('api.chat.urls')),
-        path('', include('api.chat.urls_dev')),  # Simple chat endpoints for pharmacy dashboard
         
         # Global API (delegated)
         path('', include('api.global_api.urls')),
