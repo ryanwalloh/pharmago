@@ -328,6 +328,156 @@ const PharmacyDashboard = () => {
     }));
   };
 
+  // Cart Order Handlers
+  const handleApproveSeniorDiscount = async (orderId) => {
+    if (!userInfo?.id) {
+      alert('User information not found. Please log in again.');
+      return;
+    }
+
+    try {
+      const base = (process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
+      const response = await fetch(`${base}/api/orders/pharmacy-review-senior-discount/${orderId}/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          pharmacy_user_id: userInfo.id,
+          action: 'approve',
+          notes: 'Senior ID verified and approved'
+        })
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        console.log('✅ Senior discount approved:', data);
+        
+        // Update selected order with new totals
+        setSelectedOrder(prev => ({
+          ...prev,
+          seniorDiscountStatus: 'approved',
+          discount_amount: data.discount_amount,
+          totalAmount: data.new_total
+        }));
+        
+        // Refresh orders to show updated data
+        if (pharmacyInfo?.id) {
+          fetchOrders(pharmacyInfo.id);
+        }
+        
+        alert(`Senior discount approved! New total: ₱${data.new_total.toFixed(2)}`);
+      } else {
+        console.error('Failed to approve senior discount:', data);
+        alert(data.error || 'Failed to approve senior discount');
+      }
+    } catch (error) {
+      console.error('Error approving senior discount:', error);
+      alert('Failed to approve senior discount. Please try again.');
+    }
+  };
+
+  const handleRejectSeniorDiscount = async (orderId) => {
+    if (!userInfo?.id) {
+      alert('User information not found. Please log in again.');
+      return;
+    }
+
+    const reason = prompt('Reason for rejecting senior discount (optional):');
+    if (reason === null) return; // User cancelled
+
+    try {
+      const base = (process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
+      const response = await fetch(`${base}/api/orders/pharmacy-review-senior-discount/${orderId}/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          pharmacy_user_id: userInfo.id,
+          action: 'reject',
+          notes: reason || 'Senior ID not verified'
+        })
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        console.log('❌ Senior discount rejected:', data);
+        
+        // Update selected order
+        setSelectedOrder(prev => ({
+          ...prev,
+          seniorDiscountStatus: 'rejected',
+          discount_amount: 0,
+          totalAmount: data.new_total
+        }));
+        
+        // Refresh orders
+        if (pharmacyInfo?.id) {
+          fetchOrders(pharmacyInfo.id);
+        }
+        
+        alert(`Senior discount rejected. Total: ₱${data.new_total.toFixed(2)}`);
+      } else {
+        console.error('Failed to reject senior discount:', data);
+        alert(data.error || 'Failed to reject senior discount');
+      }
+    } catch (error) {
+      console.error('Error rejecting senior discount:', error);
+      alert('Failed to reject senior discount. Please try again.');
+    }
+  };
+
+  const handleAcceptCartOrder = async (orderId) => {
+    if (!userInfo?.id) {
+      alert('User information not found. Please log in again.');
+      return;
+    }
+
+    try {
+      const base = (process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
+      const response = await fetch(`${base}/api/accept-cart-order/${orderId}/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          pharmacy_user_id: userInfo.id,
+          notes: ''
+        })
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        console.log('✅ Cart order accepted:', data);
+        
+        // Move order from pending to preparing
+        const orderToMove = orders.pending.find(order => order.id === orderId);
+        if (orderToMove) {
+          setOrders(prev => ({
+            ...prev,
+            pending: prev.pending.filter(order => order.id !== orderId),
+            preparing: [...prev.preparing, { ...orderToMove, order_status: 'accepted' }]
+          }));
+        }
+        
+        // Close modal
+        handleCloseModal();
+        
+        alert('Order accepted successfully! Moving to preparing queue.');
+      } else {
+        console.error('Failed to accept cart order:', data);
+        alert(data.error || 'Failed to accept cart order');
+      }
+    } catch (error) {
+      console.error('Error accepting cart order:', error);
+      alert('Failed to accept cart order. Please try again.');
+    }
+  };
+
   const handleAttachPrescriptionItems = async (order) => {
     try {
       console.log('🔗 Attaching prescription items - start', { orderId: order?.id, selectedCount: reviewSelectedItems.length });
@@ -2761,15 +2911,368 @@ const PharmacyDashboard = () => {
                       </div>
                     </>
                   ) : (
-                    // Show regular items for non-prescription orders
-                    <div className="w-full p-6">
-                      <h2 className="text-lg font-semibold mb-3">Order Items</h2>
-                      <div className="space-y-2">
-                        {selectedOrder.items.map((item, index) => (
-                          <div key={index} className="text-sm">{item.product} x {item.quantity}</div>
-                        ))}
+                    // ✅ NEW: Cart Order Modal (non-prescription orders)
+                    <>
+                      {/* Left Side: Chat Panel + Senior ID */}
+                      <div className="w-1/2 relative bg-gray-50 flex flex-col">
+                        {/* Chat Panel */}
+                        <div className="flex-1 flex flex-col">
+                          {/* Chat Header */}
+                          <div className="px-4 py-3 border-b bg-white">
+                            <h3 className="text-sm font-semibold text-gray-800">Chat with Customer</h3>
+                            <p className="text-xs text-gray-500">Order No. {selectedOrder.orderNumber}{chatRoom ? ` • Room ${chatRoom.room_id}` : ''}</p>
+                            {chatTyping.customer && (
+                              <p className="text-[11px] text-[#2c786c] mt-0.5">Customer is typing…</p>
+                            )}
+                          </div>
+
+                          {/* Messages Container */}
+                          <div ref={chatMessagesContainerRef} className="flex-1 overflow-auto p-4 space-y-3 bg-gray-50">
+                            {chatError && (
+                              <div className="text-xs text-red-600 text-center">{chatError}</div>
+                            )}
+                            {!chatError && chatMessages.length === 0 && !chatMessagesLoading && (
+                              <div className="text-xs text-gray-500 text-center">
+                                {chatRoom ? 'No messages yet.' : 'Click "Open Chat" to start messaging'}
+                              </div>
+                            )}
+                            {chatMessages.map((m) => (
+                              <div key={m.id} className={`flex flex-col ${((m.sender_role_code === 'pharmacy') || (m.sender_role === 'pharmacy')) ? 'items-end text-right' : 'items-start'}`}>
+                                <div className="text-[11px] text-gray-500">{m.sender_name} • {new Date(m.timestamp).toLocaleString()}</div>
+                                <div className={`inline-block max-w-[85%] mt-1 px-3 py-2 rounded-lg text-sm ${m.is_system_message ? 'bg-gray-200 text-gray-700' : ((m.sender_role_code === 'customer' || m.sender_role === 'customer') ? 'bg-green-50 border border-green-200 text-green-900' : 'bg-white border text-gray-800')} ${m._optimistic ? 'opacity-50' : ''}`}>
+                                  {m.content}
+                                  {!m.is_system_message && (m.sender_role_code === 'pharmacy' || m.sender_role === 'pharmacy') && (
+                                    <span className="ml-2 align-middle text-[10px] text-gray-400">
+                                      {m.read_at ? '✓✓' : (m.delivered_at ? '✓' : '')}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                            {chatMessagesLoading && chatMessages.length === 0 && (
+                              <div className="text-xs text-gray-500 text-center">Loading messages…</div>
+                            )}
+                          </div>
+
+                          {/* Chat Input */}
+                          <div className="p-3 border-t bg-white">
+                            <div className="flex items-center space-x-2">
+                              <input
+                                type="text"
+                                className="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2c786c]"
+                                placeholder="Type a message..."
+                                value={chatInput}
+                                onChange={(e) => {
+                                  setChatInput(e.target.value);
+                                  if (chatRoom) sendTypingState.current(chatRoom.id, true);
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    const btn = document.getElementById('cart-chat-send-btn');
+                                    if (btn) btn.click();
+                                  }
+                                }}
+                                disabled={chatSending || !chatRoom}
+                              />
+                              <button
+                                id="cart-chat-send-btn"
+                                className="px-3 py-2 rounded-lg bg-[#2c786c] text-white text-sm disabled:opacity-50"
+                                disabled={chatSending || !chatRoom || !chatInput.trim()}
+                                onClick={async () => {
+                                  if (!chatRoom || !chatInput.trim()) {
+                                    // Open chat if not opened yet
+                                    if (!chatRoom) {
+                                      try {
+                                        setChatLoading(true);
+                                        const storedPharmacyInfo = localStorage.getItem('pharmacy_info');
+                                        const pharmacy = storedPharmacyInfo ? JSON.parse(storedPharmacyInfo) : null;
+                                        const base = (process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
+                                        const resp = await fetch(`${base}/api/order-chat-room/`, {
+                                          method: 'POST',
+                                          headers: { 'Content-Type': 'application/json' },
+                                          body: JSON.stringify({ order_id: selectedOrder.id, pharmacy_id: pharmacy?.id })
+                                        });
+                                        const data = await resp.json();
+                                        if (data.success) {
+                                          const roomId = data.room_id || data.room?.id;
+                                          setChatRoom({ id: roomId, room_id: data.room_key || data.room?.room_id });
+                                          await fetchChatMessages(roomId);
+                                          if (chatPollRef.current) clearInterval(chatPollRef.current);
+                                          chatPollRef.current = setInterval(() => fetchChatMessages(roomId, { silent: true }), 12000);
+                                        }
+                                      } catch (e) {
+                                        console.error('Error opening chat:', e);
+                                      } finally {
+                                        setChatLoading(false);
+                                      }
+                                    }
+                                    return;
+                                  }
+                                  try {
+                                    setChatSending(true);
+                                    const storedPharmacyInfo = localStorage.getItem('pharmacy_info');
+                                    const pharmacy = storedPharmacyInfo ? JSON.parse(storedPharmacyInfo) : null;
+                                    const optimistic = {
+                                      id: `temp-${Date.now()}`,
+                                      sender_name: 'You',
+                                      sender_role: 'Pharmacy',
+                                      content: chatInput.trim(),
+                                      timestamp: new Date().toISOString(),
+                                      is_system_message: false,
+                                      _optimistic: true
+                                    };
+                                    setChatMessages(prev => [...prev, optimistic]);
+                                    setChatInput('');
+                                    requestAnimationFrame(() => {
+                                      if (chatMessagesContainerRef.current) {
+                                        chatMessagesContainerRef.current.scrollTop = chatMessagesContainerRef.current.scrollHeight;
+                                      }
+                                    });
+                                    const base = (process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
+                                    const resp = await fetch(`${base}/api/order-chat-send/`, {
+                                      method: 'POST',
+                                      headers: { 'Content-Type': 'application/json' },
+                                      body: JSON.stringify({ room_id: chatRoom.id, pharmacy_id: pharmacy?.id, content: chatInput.trim() })
+                                    });
+                                    const data = await resp.json();
+                                    if (!resp.ok || !data.success) {
+                                      setChatError(data.error || 'Failed to send message');
+                                    }
+                                    await fetchChatMessages(chatRoom.id, { silent: true });
+                                  } catch (e) {
+                                    console.error('Send error', e);
+                                    setChatError('Unexpected error');
+                                  } finally {
+                                    setChatSending(false);
+                                  }
+                                }}
+                              >
+                                {chatSending ? 'Sending…' : (chatRoom ? 'Send' : 'Open Chat')}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Senior Citizen ID Section */}
+                        {selectedOrder.seniorDiscountRequested && selectedOrder.seniorCitizenIdImage && (
+                          <div className="border-t bg-white p-4">
+                            <div className="flex items-center justify-between mb-2">
+                              <h3 className="text-sm font-semibold text-gray-800">💚 Senior Citizen ID</h3>
+                              <span className={`text-xs px-2 py-1 rounded-full ${
+                                selectedOrder.seniorDiscountStatus === 'approved' ? 'bg-green-100 text-green-700' :
+                                selectedOrder.seniorDiscountStatus === 'rejected' ? 'bg-red-100 text-red-700' :
+                                'bg-yellow-100 text-yellow-700'
+                              }`}>
+                                {selectedOrder.seniorDiscountStatus === 'approved' ? 'Approved' :
+                                 selectedOrder.seniorDiscountStatus === 'rejected' ? 'Rejected' :
+                                 'Pending Review'}
+                              </span>
+                            </div>
+                            <div className="relative">
+                              <img 
+                                src={selectedOrder.seniorCitizenIdImage} 
+                                alt="Senior Citizen ID" 
+                                className="w-full h-32 object-contain bg-gray-100 rounded cursor-pointer hover:opacity-90"
+                                onClick={() => {
+                                  setPrescriptionImagePreviewUrl(selectedOrder.seniorCitizenIdImage);
+                                  setIsPrescriptionImagePreviewOpen(true);
+                                }}
+                                onError={(e) => {
+                                  e.target.src = '/images/id-placeholder.png';
+                                }}
+                              />
+                              <p className="text-xs text-gray-500 mt-1 text-center">Click to enlarge</p>
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    </div>
+
+                      {/* Right Side: Order Details & Actions */}
+                      <div className="w-1/2 p-6 flex flex-col overflow-y-auto">
+                        <h2 className="text-lg font-semibold text-gray-800 mb-4">Order Details</h2>
+                        
+                        {/* Order Items */}
+                        <div className="mb-4">
+                          <h3 className="text-sm font-medium text-gray-700 mb-2">📦 Items</h3>
+                          <div className="space-y-2 bg-gray-50 p-3 rounded-lg">
+                            {selectedOrder.items && selectedOrder.items.length > 0 ? (
+                              selectedOrder.items.map((item, index) => (
+                                <div key={index} className="flex justify-between items-start text-sm">
+                                  <span className="flex-1">
+                                    {item.quantity}x {item.name}
+                                    {item.prescription_required && (
+                                      <span className="ml-2 text-xs text-red-500">⚕ Rx Required</span>
+                                    )}
+                                  </span>
+                                  <span className="font-medium">₱{item.total_price.toFixed(2)}</span>
+                                </div>
+                              ))
+                            ) : (
+                              <div className="text-xs text-gray-500">No items in order</div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Order Summary */}
+                        <div className="mb-4">
+                          <h3 className="text-sm font-medium text-gray-700 mb-2">💰 Order Summary</h3>
+                          <div className="bg-gray-50 p-3 rounded-lg space-y-1">
+                            <div className="flex justify-between text-sm">
+                              <span className="text-gray-600">Subtotal:</span>
+                              <span className="font-medium">₱{(selectedOrder.subtotal || 0).toFixed(2)}</span>
+                            </div>
+                            <div className="flex justify-between text-sm">
+                              <span className="text-gray-600">Small Order Fee:</span>
+                              <span className={`font-medium ${selectedOrder.seniorDiscountRequested && selectedOrder.tax_amount === 0 ? 'line-through text-gray-400' : ''}`}>
+                                ₱{(selectedOrder.tax_amount || 0).toFixed(2)}
+                              </span>
+                            </div>
+                            {selectedOrder.seniorDiscountRequested && selectedOrder.tax_amount === 0 && (
+                              <div className="flex justify-between text-sm text-green-600">
+                                <span>No order fee for seniors:</span>
+                                <span className="font-semibold">-₱19.00</span>
+                              </div>
+                            )}
+                            <div className="flex justify-between text-sm">
+                              <span className="text-gray-600">Delivery Fee:</span>
+                              <span className="font-medium">₱{(selectedOrder.delivery_fee || 0).toFixed(2)}</span>
+                            </div>
+                            {selectedOrder.discount_amount > 0 && (
+                              <div className="flex justify-between text-sm text-green-600">
+                                <span>Senior Discount (20%):</span>
+                                <span className="font-semibold">-₱{(selectedOrder.discount_amount || 0).toFixed(2)}</span>
+                              </div>
+                            )}
+                            <div className="border-t pt-2 mt-2"></div>
+                            <div className="flex justify-between text-base font-bold">
+                              <span>Total:</span>
+                              <span className="text-[#2c786c]">₱{(selectedOrder.totalAmount || 0).toFixed(2)}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Senior Discount Actions */}
+                        {selectedOrder.seniorDiscountRequested && selectedOrder.seniorDiscountStatus === 'pending' && (
+                          <div className="mb-4">
+                            <h3 className="text-sm font-medium text-gray-700 mb-2">💚 Senior Citizen Discount Review</h3>
+                            <div className="bg-yellow-50 border border-yellow-200 p-3 rounded-lg mb-3">
+                              <p className="text-sm text-gray-700 mb-1">
+                                Customer has requested senior citizen discount
+                              </p>
+                              <p className="text-xs text-gray-600">
+                                Potential discount: ₱{((selectedOrder.subtotal || 0) * 0.20).toFixed(2)} (20% off)
+                              </p>
+                              <p className="text-xs text-gray-600">
+                                Service fee already waived: ₱19.00
+                              </p>
+                            </div>
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => handleApproveSeniorDiscount(selectedOrder.id)}
+                                className="flex-1 bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors"
+                              >
+                                ✓ Approve Discount
+                              </button>
+                              <button
+                                onClick={() => handleRejectSeniorDiscount(selectedOrder.id)}
+                                className="flex-1 bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-700 transition-colors"
+                              >
+                                ✗ Reject Discount
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Senior Discount Status (if already reviewed) */}
+                        {selectedOrder.seniorDiscountRequested && selectedOrder.seniorDiscountStatus !== 'pending' && (
+                          <div className="mb-4">
+                            <div className={`p-3 rounded-lg ${
+                              selectedOrder.seniorDiscountStatus === 'approved' 
+                                ? 'bg-green-50 border border-green-200' 
+                                : 'bg-red-50 border border-red-200'
+                            }`}>
+                              <p className="text-sm font-medium">
+                                {selectedOrder.seniorDiscountStatus === 'approved' 
+                                  ? '✓ Senior discount approved' 
+                                  : '✗ Senior discount rejected'}
+                              </p>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Order Actions */}
+                        <div className="mt-auto space-y-2">
+                          {selectedOrder.order_status === 'pending' && (
+                            <>
+                              {!chatRoom && (
+                                <button
+                                  onClick={async () => {
+                                    try {
+                                      setChatLoading(true);
+                                      const storedPharmacyInfo = localStorage.getItem('pharmacy_info');
+                                      const pharmacy = storedPharmacyInfo ? JSON.parse(storedPharmacyInfo) : null;
+                                      const base = (process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
+                                      const resp = await fetch(`${base}/api/order-chat-room/`, {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ order_id: selectedOrder.id, pharmacy_id: pharmacy?.id })
+                                      });
+                                      const data = await resp.json();
+                                      if (data.success) {
+                                        const roomId = data.room_id || data.room?.id;
+                                        setChatRoom({ id: roomId, room_id: data.room_key || data.room?.room_id });
+                                        await fetchChatMessages(roomId);
+                                        if (chatPollRef.current) clearInterval(chatPollRef.current);
+                                        chatPollRef.current = setInterval(() => fetchChatMessages(roomId, { silent: true }), 12000);
+                                        if (chatTypingPollRef.current) clearInterval(chatTypingPollRef.current);
+                                        chatTypingPollRef.current = setInterval(() => pollTypingStatus(roomId), 4000);
+                                      }
+                                    } catch (e) {
+                                      console.error('Error opening chat:', e);
+                                    } finally {
+                                      setChatLoading(false);
+                                    }
+                                  }}
+                                  className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-50"
+                                  disabled={chatLoading}
+                                >
+                                  {chatLoading ? 'Opening Chat...' : '💬 Open Chat with Customer'}
+                                </button>
+                              )}
+                              
+                              <button
+                                onClick={() => handleAcceptCartOrder(selectedOrder.id)}
+                                className="w-full bg-[#2c786c] text-white px-4 py-3 rounded-lg text-base font-semibold hover:bg-[#1e5a52] transition-colors"
+                              >
+                                ✓ Accept & Start Preparing Order
+                              </button>
+                              
+                              <button
+                                onClick={() => {
+                                  if (window.confirm('Are you sure you want to reject this order?')) {
+                                    // TODO: Implement reject order endpoint
+                                    alert('Reject order functionality coming soon');
+                                  }
+                                }}
+                                className="w-full bg-gray-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-600 transition-colors"
+                              >
+                                ✗ Reject Order
+                              </button>
+                            </>
+                          )}
+                          
+                          {selectedOrder.order_status === 'accepted' && (
+                            <button
+                              onClick={() => handleReadyOrder(selectedOrder.id)}
+                              className="w-full bg-orange-500 text-white px-4 py-3 rounded-lg text-base font-semibold hover:bg-orange-600 transition-colors"
+                            >
+                              Mark as Ready for Pickup
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </>
                   )}
                 </div>
 

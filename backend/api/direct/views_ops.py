@@ -392,11 +392,41 @@ def direct_pharmacy_orders(request, pharmacy_id):
                     img_url = request.build_absolute_uri(raw_img)
             except Exception:
                 img_url = raw_img
+            
+            # Get order items (for cart orders)
+            items_list = []
+            try:
+                for line in order.order_lines.all():
+                    # Skip zero-price placeholder items
+                    if float(line.total_price) > 0:
+                        items_list.append({
+                            'id': line.id,
+                            'name': line.inventory_item.name,
+                            'quantity': line.quantity,
+                            'unit_price': float(line.unit_price),
+                            'total_price': float(line.total_price),
+                            'prescription_required': line.prescription_required
+                        })
+            except Exception:
+                items_list = []
+            
+            # Get senior discount info
+            senior_id_url = getattr(order, 'senior_citizen_id_image', '') or ''
+            try:
+                if senior_id_url and not str(senior_id_url).startswith('http'):
+                    senior_id_url = request.build_absolute_uri(senior_id_url)
+            except Exception:
+                pass
+            
             return {
                 'id': order.id,
                 'order_number': getattr(order, 'order_number', order.id),
                 'order_status': getattr(order, 'order_status', ''),
                 'total_amount': _safe_float(getattr(order, 'total_amount', 0)),
+                'subtotal': _safe_float(getattr(order, 'subtotal', 0)),
+                'tax_amount': _safe_float(getattr(order, 'tax_amount', 0)),
+                'delivery_fee': _safe_float(getattr(order, 'delivery_fee', 0)),
+                'discount_amount': _safe_float(getattr(order, 'discount_amount', 0)),
                 'created_at': order.created_at.isoformat() if getattr(order, 'created_at', None) else None,
                 # Frontend compatibility (camelCase fields used by PharmacyDashboard)
                 'totalAmount': _safe_float(getattr(order, 'total_amount', 0)),
@@ -408,6 +438,11 @@ def direct_pharmacy_orders(request, pharmacy_id):
                 'customerAddress': '',
                 'riderName': '',
                 'riderPhone': '',
+                # Cart order specific fields
+                'items': items_list,
+                'seniorDiscountRequested': getattr(order, 'senior_discount_requested', False),
+                'seniorCitizenIdImage': senior_id_url,
+                'seniorDiscountStatus': getattr(order, 'senior_discount_status', 'not_requested'),
             }
         pend = [serialize(o) for o in qs.filter(order_status='pending')[:200]]
         prep = [serialize(o) for o in qs.filter(order_status__in=['preparing', 'accepted'])[:200]]
@@ -523,6 +558,86 @@ def prepare_price_quote(request):
         return JsonResponse({'success': False, 'error': 'Order not found'}, status=404)
     except Exception as e:
         return JsonResponse({'success': False, 'error': 'Failed to prepare price quote', 'message': str(e)}, status=500)
+
+
+@csrf_exempt
+def accept_cart_order(request, order_id):
+    """
+    Pharmacy accepts a cart order (non-prescription order with items already priced)
+    
+    POST /api/accept-cart-order/<order_id>/
+    {
+        "pharmacy_user_id": 5,
+        "notes": "" (optional)
+    }
+    """
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
+    
+    try:
+        import json
+        from api.orders.models import Order
+        from api.users.models import User
+        
+        data = json.loads(request.body or '{}')
+        pharmacy_user_id = data.get('pharmacy_user_id')
+        notes = data.get('notes', '')
+        
+        # Get order
+        try:
+            order = Order.objects.select_related('customer').get(id=order_id)
+        except Order.DoesNotExist:
+            return JsonResponse({
+                'success': False,
+                'error': f'Order with ID {order_id} not found'
+            }, status=404)
+        
+        # Verify order is pending
+        if order.order_status != Order.OrderStatus.PENDING:
+            return JsonResponse({
+                'success': False,
+                'error': f'Order is already {order.order_status}, cannot accept'
+            }, status=400)
+        
+        # Get pharmacy user (optional for now)
+        pharmacy_user = None
+        if pharmacy_user_id:
+            try:
+                pharmacy_user = User.objects.get(id=pharmacy_user_id)
+            except User.DoesNotExist:
+                pass
+        
+        # Update order status to accepted
+        order.update_status(
+            Order.OrderStatus.ACCEPTED,
+            notes=notes or 'Cart order accepted by pharmacy'
+        )
+        
+        logger.info(f"✅ Cart order accepted: {order.order_number} (ID: {order_id})")
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Order accepted successfully',
+            'order_id': order.id,
+            'order_number': order.order_number,
+            'order_status': order.order_status,
+            'total_amount': float(order.total_amount)
+        })
+        
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'success': False,
+            'error': 'Invalid JSON in request body'
+        }, status=400)
+    except Exception as e:
+        logger.error(f"❌ Error accepting cart order: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({
+            'success': False,
+            'error': 'Failed to accept cart order',
+            'message': str(e)
+        }, status=500)
 
 
 @csrf_exempt
