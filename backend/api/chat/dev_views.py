@@ -34,6 +34,7 @@ def get_or_create_order_chat_room(request):
         return JsonResponse({'success': False, 'error': 'Failed to create room', 'message': str(e)}, status=500)
 
 
+@csrf_exempt
 def get_order_chat_messages(request):
     try:
         from api.chat.models import ChatRoom, ChatMessage
@@ -187,6 +188,7 @@ def set_order_chat_typing(request):
         return JsonResponse({'success': False, 'error': 'Failed to set typing state', 'message': str(e)}, status=500)
 
 
+@csrf_exempt
 def get_order_chat_typing_status(request):
     try:
         from django.core.cache import cache
