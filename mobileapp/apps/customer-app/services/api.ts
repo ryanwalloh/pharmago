@@ -341,7 +341,7 @@ class ApiService {
   ): Promise<ApiResponse<any>> {
     console.log('📏 Calculating distance and delivery fee');
     return this.makeDirectRequest(
-      `/calculate-distance-fee/?pharmacy_lat=${pharmacyLat}&pharmacy_lng=${pharmacyLng}&customer_lat=${customerLat}&customer_lng=${customerLng}`
+      `/calculate-distance-and-fee/?pharmacy_lat=${pharmacyLat}&pharmacy_lng=${pharmacyLng}&customer_lat=${customerLat}&customer_lng=${customerLng}`
     );
   }
 
