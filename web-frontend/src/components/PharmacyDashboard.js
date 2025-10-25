@@ -253,7 +253,7 @@ const PharmacyDashboard = () => {
     setIsOnline(!isOnline);
   };
 
-  const handleViewOrder = (order) => {
+  const handleViewOrder = async (order) => {
     const safeOrder = {
       ...order,
       items: Array.isArray(order?.items) ? order.items : [],
@@ -262,7 +262,38 @@ const PharmacyDashboard = () => {
       prescriptionImageUrl: order?.prescriptionImageUrl || '',
     };
     setSelectedOrder(safeOrder);
-    // Ensure inventory is loaded for review search
+    
+    // Auto-activate chat for cart orders (non-prescription orders)
+    const isCartOrder = !safeOrder.isPrescriptionOrder;
+    if (isCartOrder) {
+      try {
+        setChatLoading(true);
+        const storedPharmacyInfo = localStorage.getItem('pharmacy_info');
+        const pharmacy = storedPharmacyInfo ? JSON.parse(storedPharmacyInfo) : null;
+        const base = (process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
+        const resp = await fetch(`${base}/api/order-chat-room/`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ order_id: safeOrder.id, pharmacy_id: pharmacy?.id })
+        });
+        const data = await resp.json();
+        if (data.success) {
+          const roomId = data.room_id || data.room?.id;
+          setChatRoom({ id: roomId, room_id: data.room_key || data.room?.room_id });
+          await fetchChatMessages(roomId);
+          if (chatPollRef.current) clearInterval(chatPollRef.current);
+          chatPollRef.current = setInterval(() => fetchChatMessages(roomId, { silent: true }), 12000);
+          if (chatTypingPollRef.current) clearInterval(chatTypingPollRef.current);
+          chatTypingPollRef.current = setInterval(() => pollTypingStatus(roomId), 4000);
+        }
+      } catch (e) {
+        console.error('Error auto-opening chat:', e);
+      } finally {
+        setChatLoading(false);
+      }
+    }
+    
+    // Ensure inventory is loaded for review search (for prescription orders)
     if (!inventoryData.categories || inventoryData.categories.length === 0) {
       fetchPharmacyInventory();
     }
@@ -3058,7 +3089,7 @@ const PharmacyDashboard = () => {
                         {selectedOrder.seniorDiscountRequested && selectedOrder.seniorCitizenIdImage && (
                           <div className="border-t bg-white p-4">
                             <div className="flex items-center justify-between mb-2">
-                              <h3 className="text-sm font-semibold text-gray-800">💚 Senior Citizen ID</h3>
+                              <h3 className="text-sm font-semibold text-gray-800">Senior Citizen ID</h3>
                               <span className={`text-xs px-2 py-1 rounded-full ${
                                 selectedOrder.seniorDiscountStatus === 'approved' ? 'bg-green-100 text-green-700' :
                                 selectedOrder.seniorDiscountStatus === 'rejected' ? 'bg-red-100 text-red-700' :
@@ -3094,7 +3125,7 @@ const PharmacyDashboard = () => {
                         
                         {/* Order Items */}
                         <div className="mb-4">
-                          <h3 className="text-sm font-medium text-gray-700 mb-2">📦 Items</h3>
+                          <h3 className="text-sm font-medium text-gray-700 mb-2">Items</h3>
                           <div className="space-y-2 bg-gray-50 p-3 rounded-lg">
                             {selectedOrder.items && selectedOrder.items.length > 0 ? (
                               selectedOrder.items.map((item, index) => (
@@ -3102,7 +3133,7 @@ const PharmacyDashboard = () => {
                                   <span className="flex-1">
                                     {item.quantity}x {item.name}
                                     {item.prescription_required && (
-                                      <span className="ml-2 text-xs text-red-500">⚕ Rx Required</span>
+                                      <span className="ml-2 text-xs text-red-500">Rx Required</span>
                                     )}
                                   </span>
                                   <span className="font-medium">₱{item.total_price.toFixed(2)}</span>
@@ -3116,46 +3147,25 @@ const PharmacyDashboard = () => {
 
                         {/* Order Summary */}
                         <div className="mb-4">
-                          <h3 className="text-sm font-medium text-gray-700 mb-2">💰 Order Summary</h3>
-                          <div className="bg-gray-50 p-3 rounded-lg space-y-1">
-                            <div className="flex justify-between text-sm">
-                              <span className="text-gray-600">Subtotal:</span>
-                              <span className="font-medium">₱{(selectedOrder.subtotal || 0).toFixed(2)}</span>
-                            </div>
-                            <div className="flex justify-between text-sm">
-                              <span className="text-gray-600">Small Order Fee:</span>
-                              <span className={`font-medium ${selectedOrder.seniorDiscountRequested && selectedOrder.tax_amount === 0 ? 'line-through text-gray-400' : ''}`}>
-                                ₱{(selectedOrder.tax_amount || 0).toFixed(2)}
-                              </span>
-                            </div>
-                            {selectedOrder.seniorDiscountRequested && selectedOrder.tax_amount === 0 && (
-                              <div className="flex justify-between text-sm text-green-600">
-                                <span>No order fee for seniors:</span>
-                                <span className="font-semibold">-₱19.00</span>
-                              </div>
-                            )}
-                            <div className="flex justify-between text-sm">
-                              <span className="text-gray-600">Delivery Fee:</span>
-                              <span className="font-medium">₱{(selectedOrder.delivery_fee || 0).toFixed(2)}</span>
+                          <h3 className="text-sm font-medium text-gray-700 mb-2">Order Summary</h3>
+                          <div className="bg-gray-50 p-3 rounded-lg">
+                            <div className="flex justify-between text-base font-bold">
+                              <span>Subtotal:</span>
+                              <span className="text-[#2c786c]">₱{(selectedOrder.subtotal || 0).toFixed(2)}</span>
                             </div>
                             {selectedOrder.discount_amount > 0 && (
-                              <div className="flex justify-between text-sm text-green-600">
-                                <span>Senior Discount (20%):</span>
+                              <div className="flex justify-between text-sm text-green-600 mt-1">
+                                <span>Senior Discount Applied:</span>
                                 <span className="font-semibold">-₱{(selectedOrder.discount_amount || 0).toFixed(2)}</span>
                               </div>
                             )}
-                            <div className="border-t pt-2 mt-2"></div>
-                            <div className="flex justify-between text-base font-bold">
-                              <span>Total:</span>
-                              <span className="text-[#2c786c]">₱{(selectedOrder.totalAmount || 0).toFixed(2)}</span>
-                            </div>
                           </div>
                         </div>
 
                         {/* Senior Discount Actions */}
                         {selectedOrder.seniorDiscountRequested && selectedOrder.seniorDiscountStatus === 'pending' && (
                           <div className="mb-4">
-                            <h3 className="text-sm font-medium text-gray-700 mb-2">💚 Senior Citizen Discount Review</h3>
+                            <h3 className="text-sm font-medium text-gray-700 mb-2">Senior Citizen Discount Review</h3>
                             <div className="bg-yellow-50 border border-yellow-200 p-3 rounded-lg mb-3">
                               <p className="text-sm text-gray-700 mb-1">
                                 Customer has requested senior citizen discount
@@ -3172,13 +3182,13 @@ const PharmacyDashboard = () => {
                                 onClick={() => handleApproveSeniorDiscount(selectedOrder.id)}
                                 className="flex-1 bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors"
                               >
-                                ✓ Approve Discount
+                                Approve Discount
                               </button>
                               <button
                                 onClick={() => handleRejectSeniorDiscount(selectedOrder.id)}
                                 className="flex-1 bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-700 transition-colors"
                               >
-                                ✗ Reject Discount
+                                Reject Discount
                               </button>
                             </div>
                           </div>
@@ -3194,8 +3204,8 @@ const PharmacyDashboard = () => {
                             }`}>
                               <p className="text-sm font-medium">
                                 {selectedOrder.seniorDiscountStatus === 'approved' 
-                                  ? '✓ Senior discount approved' 
-                                  : '✗ Senior discount rejected'}
+                                  ? 'Senior discount approved' 
+                                  : 'Senior discount rejected'}
                               </p>
                             </div>
                           </div>
@@ -3205,47 +3215,11 @@ const PharmacyDashboard = () => {
                         <div className="mt-auto space-y-2">
                           {selectedOrder.order_status === 'pending' && (
                             <>
-                              {!chatRoom && (
-                                <button
-                                  onClick={async () => {
-                                    try {
-                                      setChatLoading(true);
-                                      const storedPharmacyInfo = localStorage.getItem('pharmacy_info');
-                                      const pharmacy = storedPharmacyInfo ? JSON.parse(storedPharmacyInfo) : null;
-                                      const base = (process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
-                                      const resp = await fetch(`${base}/api/order-chat-room/`, {
-                                        method: 'POST',
-                                        headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({ order_id: selectedOrder.id, pharmacy_id: pharmacy?.id })
-                                      });
-                                      const data = await resp.json();
-                                      if (data.success) {
-                                        const roomId = data.room_id || data.room?.id;
-                                        setChatRoom({ id: roomId, room_id: data.room_key || data.room?.room_id });
-                                        await fetchChatMessages(roomId);
-                                        if (chatPollRef.current) clearInterval(chatPollRef.current);
-                                        chatPollRef.current = setInterval(() => fetchChatMessages(roomId, { silent: true }), 12000);
-                                        if (chatTypingPollRef.current) clearInterval(chatTypingPollRef.current);
-                                        chatTypingPollRef.current = setInterval(() => pollTypingStatus(roomId), 4000);
-                                      }
-                                    } catch (e) {
-                                      console.error('Error opening chat:', e);
-                                    } finally {
-                                      setChatLoading(false);
-                                    }
-                                  }}
-                                  className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-50"
-                                  disabled={chatLoading}
-                                >
-                                  {chatLoading ? 'Opening Chat...' : '💬 Open Chat with Customer'}
-                                </button>
-                              )}
-                              
                               <button
                                 onClick={() => handleAcceptCartOrder(selectedOrder.id)}
                                 className="w-full bg-[#2c786c] text-white px-4 py-3 rounded-lg text-base font-semibold hover:bg-[#1e5a52] transition-colors"
                               >
-                                ✓ Accept & Start Preparing Order
+                                Accept & Start Preparing Order
                               </button>
                               
                               <button
@@ -3257,7 +3231,7 @@ const PharmacyDashboard = () => {
                                 }}
                                 className="w-full bg-gray-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-600 transition-colors"
                               >
-                                ✗ Reject Order
+                                Reject Order
                               </button>
                             </>
                           )}
@@ -3358,7 +3332,7 @@ const PharmacyDashboard = () => {
                         {order.isPrescriptionOrder ? 'Prescription Order' : `₱${(order.totalAmount||0).toFixed(2)}`}
                       </h3>
                       <p className="text-gray-600 text-xs lg:text-sm">
-                        {order.isPrescriptionOrder ? 'Needs review for pricing' : 'Paid'}
+                        {order.isPrescriptionOrder ? 'Needs review for pricing' : (order.payment_method || 'COD')}
                       </p>
                     </div>
                     <div className="text-center">
