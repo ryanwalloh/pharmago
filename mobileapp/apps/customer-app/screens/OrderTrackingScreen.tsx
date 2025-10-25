@@ -804,6 +804,111 @@ const OrderTrackingScreen: React.FC = () => {
                           {m.read_at ? '✓✓' : (m.delivered_at ? '✓' : '')}
                         </Text>
                       ) : null}
+                      
+                      {/* Senior Discount Rejection - Action Buttons */}
+                      {isPharmacy && typeof m.content === 'string' && /proceed with your order at the regular price/i.test(m.content) && orderData?.order_status === 'pending' && (
+                        <View style={{ flexDirection: 'row', marginTop: 12, gap: 8 }}>
+                          <TouchableOpacity
+                            style={{
+                              flex: 1,
+                              paddingVertical: 12,
+                              paddingHorizontal: 16,
+                              backgroundColor: '#EF4444',
+                              borderRadius: 8,
+                              alignItems: 'center'
+                            }}
+                            onPress={async () => {
+                              Alert.alert(
+                                'Cancel Order',
+                                'Are you sure you want to cancel this order?',
+                                [
+                                  { text: 'No', style: 'cancel' },
+                                  {
+                                    text: 'Yes, Cancel',
+                                    style: 'destructive',
+                                    onPress: async () => {
+                                      try {
+                                        const customerId = await AsyncStorage.getItem('customer_id');
+                                        if (!customerId) {
+                                          Alert.alert('Error', 'Customer ID not found');
+                                          return;
+                                        }
+                                        
+                                        const response = await apiService.cancelOrder(orderData.id, {
+                                          customer_id: parseInt(customerId),
+                                          reason: 'Senior discount rejected, customer cancelled'
+                                        });
+                                        
+                                        if (response.success) {
+                                          // Send cancellation message to pharmacy
+                                          if (chatRoom?.id) {
+                                            await apiService.sendOrderChatMessage(
+                                              chatRoom.id,
+                                              "I have cancelled this order."
+                                            );
+                                          }
+                                          
+                                          Alert.alert('Order Cancelled', 'Your order has been cancelled.', [
+                                            { text: 'OK', onPress: () => router.back() }
+                                          ]);
+                                        } else {
+                                          Alert.alert('Error', response.error || 'Failed to cancel order');
+                                        }
+                                      } catch (error) {
+                                        console.error('Cancel order error:', error);
+                                        Alert.alert('Error', 'Failed to cancel order. Please try again.');
+                                      }
+                                    }
+                                  }
+                                ]
+                              );
+                            }}
+                          >
+                            <Text style={{ color: 'white', fontWeight: '600', fontSize: 14 }}>
+                              Cancel Order
+                            </Text>
+                          </TouchableOpacity>
+                          
+                          <TouchableOpacity
+                            style={{
+                              flex: 1,
+                              paddingVertical: 12,
+                              paddingHorizontal: 16,
+                              backgroundColor: '#10B981',
+                              borderRadius: 8,
+                              alignItems: 'center'
+                            }}
+                            onPress={async () => {
+                              try {
+                                if (chatRoom?.id) {
+                                  await apiService.sendOrderChatMessage(
+                                    chatRoom.id,
+                                    "I will proceed with the order at the regular price."
+                                  );
+                                  
+                                  Alert.alert('Message Sent', 'The pharmacy has been notified that you will proceed with the order.');
+                                  
+                                  // Refresh messages
+                                  const msgs = await apiService.getOrderChatMessages(chatRoom.id);
+                                  if (msgs.success) {
+                                    setChatMessages(msgs.data?.messages || msgs.data || []);
+                                  }
+                                } else {
+                                  Alert.alert('Error', 'Chat room not available');
+                                }
+                              } catch (error) {
+                                console.error('Proceed order error:', error);
+                                Alert.alert('Error', 'Failed to send message. Please try again.');
+                              }
+                            }}
+                          >
+                            <Text style={{ color: 'white', fontWeight: '600', fontSize: 14 }}>
+                              Proceed with Order
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+                      )}
+                      
                       {isPricingPrompt && orderData?.order_status === 'pending' && (
                         <View style={{ flexDirection: 'row', marginTop: 10 }}>
                           <TouchableOpacity
