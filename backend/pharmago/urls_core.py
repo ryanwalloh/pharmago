@@ -24,6 +24,8 @@ urlpatterns = [
     path('api/', include(('api.users.urls_direct', 'users_direct'), namespace='users_direct')),
     path('api/', include(('api.search.urls', 'search'), namespace='search')),
     path('api/', include('api.urls')),
+    # Chat dev endpoints (needed for pharmacy dashboard in production)
+    path('api/', include(('api.chat.urls_dev', 'chat_dev'), namespace='chat_dev')),
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
     path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
     path('api/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
@@ -32,9 +34,6 @@ urlpatterns = [
 ]
 
 if settings.DEBUG:
-    urlpatterns += [
-        path('api/', include(('api.chat.urls_dev', 'chat_dev'), namespace='chat_dev')),
-    ]
     urlpatterns += staticfiles_urlpatterns()
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
