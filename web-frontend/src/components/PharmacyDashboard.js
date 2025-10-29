@@ -2553,7 +2553,7 @@ const PharmacyDashboard = () => {
           {/* Order Modal */}
           {selectedOrder && (
             <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4">
-              <div className="bg-white rounded-2xl w-full max-w-4xl h-[600px] relative shadow-2xl overflow-hidden flex">
+              <div className={`bg-white rounded-2xl w-full max-w-4xl ${selectedOrder.isPrescriptionOrder && selectedOrder.seniorDiscountRequested ? 'h-[750px]' : 'h-[600px]'} relative shadow-2xl overflow-hidden flex`}>
                 <span 
                   className="absolute top-2 right-4 text-2xl cursor-pointer"
                   onClick={handleCloseModal}
@@ -2775,7 +2775,7 @@ const PharmacyDashboard = () => {
                       </div>
 
                       {/* Right: Search & Select */}
-                      <div className="w-1/2 p-6 flex flex-col">
+                      <div className="w-1/2 p-6 flex flex-col overflow-y-auto">
                         <div className="flex items-center justify-between mb-4">
                           <h1 className="text-xl font-bold text-gray-800">Match Prescription Items</h1>
                           <span className="text-xs text-gray-500">Order No. <span className="font-semibold">{selectedOrder.orderNumber}</span></span>
