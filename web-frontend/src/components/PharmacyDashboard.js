@@ -3028,6 +3028,12 @@ const PharmacyDashboard = () => {
                                       delivery = typeof p?.delivery_fee === 'number' ? p.delivery_fee : null;
                                       serviceFee = typeof p?.tax_amount === 'number' ? p.tax_amount : null; // display as Service Fee
                                       if (typeof p?.total_amount === 'number') total = p.total_amount;
+                                      
+                                      // Get senior discount info
+                                      const discountAmount = typeof p?.discount_amount === 'number' ? p.discount_amount : null;
+                                      const seniorDiscountApproved = p?.senior_discount_status === 'approved';
+                                      const seniorDiscountRequested = p?.senior_discount_requested === true;
+                                      
                                       if (Array.isArray(p?.items)) {
                                         itemLines = p.items.map((it) => {
                                           const nm = String((it && (it.name || it.product || it.display_name)) || 'Item');
@@ -3038,17 +3044,37 @@ const PharmacyDashboard = () => {
                                         }).filter(Boolean);
                                       }
                                     } catch (_) {}
+                                    
                                     const parts = [];
                                     if (subtotal != null) parts.push(`Subtotal: ₱${Number(subtotal).toFixed(2)}`);
-                                    if (serviceFee != null) parts.push(`Service Fee: ₱${Number(serviceFee).toFixed(2)}`);
+                                    
+                                    // Add senior discount line if approved
+                                    if (seniorDiscountApproved && discountAmount != null && discountAmount > 0) {
+                                      parts.push(`Senior Citizen Discount (20%): -₱${Number(discountAmount).toFixed(2)} 🎉`);
+                                    }
+                                    
+                                    if (serviceFee != null) {
+                                      if (seniorDiscountApproved && serviceFee === 0) {
+                                        parts.push(`Service Fee: FREE (Senior benefit) ✨`);
+                                      } else {
+                                        parts.push(`Service Fee: ₱${Number(serviceFee).toFixed(2)}`);
+                                      }
+                                    }
                                     if (delivery != null) parts.push(`Delivery Fee: ₱${Number(delivery).toFixed(2)}`);
+                                    
                                     const header = total != null
                                       ? `Your price quote is ready: ₱${Number(total).toFixed(2)}`
                                       : `Your price quote is ready.`;
                                     const breakdown = parts.length ? `\n${parts.join('\n')}` : '';
                                     const itemsLine = itemLines.length ? `\nItems:\n${itemLines.join('\n')}` : '';
                                     const footer = total != null ? `\nTotal: ₱${Number(total).toFixed(2)}` : '';
-                                    const msgContent = `${header}${breakdown}${itemsLine}${footer}`;
+                                    
+                                    // Add friendly senior discount message
+                                    const seniorMessage = seniorDiscountApproved 
+                                      ? `\n\n🎊 Great news! Your senior citizen discount has been approved! You're saving ₱${Number(discountAmount || 0).toFixed(2)} plus FREE service fee.`
+                                      : '';
+                                    
+                                    const msgContent = `${header}${breakdown}${itemsLine}${footer}${seniorMessage}`;
 
                                     // Optimistic pricing message (semi-transparent with Sending...)
                                     const tempId = `temp-${Date.now()}`;
