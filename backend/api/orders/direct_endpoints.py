@@ -59,6 +59,11 @@ def direct_prescription_order_creation(request):
         prescription_date = prescription_details.get('prescriptionDate', '').strip()
         prescription_notes_detail = prescription_details.get('notes', '').strip()
         
+        # Extract senior citizen discount data
+        apply_senior_discount = data.get('apply_senior_discount', False)
+        senior_id_image_url = data.get('senior_id_image_url', '').strip() if data.get('senior_id_image_url') else None
+        senior_discount_status = data.get('senior_discount_status', 'not_requested')
+        
         # Validate required fields
         if not customer_username:
             return JsonResponse({
@@ -197,7 +202,11 @@ def direct_prescription_order_creation(request):
                 notes=f"Prescription order - Doctor: {doctor_name}, Date: {prescription_date}. Notes: {prescription_notes_detail}",
                 prescription_image_url=prescription_image_url,
                 prescription_status='pending',
-                prescription_notes=f"Doctor: {doctor_name}, Date: {prescription_date}. {prescription_notes_detail}"
+                prescription_notes=f"Doctor: {doctor_name}, Date: {prescription_date}. {prescription_notes_detail}",
+                # Senior citizen discount fields
+                senior_discount_requested=apply_senior_discount,
+                senior_citizen_id_image=senior_id_image_url,
+                senior_discount_status=senior_discount_status
             )
             
             # Create a placeholder order line for prescription review
@@ -248,6 +257,10 @@ def direct_prescription_order_creation(request):
                 notes="Prescription order - awaiting pharmacist review"
             )
             
+            # Log senior discount request if applicable
+            if apply_senior_discount:
+                logger.info(f"👴 Senior discount requested for order {order.order_number}: Status={senior_discount_status}, ID Image={'Uploaded' if senior_id_image_url else 'Not Uploaded'}")
+            
             logger.info(f"✅ Prescription order created successfully: {order.order_number}")
             
             # Build absolute prescription image URL for client convenience
@@ -278,7 +291,11 @@ def direct_prescription_order_creation(request):
                     'payment_method': payment_method_name,
                     'prescription_image_url': absolute_prescription_url,
                     'created_at': order.created_at.isoformat(),
-                    'estimated_delivery': None  # Will be set when pharmacist processes
+                    'estimated_delivery': None,  # Will be set when pharmacist processes
+                    # Senior discount information
+                    'senior_discount_requested': order.senior_discount_requested,
+                    'senior_discount_status': order.senior_discount_status,
+                    'senior_citizen_id_image': order.senior_citizen_id_image
                 }
             })
             
@@ -398,6 +415,17 @@ def get_order_status(request, order_id):
             except Exception:
                 absolute_prescription_url = order.prescription_image_url
 
+        # Normalize senior citizen ID image URL to absolute
+        absolute_senior_id_url = None
+        if order.senior_citizen_id_image:
+            try:
+                if str(order.senior_citizen_id_image).startswith('http'):
+                    absolute_senior_id_url = order.senior_citizen_id_image
+                else:
+                    absolute_senior_id_url = request.build_absolute_uri(order.senior_citizen_id_image)
+            except Exception:
+                absolute_senior_id_url = order.senior_citizen_id_image
+
         # Build items data (exclude zero-priced placeholder lines)
         items_data = []
         try:
@@ -454,7 +482,11 @@ def get_order_status(request, order_id):
                 'updated_at': order.updated_at.isoformat(),
                 'estimated_delivery': order.estimated_delivery.isoformat() if order.estimated_delivery else None,
                 'actual_delivery': order.actual_delivery.isoformat() if order.actual_delivery else None,
-                'notes': order.notes
+                'notes': order.notes,
+                # Senior citizen discount fields
+                'senior_discount_requested': order.senior_discount_requested,
+                'senior_discount_status': order.senior_discount_status,
+                'senior_citizen_id_image': absolute_senior_id_url
             }
         })
         
