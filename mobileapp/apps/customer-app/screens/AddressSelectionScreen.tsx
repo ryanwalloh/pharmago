@@ -9,6 +9,8 @@ import {
   Alert,
   TextInput,
   ActivityIndicator,
+  Modal,
+  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -57,12 +59,33 @@ const AddressSelectionScreen: React.FC = () => {
     is_default: true,
   });
 
+  // Success modal states
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [orderNumber, setOrderNumber] = useState<string | null>(null);
+  const [orderId, setOrderId] = useState<number | null>(null);
+  const scaleAnim = useRef(new Animated.Value(0)).current;
+
   const mapRef = useRef<MapView>(null);
 
   useEffect(() => {
     loadSelectedData();
     requestLocationPermission();
   }, []);
+
+  // Animate modal on show
+  useEffect(() => {
+    if (showSuccessModal) {
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        friction: 8,
+        tension: 40,
+        useNativeDriver: true,
+      }).start();
+    } else {
+      scaleAnim.setValue(0);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showSuccessModal]);
 
   const loadSelectedData = async () => {
     try {
@@ -312,6 +335,11 @@ const AddressSelectionScreen: React.FC = () => {
         prescriptionImageUrl = uploadRes.data.url;
       }
 
+      // Get senior discount data from AsyncStorage
+      const applySeniorDiscountStr = await AsyncStorage.getItem('applySeniorDiscount');
+      const applySeniorDiscount = applySeniorDiscountStr === 'true';
+      const seniorIdImage = await AsyncStorage.getItem('seniorIdImage');
+
       // Prepare order data for API
       const orderData = {
         customer_username: user.username,
@@ -340,10 +368,17 @@ const AddressSelectionScreen: React.FC = () => {
           doctorName: prescriptionData.doctorName || '',
           prescriptionDate: prescriptionData.prescriptionDate || '',
           notes: prescriptionData.notes || '',
-        }
+        },
+        // Senior citizen discount data
+        apply_senior_discount: applySeniorDiscount,
+        senior_id_image_url: seniorIdImage || null,
+        senior_discount_status: applySeniorDiscount && seniorIdImage ? 'pending' : 'not_requested',
       };
 
       console.log('📦 Creating prescription order with data:', orderData);
+      if (applySeniorDiscount) {
+        console.log('👴 Senior discount requested:', seniorIdImage ? 'with ID' : 'without ID');
+      }
 
       // Create order via API
       const response = await apiService.createPrescriptionOrder(orderData);
@@ -360,30 +395,15 @@ const AddressSelectionScreen: React.FC = () => {
         await AsyncStorage.removeItem('tempPrescription');
         await AsyncStorage.removeItem('selectedPharmacy');
         await AsyncStorage.removeItem('selectedPaymentMethod');
+        await AsyncStorage.removeItem('applySeniorDiscount');
+        await AsyncStorage.removeItem('seniorIdImage');
         
         console.log('✅ Order created successfully:', createdOrder.order_number || createdOrder.order_id);
         
-        Alert.alert(
-          'Order Placed Successfully! 🎉',
-          createdOrder.order_number
-            ? `Your prescription order #${createdOrder.order_number} has been submitted. The pharmacy will review your prescription and contact you with pricing details through our chat system.`
-            : 'Your prescription order has been submitted. The pharmacy will review your prescription and contact you with pricing details through our chat system.',
-          [
-            {
-              text: 'Track Order',
-              onPress: () => {
-                // Navigate to order tracking screen only with a valid ID
-                router.push(`/order-tracking/${createdOrder.order_id}` as any);
-              },
-            },
-            {
-              text: 'Go Home',
-              onPress: () => {
-                router.push('/');
-              },
-            },
-          ]
-        );
+        // Show custom success modal
+        setOrderNumber(createdOrder.order_number || null);
+        setOrderId(createdOrder.order_id);
+        setShowSuccessModal(true);
       } else {
         const err = (response as any)?.error || (serverPayload && serverPayload.error) || 'Unknown error';
         console.error('❌ Order creation failed:', err);
@@ -481,10 +501,10 @@ const AddressSelectionScreen: React.FC = () => {
               <Text style={styles.inputLabel}>Address Type</Text>
               <View style={styles.labelOptions}>
                 {[
-                  { value: 'home', label: 'Home', icon: '🏠' },
-                  { value: 'work', label: 'Work', icon: '🏢' },
-                  { value: 'parent_house', label: 'Parent\'s House', icon: '👨‍👩‍👧‍👦' },
-                  { value: 'other', label: 'Other', icon: '📍' },
+                  { value: 'home', label: 'Home' },
+                  { value: 'work', label: 'Work' },
+                  { value: 'parent_house', label: 'Parents'},
+                  { value: 'other', label: 'Other' },
                 ].map((option) => (
                   <TouchableOpacity
                     key={option.value}
@@ -494,7 +514,7 @@ const AddressSelectionScreen: React.FC = () => {
                     ]}
                     onPress={() => handleInputChange('label', option.value)}
                   >
-                    <Text style={styles.labelOptionIcon}>{option.icon}</Text>
+                    <Text style={styles.labelOptionIcon}></Text>
                     <Text style={[
                       styles.labelOptionText,
                       addressData.label === option.value && styles.selectedLabelOptionText
@@ -635,6 +655,62 @@ const AddressSelectionScreen: React.FC = () => {
           )}
         </TouchableOpacity>
       </View>
+
+      {/* Custom Success Modal */}
+      <Modal
+        visible={showSuccessModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowSuccessModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <Animated.View style={[styles.modalContent, { transform: [{ scale: scaleAnim }] }]}>
+            <View style={styles.successIconContainer}>
+              <View style={styles.successCircle}>
+                <Text style={styles.successCheck}>✓</Text>
+              </View>
+            </View>
+            
+            <Text style={styles.modalTitle}>Order Placed Successfully!</Text>
+            
+            {orderNumber && (
+              <View style={styles.orderNumberContainer}>
+                <Text style={styles.orderNumberLabel}>Order Number:</Text>
+                <Text style={styles.orderNumberValue}>#{orderNumber}</Text>
+              </View>
+            )}
+            
+            <Text style={styles.modalMessage}>
+              Your prescription order has been submitted. The pharmacy will review your prescription 
+              and contact you with pricing details through our chat system.
+            </Text>
+            
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={styles.trackOrderButton}
+                onPress={() => {
+                  setShowSuccessModal(false);
+                  if (orderId) {
+                    router.push(`/order-tracking/${orderId}` as any);
+                  }
+                }}
+              >
+                <Text style={styles.trackOrderButtonText}>Track Order</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={styles.goHomeButton}
+                onPress={() => {
+                  setShowSuccessModal(false);
+                  router.push('/');
+                }}
+              >
+                <Text style={styles.goHomeButtonText}>Go Home</Text>
+              </TouchableOpacity>
+            </View>
+          </Animated.View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -862,6 +938,113 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontFamily: fontFamily.heavy,
     color: '#FFFFFF',
+  },
+  // Success Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 30,
+    width: '100%',
+    maxWidth: 400,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 10,
+  },
+  successIconContainer: {
+    marginBottom: 20,
+  },
+  successCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#9DD49D',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  successCheck: {
+    fontSize: 48,
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontFamily: fontFamily.heavy,
+    color: '#2A2A2A',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  orderNumberContainer: {
+    backgroundColor: '#F8FFF8',
+    borderRadius: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#9DD49D',
+  },
+  orderNumberLabel: {
+    fontSize: 12,
+    fontFamily: fontFamily.light,
+    color: '#666666',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  orderNumberValue: {
+    fontSize: 20,
+    fontFamily: fontFamily.heavy,
+    color: '#9DD49D',
+    textAlign: 'center',
+  },
+  modalMessage: {
+    fontSize: 14,
+    fontFamily: fontFamily.light,
+    color: '#666666',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 24,
+  },
+  modalButtons: {
+    width: '100%',
+    gap: 12,
+  },
+  trackOrderButton: {
+    backgroundColor: '#9DD49D',
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    width: '100%',
+  },
+  trackOrderButtonText: {
+    fontSize: 16,
+    fontFamily: fontFamily.heavy,
+    color: '#FFFFFF',
+  },
+  goHomeButton: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    width: '100%',
+    borderWidth: 2,
+    borderColor: '#9DD49D',
+  },
+  goHomeButtonText: {
+    fontSize: 16,
+    fontFamily: fontFamily.heavy,
+    color: '#9DD49D',
   },
 });
 

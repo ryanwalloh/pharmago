@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,61 +7,70 @@ import {
   TouchableOpacity,
   ScrollView,
   Alert,
+  Switch,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import { fontFamily } from '../utils/fonts';
+import * as ImagePicker from 'expo-image-picker';
 
 interface PaymentMethod {
   id: string;
   name: string;
   description: string;
-  icon: string;
+  icon: any; // Support both require() and string
   isAvailable: boolean;
 }
 
 const PaymentMethodScreen: React.FC = () => {
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod | null>(null);
   const [selectedPharmacy, setSelectedPharmacy] = useState<any>(null);
+  
+  // Senior Citizen Discount States
+  const [applySeniorDiscount, setApplySeniorDiscount] = useState(false);
+  const [seniorIdImage, setSeniorIdImage] = useState<string | null>(null);
+  const [uploadingSeniorId, setUploadingSeniorId] = useState(false);
 
-  // Payment methods available
-  const paymentMethods: PaymentMethod[] = useMemo(() => [
+  // Payment methods - Only COD available for prescription orders
+  const paymentMethods: PaymentMethod[] = [
     {
       id: 'cod',
       name: 'Cash on Delivery',
-      description: 'Pay when your order arrives',
-      icon: '💰',
+      description: 'Only payment method available for prescription orders',
+      icon: require('../assets/cod2.png'),
       isAvailable: true,
     },
     {
       id: 'gcash',
       name: 'GCash',
-      description: 'Pay using your GCash wallet',
-      icon: '📱',
-      isAvailable: true,
+      description: 'Not available for prescription orders',
+      icon: require('../assets/gcash.png'),
+      isAvailable: false,
     },
     {
       id: 'paymaya',
       name: 'PayMaya',
-      description: 'Pay using your PayMaya account',
-      icon: '💳',
-      isAvailable: true,
+      description: 'Not available for prescription orders',
+      icon: require('../assets/maya2.png'),
+      isAvailable: false,
     },
     {
-      id: 'bank_transfer',
-      name: 'Bank Transfer',
-      description: 'Direct bank transfer',
-      icon: '🏦',
-      isAvailable: false, // Coming soon
+      id: 'card',
+      name: 'Card (Visa, Mastercard, etc.)',
+      description: 'Not available for prescription orders',
+      icon: require('../assets/card.png'),
+      isAvailable: false,
     },
-  ], []);
+  ];
 
   useEffect(() => {
     loadSelectedPharmacy();
     // Set COD as default
     setSelectedPaymentMethod(paymentMethods[0]);
-  }, [paymentMethods]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const loadSelectedPharmacy = async () => {
     try {
@@ -78,11 +87,144 @@ const PaymentMethodScreen: React.FC = () => {
 
   const handlePaymentMethodSelect = (method: PaymentMethod) => {
     if (!method.isAvailable) {
-      Alert.alert('Coming Soon', 'This payment method will be available soon!');
       return;
     }
     setSelectedPaymentMethod(method);
     console.log('💳 Selected payment method:', method.name);
+  };
+
+  // Senior Citizen ID Upload Functions
+  const handleUploadSeniorId = async () => {
+    Alert.alert(
+      'Upload Senior Citizen ID',
+      'Choose how you want to upload your ID',
+      [
+        {
+          text: 'Take Photo',
+          onPress: () => handleCameraUpload(),
+        },
+        {
+          text: 'Choose from Gallery',
+          onPress: () => handleGalleryUpload(),
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+      ]
+    );
+  };
+
+  const handleCameraUpload = async () => {
+    try {
+      setUploadingSeniorId(true);
+      
+      const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permissionResult.granted) {
+        Alert.alert('Permission Required', 'Camera permission is required to take a photo!');
+        setUploadingSeniorId(false);
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        aspect: [16, 9],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        const imageUri = result.assets[0].uri;
+        const cloudinaryUrl = await uploadToCloudinary(imageUri, 'senior-citizen-ids');
+        
+        if (cloudinaryUrl) {
+          setSeniorIdImage(cloudinaryUrl);
+          console.log('✅ Senior ID uploaded (camera):', cloudinaryUrl);
+        } else {
+          Alert.alert('Upload Failed', 'Failed to upload image. Please try again.');
+        }
+      }
+    } catch (error: any) {
+      console.error('Failed to upload Senior ID (camera):', error);
+      Alert.alert('Error', 'Failed to upload image. Please try again.');
+    } finally {
+      setUploadingSeniorId(false);
+    }
+  };
+
+  const handleGalleryUpload = async () => {
+    try {
+      setUploadingSeniorId(true);
+      
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permissionResult.granted) {
+        Alert.alert('Permission Required', 'Permission to access camera roll is required!');
+        setUploadingSeniorId(false);
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [16, 9],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        const imageUri = result.assets[0].uri;
+        const cloudinaryUrl = await uploadToCloudinary(imageUri, 'senior-citizen-ids');
+        
+        if (cloudinaryUrl) {
+          setSeniorIdImage(cloudinaryUrl);
+          console.log('✅ Senior ID uploaded (gallery):', cloudinaryUrl);
+        } else {
+          Alert.alert('Upload Failed', 'Failed to upload image. Please try again.');
+        }
+      }
+    } catch (error: any) {
+      console.error('Failed to upload Senior ID (gallery):', error);
+      Alert.alert('Error', 'Failed to upload image. Please try again.');
+    } finally {
+      setUploadingSeniorId(false);
+    }
+  };
+
+  const uploadToCloudinary = async (imageUri: string, folder: string): Promise<string | null> => {
+    try {
+      console.log('📤 Starting Cloudinary upload...');
+      
+      const formData = new FormData();
+      formData.append('file', {
+        uri: imageUri,
+        type: 'image/jpeg',
+        name: 'senior_id.jpg',
+      } as any);
+      formData.append('upload_preset', 'pharmago-file-uploads');
+      formData.append('folder', folder);
+
+      const response = await fetch(
+        `https://api.cloudinary.com/v1_1/dwqrkobq1/image/upload`,
+        {
+          method: 'POST',
+          body: formData,
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        console.error('❌ Cloudinary upload failed:', data.error?.message || 'Unknown error');
+        return null;
+      }
+
+      if (data.secure_url) {
+        console.log('✅ Upload successful! URL:', data.secure_url);
+        return data.secure_url;
+      }
+      return null;
+    } catch (error: any) {
+      console.error('❌ Cloudinary upload error:', error);
+      return null;
+    }
   };
 
   const handleProceed = async () => {
@@ -96,12 +238,32 @@ const PaymentMethodScreen: React.FC = () => {
       return;
     }
 
-    // Store selected payment method
+    // Validate senior discount requirements
+    if (applySeniorDiscount && !seniorIdImage) {
+      Alert.alert(
+        'Senior Discount',
+        'Please upload your Senior Citizen ID to apply the discount',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
+    // Store selected payment method and senior discount data
     try {
       await AsyncStorage.setItem('selectedPaymentMethod', JSON.stringify(selectedPaymentMethod));
+      
+      // Store senior discount data
+      await AsyncStorage.setItem('applySeniorDiscount', JSON.stringify(applySeniorDiscount));
+      if (applySeniorDiscount && seniorIdImage) {
+        await AsyncStorage.setItem('seniorIdImage', seniorIdImage);
+      } else {
+        await AsyncStorage.removeItem('seniorIdImage');
+      }
+      
       console.log('💾 Selected payment method stored:', selectedPaymentMethod.name);
+      console.log('💾 Senior discount status:', applySeniorDiscount);
     } catch (error) {
-      console.error('💥 Error storing selected payment method:', error);
+      console.error('💥 Error storing payment data:', error);
     }
 
     console.log('🚀 Proceeding to address selection with payment method:', selectedPaymentMethod.name);
@@ -157,7 +319,7 @@ const PaymentMethodScreen: React.FC = () => {
                 >
                   <View style={styles.paymentMethodContent}>
                     <View style={styles.paymentMethodLeft}>
-                      <Text style={styles.paymentMethodIcon}>{method.icon}</Text>
+                      <Image source={method.icon} style={styles.paymentMethodIcon} resizeMode="contain" />
                       <View style={styles.paymentMethodTextContainer}>
                         <Text style={[
                           styles.paymentMethodName,
@@ -174,21 +336,69 @@ const PaymentMethodScreen: React.FC = () => {
                       </View>
                     </View>
                     
-                    {selectedPaymentMethod?.id === method.id && (
+                    {selectedPaymentMethod?.id === method.id && method.isAvailable && (
                       <View style={styles.selectedIndicator}>
                         <Text style={styles.selectedText}>✓</Text>
-                      </View>
-                    )}
-                    
-                    {!method.isAvailable && (
-                      <View style={styles.comingSoonBadge}>
-                        <Text style={styles.comingSoonText}>Coming Soon</Text>
                       </View>
                     )}
                   </View>
                 </TouchableOpacity>
               ))}
             </View>
+          </View>
+
+          {/* Senior Citizen Discount Section */}
+          <View style={styles.seniorDiscountSection}>
+            <View style={styles.seniorDiscountHeader}>
+              <View>
+                <Text style={styles.seniorDiscountTitle}>Senior Citizen Discount</Text>
+                <Text style={styles.seniorDiscountSubtitle}>Get 20% off on medicines</Text>
+              </View>
+              <Switch
+                value={applySeniorDiscount}
+                onValueChange={setApplySeniorDiscount}
+                trackColor={{ false: '#E0E0E0', true: '#9DD49D' }}
+                thumbColor={applySeniorDiscount ? '#FFFFFF' : '#F4F4F4'}
+              />
+            </View>
+            
+            {applySeniorDiscount && (
+              <View style={styles.seniorIdUploadSection}>
+                {!seniorIdImage ? (
+                  <TouchableOpacity 
+                    style={styles.uploadSeniorIdButton}
+                    onPress={handleUploadSeniorId}
+                    disabled={uploadingSeniorId}
+                  >
+                    {uploadingSeniorId ? (
+                      <ActivityIndicator color="#9DD49D" />
+                    ) : (
+                      <>
+                        <Text style={styles.uploadIcon}>📄</Text>
+                        <Text style={styles.uploadButtonText}>Upload Senior Citizen ID</Text>
+                        <Text style={styles.uploadSubtext}>Required for discount verification</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                ) : (
+                  <View style={styles.seniorIdPreview}>
+                    <Image source={{ uri: seniorIdImage }} style={styles.seniorIdThumbnail} />
+                    <View style={styles.seniorIdInfo}>
+                      <Text style={styles.seniorIdUploadedText}>✓ Senior ID Uploaded</Text>
+                      <TouchableOpacity onPress={() => setSeniorIdImage(null)}>
+                        <Text style={styles.changeIdText}>Change Photo</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
+                
+                <View style={styles.seniorDiscountNote}>
+                  <Text style={styles.noteText}>
+                    ⓘ Discount subject to pharmacy verification
+                  </Text>
+                </View>
+              </View>
+            )}
           </View>
 
           {/* Selected Pharmacy Info */}
@@ -313,7 +523,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 2,
     borderColor: '#E9ECEF',
-    padding: 16,
+    padding: 12,
   },
   selectedPaymentMethodCard: {
     borderColor: '#9DD49D',
@@ -334,7 +544,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   paymentMethodIcon: {
-    fontSize: 24,
+    width: 40,
+    height: 40,
     marginRight: 12,
   },
   paymentMethodTextContainer: {
@@ -367,18 +578,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: fontFamily.heavy,
     color: '#28A745',
-  },
-  comingSoonBadge: {
-    backgroundColor: '#FFE0B2',
-    borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    marginLeft: 12,
-  },
-  comingSoonText: {
-    fontSize: 12,
-    fontFamily: fontFamily.heavy,
-    color: '#F57C00',
   },
   // Pharmacy Info Section
   pharmacyInfoSection: {
@@ -448,6 +647,93 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontFamily: fontFamily.heavy,
     color: '#FFFFFF',
+  },
+  // Senior Citizen Discount Styles
+  seniorDiscountSection: {
+    marginBottom: 24,
+  },
+  seniorDiscountHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  seniorDiscountTitle: {
+    fontSize: 18,
+    fontFamily: fontFamily.heavy,
+    color: '#2A2A2A',
+  },
+  seniorDiscountSubtitle: {
+    fontSize: 14,
+    color: '#9DD49D',
+    marginTop: 4,
+  },
+  seniorIdUploadSection: {
+    marginTop: 10,
+  },
+  uploadSeniorIdButton: {
+    backgroundColor: '#F8FFF8',
+    borderRadius: 12,
+    paddingVertical: 20,
+    paddingHorizontal: 15,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#9DD49D',
+    borderStyle: 'dashed',
+  },
+  uploadIcon: {
+    fontSize: 32,
+    marginBottom: 8,
+  },
+  uploadButtonText: {
+    fontSize: 14,
+    fontFamily: fontFamily.heavy,
+    color: '#9DD49D',
+    marginBottom: 4,
+  },
+  uploadSubtext: {
+    fontSize: 12,
+    color: '#666666',
+  },
+  seniorIdPreview: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FFF8',
+    borderRadius: 12,
+    padding: 15,
+    borderWidth: 1,
+    borderColor: '#9DD49D',
+  },
+  seniorIdThumbnail: {
+    width: 80,
+    height: 50,
+    borderRadius: 8,
+    backgroundColor: '#E0E0E0',
+  },
+  seniorIdInfo: {
+    flex: 1,
+    marginLeft: 15,
+  },
+  seniorIdUploadedText: {
+    fontSize: 14,
+    fontFamily: fontFamily.heavy,
+    color: '#9DD49D',
+    marginBottom: 4,
+  },
+  changeIdText: {
+    fontSize: 12,
+    color: '#666666',
+  },
+  seniorDiscountNote: {
+    marginTop: 12,
+    padding: 10,
+    backgroundColor: '#FFF9E6',
+    borderRadius: 8,
+  },
+  noteText: {
+    fontSize: 12,
+    color: '#996600',
+    textAlign: 'center',
   },
 });
 

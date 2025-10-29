@@ -5,7 +5,6 @@ import {
   StyleSheet,
   StatusBar,
   TouchableOpacity,
-  TextInput,
   Image,
   ScrollView,
   FlatList,
@@ -296,21 +295,20 @@ export default function MainPage() {
         >
         {/* Search Field */}
         <View style={styles.searchContainer}>
-          <View style={styles.searchField}>
+          <TouchableOpacity 
+            style={styles.searchField}
+            onPress={() => router.push('/supersearch' as any)}
+            activeOpacity={0.7}
+          >
             <SearchIcon size={20} color="#999999" />
             <View style={styles.searchInputContainer}>
-              <TextInput
-                style={styles.searchInput}
-                placeholder=""
-                placeholderTextColor="transparent"
-              />
               <View style={styles.customPlaceholder}>
                 <Text style={styles.placeholderText}>Search for </Text>
                 <Text style={styles.placeholderHighlight}>medicines</Text>
                 <Text style={styles.placeholderText}> and more..</Text>
               </View>
             </View>
-          </View>
+          </TouchableOpacity>
           <TouchableOpacity style={styles.filterButton}>
             <FilterIcon size={20} color="#999999" />
           </TouchableOpacity>
@@ -389,7 +387,7 @@ export default function MainPage() {
         {/* Best Selling Section */}
         <View style={styles.sectionContainer}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Best Selling</Text>
+            <Text style={styles.sectionTitle}>Featured</Text>
             <TouchableOpacity>
               <Text style={styles.viewAllText}>View All</Text>
             </TouchableOpacity>
@@ -616,23 +614,12 @@ const styles = StyleSheet.create({
   },
   searchInputContainer: {
     flex: 1,
-    position: 'relative',
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 16,
-    color: '#333333',
-    zIndex: 1,
+    justifyContent: 'center',
   },
   customPlaceholder: {
-    position: 'absolute',
-    top: 0,
-    left: 10,
-    right: 0,
-    bottom: 0,
     flexDirection: 'row',
     alignItems: 'center',
-    zIndex: 0,
+    paddingLeft: 10,
   },
   placeholderText: {
     fontSize: 12,
