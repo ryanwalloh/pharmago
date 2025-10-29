@@ -2564,34 +2564,69 @@ const PharmacyDashboard = () => {
                   {selectedOrder.isPrescriptionOrder ? (
                     <>
                       {/* Left: Image or Chat */}
-                      <div className="w-1/2 relative bg-gray-50">
+                      <div className="w-1/2 relative bg-gray-50 flex flex-col">
                         {!showChatPanel ? (
-                          <div className="w-full h-full p-4 flex items-center justify-center">
-                            {selectedOrder.prescriptionImageUrl ? (
-                              <img 
-                                src={selectedOrder.prescriptionImageUrl} 
-                                alt="Prescription" 
-                                className="max-h-full max-w-full object-contain rounded cursor-zoom-in"
-                                onClick={() => {
-                                  setPrescriptionImagePreviewUrl(selectedOrder.prescriptionImageUrl);
-                                  setIsPrescriptionImagePreviewOpen(true);
-                                }}
-                                onError={(e) => {
-                                  if (e?.target) {
-                                    e.target.style.display = 'none';
-                                    const fallback = e.target.nextSibling;
-                                    if (fallback && fallback.style) {
-                                      fallback.style.display = 'block';
+                          <>
+                            <div className="flex-1 p-4 flex items-center justify-center overflow-auto">
+                              {selectedOrder.prescriptionImageUrl ? (
+                                <img 
+                                  src={selectedOrder.prescriptionImageUrl} 
+                                  alt="Prescription" 
+                                  className="max-h-full max-w-full object-contain rounded cursor-zoom-in"
+                                  onClick={() => {
+                                    setPrescriptionImagePreviewUrl(selectedOrder.prescriptionImageUrl);
+                                    setIsPrescriptionImagePreviewOpen(true);
+                                  }}
+                                  onError={(e) => {
+                                    if (e?.target) {
+                                      e.target.style.display = 'none';
+                                      const fallback = e.target.nextSibling;
+                                      if (fallback && fallback.style) {
+                                        fallback.style.display = 'block';
+                                      }
                                     }
-                                  }
-                                }}
-                              />
-                            ) : (
-                              <div className="text-gray-500 text-center">
-                                No prescription image available
+                                  }}
+                                />
+                              ) : (
+                                <div className="text-gray-500 text-center">
+                                  No prescription image available
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Senior Citizen ID Section for Prescription Orders */}
+                            {selectedOrder.seniorDiscountRequested && selectedOrder.seniorCitizenIdImage && (
+                              <div className="border-t bg-white p-4">
+                                <div className="flex items-center justify-between mb-2">
+                                  <h3 className="text-sm font-semibold text-gray-800">Senior Citizen ID</h3>
+                                  <span className={`text-xs px-2 py-1 rounded-full ${
+                                    selectedOrder.seniorDiscountStatus === 'approved' ? 'bg-green-100 text-green-700' :
+                                    selectedOrder.seniorDiscountStatus === 'rejected' ? 'bg-red-100 text-red-700' :
+                                    'bg-yellow-100 text-yellow-700'
+                                  }`}>
+                                    {selectedOrder.seniorDiscountStatus === 'approved' ? 'Approved' :
+                                     selectedOrder.seniorDiscountStatus === 'rejected' ? 'Rejected' :
+                                     'Pending Review'}
+                                  </span>
+                                </div>
+                                <div className="relative">
+                                  <img 
+                                    src={selectedOrder.seniorCitizenIdImage} 
+                                    alt="Senior Citizen ID" 
+                                    className="w-full h-32 object-contain bg-gray-100 rounded cursor-pointer hover:opacity-90"
+                                    onClick={() => {
+                                      setPrescriptionImagePreviewUrl(selectedOrder.seniorCitizenIdImage);
+                                      setIsPrescriptionImagePreviewOpen(true);
+                                    }}
+                                    onError={(e) => {
+                                      e.target.src = '/images/id-placeholder.png';
+                                    }}
+                                  />
+                                  <p className="text-xs text-gray-500 mt-1 text-center">Click to enlarge</p>
+                                </div>
                               </div>
                             )}
-                          </div>
+                          </>
                         ) : (
                           <div className="w-full h-full flex flex-col">
                             {/* Chat Header */}
@@ -2864,6 +2899,47 @@ const PharmacyDashboard = () => {
                           </div>
                         )}
                       </div>
+
+                      {/* Senior Discount Review Section for Prescription Orders */}
+                      {selectedOrder.seniorDiscountRequested && selectedOrder.seniorDiscountStatus === 'pending' && (
+                        <div className="mb-4 mt-4">
+                          <h3 className="text-sm font-medium text-gray-700 mb-2">Senior Citizen Discount Review</h3>
+                          <div className="bg-yellow-50 border border-yellow-200 p-3 rounded-lg mb-3">
+                            <p className="text-sm text-gray-700 mb-1">
+                              Customer has requested senior citizen discount
+                            </p>
+                            <p className="text-xs text-gray-600">
+                              Review the Senior Citizen ID image on the left before approving
+                            </p>
+                            <p className="text-xs text-gray-600 mt-1">
+                              Discount will be calculated after you add items and send the price quote
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => handleRejectSeniorDiscount(selectedOrder.id)}
+                            className="w-full bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-700 transition-colors"
+                          >
+                            Reject Discount (if ID is invalid)
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Senior Discount Status (if already reviewed) */}
+                      {selectedOrder.seniorDiscountRequested && selectedOrder.seniorDiscountStatus !== 'pending' && (
+                        <div className="mb-4 mt-4">
+                          <div className={`p-3 rounded-lg ${
+                            selectedOrder.seniorDiscountStatus === 'approved' 
+                              ? 'bg-green-50 border border-green-200' 
+                              : 'bg-red-50 border border-red-200'
+                          }`}>
+                            <p className="text-sm font-medium">
+                              {selectedOrder.seniorDiscountStatus === 'approved' 
+                                ? 'Senior discount approved' 
+                                : 'Senior discount rejected'}
+                            </p>
+                          </div>
+                        </div>
+                      )}
                       
                       {/* Actions */}
                       <div className="mt-4 space-y-2">

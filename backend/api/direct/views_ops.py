@@ -484,6 +484,9 @@ def attach_prescription_items(request):
         import json
         from api.orders.models import Order, OrderLine
         from api.inventory.models import PharmacyInventory
+        from django.db.models import Sum, F
+        from django.utils import timezone
+        from decimal import Decimal
 
         data = json.loads(request.body or '{}')
         order_id = int(data.get('order_id') or 0)
@@ -494,7 +497,6 @@ def attach_prescription_items(request):
 
         order = Order.objects.get(id=order_id)
         added = []
-        from decimal import Decimal
         for it in items:
             inv_id = int(it.get('inventory_item_id') or 0)
             qty = int(it.get('quantity') or 1)
@@ -521,6 +523,24 @@ def attach_prescription_items(request):
                 line.total_price = total_price
                 line.save(update_fields=['quantity', 'unit_price', 'total_price'])
             added.append(line.id)
+
+        # Auto-approve senior discount if requested and pending (same logic as cart orders)
+        if order.senior_discount_requested and order.senior_discount_status == 'pending':
+            subtotal = order.order_lines.aggregate(
+                total=Sum(F('unit_price') * F('quantity'))
+            )['total'] or Decimal('0.00')
+            
+            if subtotal > 0:
+                # Calculate 20% discount on subtotal
+                discount = subtotal * Decimal('0.20')
+                
+                # Update order with approved senior discount
+                order.senior_discount_status = 'approved'
+                order.discount_amount = discount
+                order.senior_discount_notes = 'Auto-approved when prescription items were added'
+                order.senior_discount_review_date = timezone.now()
+                
+                logger.info(f"💚 Auto-approved senior discount for prescription order {order.order_number}: ₱{discount}")
 
         # Recalculate order totals after modifications
         try:
