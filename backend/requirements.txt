@@ -34,3 +34,4 @@ daphne==4.0.0                          # ASGI server for Channels
 dj-database-url==2.1.0                 # Database URL parser for Railway
 whitenoise==6.6.0                      # Static file serving for production
 sib-api-v3-sdk==7.6.0                  # Brevo (Sendinblue) email API - 300 emails/day free
+stripe==11.1.1                         # Stripe payment processing
