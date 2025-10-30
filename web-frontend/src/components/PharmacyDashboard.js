@@ -74,6 +74,8 @@ const PharmacyDashboard = () => {
   const [reviewSelectedItems, setReviewSelectedItems] = useState([]);
   const [reviewSearching, setReviewSearching] = useState(false);
   const reviewSearchDebounceRef = useRef(null);
+  const [showItemsAddedSuccess, setShowItemsAddedSuccess] = useState(false);
+  const [addedItemsCount, setAddedItemsCount] = useState(0);
   const [isPrescriptionImagePreviewOpen, setIsPrescriptionImagePreviewOpen] = useState(false);
   const [prescriptionImagePreviewUrl, setPrescriptionImagePreviewUrl] = useState('');
   const [showChatPanel, setShowChatPanel] = useState(false);
@@ -266,6 +268,10 @@ const PharmacyDashboard = () => {
       orderNumber: order?.orderNumber || order?.order_number || order?.id,
       prescriptionNotes: order?.prescriptionNotes || '',
       prescriptionImageUrl: order?.prescriptionImageUrl || '',
+      // Ensure senior discount fields are properly mapped
+      seniorDiscountRequested: order?.seniorDiscountRequested || false,
+      seniorCitizenIdImage: order?.seniorCitizenIdImage || order?.senior_citizen_id_image || '',
+      seniorDiscountStatus: order?.seniorDiscountStatus || order?.senior_discount_status || 'not_requested',
     };
     setSelectedOrder(safeOrder);
     
@@ -316,6 +322,8 @@ const PharmacyDashboard = () => {
     setReviewSearchResults([]);
     setReviewSelectedItems([]);
     setReviewSearching(false);
+    setShowItemsAddedSuccess(false);
+    setAddedItemsCount(0);
     if (reviewSearchDebounceRef.current) {
       clearTimeout(reviewSearchDebounceRef.current);
       reviewSearchDebounceRef.current = null;
@@ -665,9 +673,50 @@ const PharmacyDashboard = () => {
       }
 
       // Refresh orders to reflect updated totals and items
-      fetchOrders(pharmacy.id);
+      await fetchOrders(pharmacy.id);
 
-      // Clear selection and close modal
+      // Refresh the selected order to show updated data (including senior discount status)
+      try {
+        const base = (process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
+        const statusResp = await fetch(`${base}/api/order-status/${order.id}/`);
+        const statusJson = await statusResp.json();
+        
+        if (statusResp.ok && statusJson.success) {
+          const updatedOrderData = statusJson.data || statusJson;
+          
+          // Update selectedOrder with fresh data
+          setSelectedOrder(prevOrder => ({
+            ...prevOrder,
+            ...updatedOrderData,
+            items: updatedOrderData.items || prevOrder.items,
+            subtotal: updatedOrderData.subtotal,
+            total_amount: updatedOrderData.total_amount,
+            discount_amount: updatedOrderData.discount_amount,
+            tax_amount: updatedOrderData.tax_amount,
+            delivery_fee: updatedOrderData.delivery_fee,
+            // Map senior discount fields (handle both snake_case and camelCase)
+            seniorDiscountStatus: updatedOrderData.senior_discount_status || updatedOrderData.seniorDiscountStatus,
+            seniorDiscountRequested: updatedOrderData.senior_discount_requested || updatedOrderData.seniorDiscountRequested,
+            seniorCitizenIdImage: updatedOrderData.senior_citizen_id_image || updatedOrderData.seniorCitizenIdImage,
+          }));
+          
+          console.log('✅ Modal refreshed with updated order data', updatedOrderData);
+        }
+      } catch (err) {
+        console.error('Failed to refresh order in modal:', err);
+      }
+
+      // Show success notification
+      const itemsCount = reviewSelectedItems.length;
+      setAddedItemsCount(itemsCount);
+      setShowItemsAddedSuccess(true);
+      
+      // Hide success notification after 5 seconds
+      setTimeout(() => {
+        setShowItemsAddedSuccess(false);
+      }, 5000);
+
+      // Clear selection
       setReviewSelectedItems([]);
       setReviewSearchQuery('');
       setReviewSearchResults([]);
@@ -2781,6 +2830,23 @@ const PharmacyDashboard = () => {
                           <span className="text-xs text-gray-500">Order No. <span className="font-semibold">{selectedOrder.orderNumber}</span></span>
                         </div>
 
+                        {/* Items Added Success Notification */}
+                        {showItemsAddedSuccess && (
+                          <div className="mb-4 bg-green-50 border border-green-200 rounded-lg p-3 flex items-center animate-fade-in">
+                            <svg className="w-5 h-5 text-green-600 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/>
+                            </svg>
+                            <div className="flex-1">
+                              <p className="text-sm font-medium text-green-800">
+                                ✅ {addedItemsCount} item{addedItemsCount !== 1 ? 's' : ''} added successfully!
+                              </p>
+                              <p className="text-xs text-green-700 mt-0.5">
+                                Order totals have been updated
+                              </p>
+                            </div>
+                          </div>
+                        )}
+
                         {/* Review Search */}
                         <div className="mb-3">
                       <label className="block text-sm text-gray-700 mb-1">Search inventory to match prescription</label>
@@ -2909,10 +2975,11 @@ const PharmacyDashboard = () => {
                               Customer has requested senior citizen discount
                             </p>
                             <p className="text-xs text-gray-600">
-                              Review the Senior Citizen ID image on the left before approving
+                              Review the Senior Citizen ID image on the left before adding items
                             </p>
-                            <p className="text-xs text-gray-600 mt-1">
-                              Discount will be calculated after you add items and send the price quote
+                            <p className="text-xs text-blue-600 font-medium mt-2 flex items-center">
+                              <span className="mr-1">ℹ️</span>
+                              Discount will be auto-approved when you add items to this order
                             </p>
                           </div>
                           <button
@@ -2932,11 +2999,16 @@ const PharmacyDashboard = () => {
                               ? 'bg-green-50 border border-green-200' 
                               : 'bg-red-50 border border-red-200'
                           }`}>
-                            <p className="text-sm font-medium">
+                            <p className="text-sm font-medium mb-1">
                               {selectedOrder.seniorDiscountStatus === 'approved' 
-                                ? 'Senior discount approved' 
-                                : 'Senior discount rejected'}
+                                ? '✅ Senior discount approved' 
+                                : '❌ Senior discount rejected'}
                             </p>
+                            {selectedOrder.seniorDiscountStatus === 'approved' && selectedOrder.discount_amount > 0 && (
+                              <p className="text-xs text-green-700">
+                                Customer saves ₱{(selectedOrder.discount_amount || 0).toFixed(2)} (20% off) + FREE service fee
+                              </p>
+                            )}
                           </div>
                         </div>
                       )}
@@ -3013,6 +3085,8 @@ const PharmacyDashboard = () => {
                                   try {
                                     // Fetch latest breakdown for invoice-like message
                                     let subtotal = null, delivery = null, serviceFee = null, total = quotedTotal, itemLines = [];
+                                    let discountAmount = null, seniorDiscountApproved = false;
+                                    
                                     try {
                                       // Force totals refresh, then read status
                                       const base = (process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
@@ -3030,9 +3104,8 @@ const PharmacyDashboard = () => {
                                       if (typeof p?.total_amount === 'number') total = p.total_amount;
                                       
                                       // Get senior discount info
-                                      const discountAmount = typeof p?.discount_amount === 'number' ? p.discount_amount : null;
-                                      const seniorDiscountApproved = p?.senior_discount_status === 'approved';
-                                      const seniorDiscountRequested = p?.senior_discount_requested === true;
+                                      discountAmount = typeof p?.discount_amount === 'number' ? p.discount_amount : null;
+                                      seniorDiscountApproved = p?.senior_discount_status === 'approved';
                                       
                                       if (Array.isArray(p?.items)) {
                                         itemLines = p.items.map((it) => {
@@ -3076,6 +3149,8 @@ const PharmacyDashboard = () => {
                                     
                                     const msgContent = `${header}${breakdown}${itemsLine}${footer}${seniorMessage}`;
 
+                                    console.log('📨 Preparing to send pricing message:', msgContent);
+
                                     // Optimistic pricing message (semi-transparent with Sending...)
                                     const tempId = `temp-${Date.now()}`;
                                     const optimisticMsg = {
@@ -3096,20 +3171,26 @@ const PharmacyDashboard = () => {
                                     });
 
                                     const base = (process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
+                                    console.log('📤 Sending message to:', `${base}/api/order-chat-send/`);
                                     const sendResp = await fetch(`${base}/api/order-chat-send/`, {
                                       method: 'POST',
                                       headers: { 'Content-Type': 'application/json' },
                                       body: JSON.stringify({ room_id: roomId, pharmacy_id: pharmacy?.id, content: msgContent })
                                     });
                                     const sendJson = await sendResp.json();
+                                    console.log('📥 Send response:', sendJson);
                                     if (!sendResp.ok || !sendJson.success) {
+                                      console.error('❌ Send failed:', sendJson);
                                       // Mark failure subtly or refetch
                                       await fetchChatMessages(roomId, { silent: true });
                                     } else {
+                                      console.log('✅ Message sent successfully');
                                       // Reconcile list (refetch replaces optimistic with real message)
                                       await fetchChatMessages(roomId, { silent: true });
                                     }
-                                  } catch (_) {}
+                                  } catch (err) {
+                                    console.error('💥 Error sending pricing message:', err);
+                                  }
                                   // Also nudge the customer's app to show pricing approval sheet by updating totals/state (client already polls)
                                 } catch (e) {
                                   console.error('Open chat error', e);
