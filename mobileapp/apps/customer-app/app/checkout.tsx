@@ -33,8 +33,8 @@ const BackArrowIcon = ({ size = 24, color = '#000000' }) => (
 );
 
 // Payment Method Icons using custom assets
-const VisaIcon = () => (
-  <Image source={require('../assets/visa.png')} style={styles.paymentIcon} resizeMode="contain" />
+const CardIcon = () => (
+  <Image source={require('../assets/card2.png')} style={styles.paymentIcon} resizeMode="contain" />
 );
 
 const BankTransferIcon = () => (
@@ -149,7 +149,7 @@ export default function CheckoutScreen() {
   // Get payment method display name
   const getPaymentMethodName = (method: string) => {
     switch (method) {
-      case 'visa': return 'Visa';
+      case 'card': return 'Card (Visa, Mastercard, etc.)';
       case 'bank_transfer': return 'Bank Transfer';
       case 'paypal': return 'PayPal';
       case 'cod': return 'Cash on Delivery';
@@ -591,7 +591,7 @@ export default function CheckoutScreen() {
               // Collapsed view - show only selected method + total
               <View style={styles.paymentSummary}>
                 <View style={styles.paymentSummaryLeft}>
-                  {selectedPaymentMethod === 'visa' && <VisaIcon />}
+                  {selectedPaymentMethod === 'card' && <CardIcon />}
                   {selectedPaymentMethod === 'bank_transfer' && <BankTransferIcon />}
                   {selectedPaymentMethod === 'paypal' && <PayPalIcon />}
                   {selectedPaymentMethod === 'cod' && <CODIcon />}
@@ -602,83 +602,53 @@ export default function CheckoutScreen() {
             ) : (
               // Expanded view - show all payment options
               <View style={styles.paymentMethods}>
-                {/* Visa */}
+                {/* Card */}
                 <TouchableOpacity
                   style={[
                     styles.paymentOption,
-                    selectedPaymentMethod === 'visa' && styles.paymentOptionActive,
-                    hasPendingSeniorDiscount && selectedPaymentMethod !== 'visa' && styles.paymentOptionDisabled,
+                    selectedPaymentMethod === 'card' && styles.paymentOptionActive,
+                    hasPendingSeniorDiscount && selectedPaymentMethod !== 'card' && styles.paymentOptionDisabled,
                   ]}
                   onPress={() => {
                     if (!hasPendingSeniorDiscount) {
-                      setSelectedPaymentMethod('visa');
+                      setSelectedPaymentMethod('card');
                     }
                   }}
-                  disabled={hasPendingSeniorDiscount && selectedPaymentMethod !== 'visa'}
+                  disabled={hasPendingSeniorDiscount && selectedPaymentMethod !== 'card'}
                 >
-                  <VisaIcon />
+                  <CardIcon />
                   <View style={styles.paymentLabelContainer}>
-                    <Text style={[styles.paymentLabel, hasPendingSeniorDiscount && selectedPaymentMethod !== 'visa' && styles.paymentLabelDisabled]}>Visa</Text>
-                    {hasPendingSeniorDiscount && selectedPaymentMethod !== 'visa' && (
+                    <Text style={[styles.paymentLabel, hasPendingSeniorDiscount && selectedPaymentMethod !== 'card' && styles.paymentLabelDisabled]}>Card (Visa, Mastercard, etc.)</Text>
+                    {hasPendingSeniorDiscount && selectedPaymentMethod !== 'card' && (
                       <Text style={styles.paymentRestrictionText}>Not available for pending senior discount</Text>
                     )}
                   </View>
                   <View style={styles.radioOuter}>
-                    {selectedPaymentMethod === 'visa' && <View style={styles.radioInner} />}
+                    {selectedPaymentMethod === 'card' && <View style={styles.radioInner} />}
                   </View>
                 </TouchableOpacity>
 
-                {/* Bank Transfer */}
-                <TouchableOpacity
-                  style={[
-                    styles.paymentOption,
-                    selectedPaymentMethod === 'bank_transfer' && styles.paymentOptionActive,
-                    hasPendingSeniorDiscount && selectedPaymentMethod !== 'bank_transfer' && styles.paymentOptionDisabled,
-                  ]}
-                  onPress={() => {
-                    if (!hasPendingSeniorDiscount) {
-                      setSelectedPaymentMethod('bank_transfer');
-                    }
-                  }}
-                  disabled={hasPendingSeniorDiscount && selectedPaymentMethod !== 'bank_transfer'}
-                >
+                {/* Bank Transfer - Coming Soon */}
+                <View style={[styles.paymentOption, styles.paymentOptionDisabled]}>
                   <BankTransferIcon />
                   <View style={styles.paymentLabelContainer}>
-                    <Text style={[styles.paymentLabel, hasPendingSeniorDiscount && selectedPaymentMethod !== 'bank_transfer' && styles.paymentLabelDisabled]}>Bank Transfer</Text>
-                    {hasPendingSeniorDiscount && selectedPaymentMethod !== 'bank_transfer' && (
-                      <Text style={styles.paymentRestrictionText}>Not available for pending senior discount</Text>
-                    )}
+                    <Text style={[styles.paymentLabel, styles.paymentLabelDisabled]}>Bank Transfer</Text>
                   </View>
-                  <View style={styles.radioOuter}>
-                    {selectedPaymentMethod === 'bank_transfer' && <View style={styles.radioInner} />}
+                  <View style={styles.comingSoonBadge}>
+                    <Text style={styles.comingSoonText}>Coming Soon</Text>
                   </View>
-                </TouchableOpacity>
+                </View>
 
-                {/* PayPal */}
-                <TouchableOpacity
-                  style={[
-                    styles.paymentOption,
-                    selectedPaymentMethod === 'paypal' && styles.paymentOptionActive,
-                    hasPendingSeniorDiscount && selectedPaymentMethod !== 'paypal' && styles.paymentOptionDisabled,
-                  ]}
-                  onPress={() => {
-                    if (!hasPendingSeniorDiscount) {
-                      setSelectedPaymentMethod('paypal');
-                    }
-                  }}
-                  disabled={hasPendingSeniorDiscount && selectedPaymentMethod !== 'paypal'}
-                >
+                {/* PayPal - Coming Soon */}
+                <View style={[styles.paymentOption, styles.paymentOptionDisabled]}>
                   <PayPalIcon />
                   <View style={styles.paymentLabelContainer}>
-                    <Text style={[styles.paymentLabel, hasPendingSeniorDiscount && selectedPaymentMethod !== 'paypal' && styles.paymentLabelDisabled]}>PayPal</Text>
-                    {hasPendingSeniorDiscount && selectedPaymentMethod !== 'paypal' && (
-                      <Text style={styles.paymentRestrictionText}>Not available for pending senior discount</Text>
-                    )}
+                    <Text style={[styles.paymentLabel, styles.paymentLabelDisabled]}>PayPal</Text>
                   </View>
-                  <View style={styles.radioOuter}>
-                    {selectedPaymentMethod === 'paypal' && <View style={styles.radioInner} />}
+                  <View style={styles.comingSoonBadge}>
+                    <Text style={styles.comingSoonText}>Coming Soon</Text>
                   </View>
-                </TouchableOpacity>
+                </View>
 
                 {/* COD */}
                 <TouchableOpacity
@@ -1452,6 +1422,18 @@ const styles = StyleSheet.create({
   labelButtonTextActive: {
     color: '#00bf63',
     fontWeight: '600',
+  },
+  // Coming Soon Badge
+  comingSoonBadge: {
+    backgroundColor: '#FFE0B2',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  comingSoonText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#F57C00',
   },
 });
 
