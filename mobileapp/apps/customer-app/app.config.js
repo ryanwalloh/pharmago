@@ -54,7 +54,13 @@ module.exports = {
     },
     plugins: [
       'expo-router',
-      '@stripe/stripe-react-native',
+      [
+        '@stripe/stripe-react-native',
+        {
+          merchantIdentifier: 'merchant.com.pharmago.customer',
+          enableGooglePay: true,
+        },
+      ],
       [
         'expo-splash-screen',
         {
@@ -101,6 +107,9 @@ module.exports = {
       // Also expose to JS runtime for reverse geocoding fallback
       googleMapsApiKey: GOOGLE_MAPS_API_KEY,
       stripePublishableKey: STRIPE_PUBLISHABLE_KEY,
+      eas: {
+        projectId: 'e5d9e71b-338b-490e-8b22-4701372eec35',
+      },
     },
   },
 };

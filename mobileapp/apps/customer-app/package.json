@@ -16,7 +16,7 @@
     "@react-navigation/bottom-tabs": "^7.4.7",
     "@react-navigation/elements": "^2.6.3",
     "@react-navigation/native": "^7.1.17",
-    "@stripe/stripe-react-native": "^0.38.0",
+    "@stripe/stripe-react-native": "0.37.3",
     "expo": "~54.0.2",
     "expo-constants": "~18.0.8",
     "expo-dev-client": "~6.0.8",
