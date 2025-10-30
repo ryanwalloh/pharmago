@@ -81,6 +81,10 @@
     "fonts": [
       "./assets/fonts/Nexa-ExtraLight.ttf",
       "./assets/fonts/Nexa-Heavy.ttf"
-    ]
+    ],
+    "extra": {
+      "stripePublishableKey": "pk_test_51SMVqmJAiW57btKoSHW90pbFU3X7p6gFFxSFBq1IpatB6vD3LtUsjDShOV470HrGTZnuIUyQt0PDperJ13XfG1ue00iSbUd3Dp",
+      "googleMapsApiKey": "AIzaSyCCuDLJMhB-23kQiXYpXwi-yYGvKz7OgSQ"
+    }
   }
 }

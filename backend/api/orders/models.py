@@ -76,6 +76,34 @@ class Order(models.Model):
         help_text=_('Payment status')
     )
     
+    payment_method = models.CharField(
+        max_length=50,
+        default='cod',
+        choices=[
+            ('cod', _('Cash on Delivery')),
+            ('card', _('Card (Visa, Mastercard, etc.)')),
+            ('gcash', _('GCash')),
+            ('paymaya', _('PayMaya')),
+            ('bank_transfer', _('Bank Transfer')),
+        ],
+        help_text=_('Payment method selected by customer')
+    )
+    
+    # Stripe payment fields
+    stripe_payment_intent_id = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text=_('Stripe payment intent ID for card payments')
+    )
+    
+    stripe_payment_status = models.CharField(
+        max_length=50,
+        blank=True,
+        null=True,
+        help_text=_('Stripe payment status (succeeded, pending, failed)')
+    )
+    
     delivery_type = models.CharField(
         max_length=50,
         choices=DeliveryType.choices,
