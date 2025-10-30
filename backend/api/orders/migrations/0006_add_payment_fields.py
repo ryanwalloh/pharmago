@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('orders', '0005_add_senior_discount_fields'),
+        ('orders', '0005_order_senior_citizen_id_image_and_more'),
     ]
 
     operations = [
