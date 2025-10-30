@@ -3129,6 +3129,10 @@ const PharmacyDashboard = () => {
                                       const statusResp2 = await fetch(`${base}/api/order-status/${selectedOrder.id}/`);
                                       const statusJson2 = await statusResp2.json();
                                       const p = statusJson2?.data || statusJson2;
+                                      
+                                      console.log('🔍 Full order status response:', p);
+                                      console.log('🔍 Items array:', p?.items);
+                                      
                                       subtotal = typeof p?.subtotal === 'number' ? p.subtotal : null;
                                       delivery = typeof p?.delivery_fee === 'number' ? p.delivery_fee : null;
                                       serviceFee = typeof p?.tax_amount === 'number' ? p.tax_amount : null; // display as Service Fee
@@ -3139,17 +3143,21 @@ const PharmacyDashboard = () => {
                                       seniorDiscountApproved = p?.senior_discount_status === 'approved';
                                       
                                       if (Array.isArray(p?.items)) {
-                                        console.log('📦 Items from API:', p.items);
-                                        itemLines = p.items.map((it) => {
+                                        console.log('📦 Processing items, count:', p.items.length);
+                                        itemLines = p.items.map((it, index) => {
+                                          console.log(`📦 Item ${index + 1}:`, it);
                                           const nm = String((it && (it.name || it.product || it.display_name)) || 'Item');
                                           const qty = (it && it.quantity) || 1;
                                           const rawUnit = it && (it.unit_price != null ? it.unit_price : it.price);
                                           const unit = typeof rawUnit === 'number' ? rawUnit : (rawUnit ? Number(rawUnit) : null);
                                           const priceStr = unit != null && !Number.isNaN(unit) ? `₱${Number(unit).toFixed(2)}` : '₱0.00';
                                           const qtyPrefix = qty > 1 ? `${qty}x ` : '';
-                                          console.log(`  Item: ${nm}, Qty: ${qty}, QtyPrefix: "${qtyPrefix}", Unit: ${priceStr}`);
+                                          console.log(`  ➜ Name: ${nm}, Qty: ${qty}, QtyPrefix: "${qtyPrefix}", Price: ${priceStr}`);
                                           return `- ${qtyPrefix}${nm} — ${priceStr} each`;
                                         }).filter(Boolean);
+                                        console.log('📦 Final item lines:', itemLines);
+                                      } else {
+                                        console.warn('⚠️ Items is not an array or is missing:', p?.items);
                                       }
                                     } catch (_) {}
                                     
