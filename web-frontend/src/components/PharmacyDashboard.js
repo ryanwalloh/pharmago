@@ -643,7 +643,7 @@ const PharmacyDashboard = () => {
         pharmacy_id: pharmacy.id,
         items: reviewSelectedItems.map(item => ({
           inventory_item_id: item.id,
-          quantity: 1
+          quantity: item.quantity || 1
         })),
         notes: reviewSearchQuery ? `Matched items for: ${reviewSearchQuery}` : ''
       };
@@ -707,8 +707,8 @@ const PharmacyDashboard = () => {
       }
 
       // Show success notification
-      const itemsCount = reviewSelectedItems.length;
-      setAddedItemsCount(itemsCount);
+      const totalQuantity = reviewSelectedItems.reduce((sum, item) => sum + (item.quantity || 1), 0);
+      setAddedItemsCount(totalQuantity);
       setShowItemsAddedSuccess(true);
       
       // Hide success notification after 5 seconds
@@ -2930,7 +2930,7 @@ const PharmacyDashboard = () => {
                               <button
                                 onClick={() => {
                                   if (!reviewSelectedItems.find((x) => x.id === item.id)) {
-                                    setReviewSelectedItems((prev) => [...prev, item]);
+                                    setReviewSelectedItems((prev) => [...prev, { ...item, quantity: 1 }]);
                                   }
                                 }}
                                 className="flex items-center justify-center h-8 w-8 rounded-full bg-green-600 text-white hover:bg-green-700"
@@ -2951,8 +2951,39 @@ const PharmacyDashboard = () => {
                         ) : (
                           <div className="flex flex-wrap gap-2">
                             {reviewSelectedItems.map((item) => (
-                              <span key={item.id} className="inline-flex items-center px-2 py-1 rounded-full bg-green-50 text-green-700 text-xs border border-green-200">
-                                {item.name}
+                              <div key={item.id} className="inline-flex items-center px-2 py-1 rounded-full bg-green-50 text-green-700 text-xs border border-green-200">
+                                <span className="font-medium">{item.name}</span>
+                                <div className="flex items-center ml-2 bg-white rounded-full px-1.5 py-0.5 border border-green-300">
+                                  <button
+                                    className="w-4 h-4 flex items-center justify-center text-green-700 hover:text-green-900 font-bold"
+                                    onClick={() => {
+                                      setReviewSelectedItems((prev) =>
+                                        prev.map((x) =>
+                                          x.id === item.id && x.quantity > 1
+                                            ? { ...x, quantity: x.quantity - 1 }
+                                            : x
+                                        )
+                                      );
+                                    }}
+                                    title="Decrease quantity"
+                                  >
+                                    −
+                                  </button>
+                                  <span className="mx-1.5 font-semibold min-w-[1rem] text-center">{item.quantity || 1}</span>
+                                  <button
+                                    className="w-4 h-4 flex items-center justify-center text-green-700 hover:text-green-900 font-bold"
+                                    onClick={() => {
+                                      setReviewSelectedItems((prev) =>
+                                        prev.map((x) =>
+                                          x.id === item.id ? { ...x, quantity: (x.quantity || 1) + 1 } : x
+                                        )
+                                      );
+                                    }}
+                                    title="Increase quantity"
+                                  >
+                                    +
+                                  </button>
+                                </div>
                                 <button
                                   className="ml-2 text-green-700 hover:text-green-900"
                                   onClick={() => setReviewSelectedItems((prev) => prev.filter((x) => x.id !== item.id))}
@@ -2960,7 +2991,7 @@ const PharmacyDashboard = () => {
                                 >
                                   ×
                                 </button>
-                              </span>
+                              </div>
                             ))}
                           </div>
                         )}
