@@ -3141,10 +3141,12 @@ const PharmacyDashboard = () => {
                                       if (Array.isArray(p?.items)) {
                                         itemLines = p.items.map((it) => {
                                           const nm = String((it && (it.name || it.product || it.display_name)) || 'Item');
+                                          const qty = it && (it.quantity != null ? it.quantity : 1);
                                           const rawUnit = it && (it.unit_price != null ? it.unit_price : it.price);
                                           const unit = typeof rawUnit === 'number' ? rawUnit : (rawUnit ? Number(rawUnit) : null);
                                           const priceStr = unit != null && !Number.isNaN(unit) ? `₱${Number(unit).toFixed(2)}` : '₱0.00';
-                                          return `- ${nm} — ${priceStr}`;
+                                          const qtyPrefix = qty > 1 ? `${qty}x ` : '';
+                                          return `- ${qtyPrefix}${nm} — ${priceStr} each`;
                                         }).filter(Boolean);
                                       }
                                     } catch (_) {}
