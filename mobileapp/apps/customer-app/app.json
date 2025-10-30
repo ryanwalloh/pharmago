@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "mobileapp",
-    "slug": "mobileapp",
+    "name": "PharmGo Customer",
+    "slug": "pharmago-customer",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -43,6 +43,7 @@
     },
     "plugins": [
       "expo-router",
+      "@stripe/stripe-react-native",
       [
         "expo-splash-screen",
         {
