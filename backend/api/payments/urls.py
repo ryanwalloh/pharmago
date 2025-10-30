@@ -1,12 +1,19 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import PaymentViewSet
+from .stripe_views import create_payment_intent, stripe_webhook, confirm_payment
 
 router = DefaultRouter()
 router.register(r'payments', PaymentViewSet, basename='payment')
 
 urlpatterns = [
     path('', include(router.urls)),
+    
+    # Stripe payment endpoints
+    path('stripe/create-payment-intent/', create_payment_intent, name='stripe-create-payment-intent'),
+    path('stripe/webhook/', stripe_webhook, name='stripe-webhook'),
+    path('stripe/confirm-payment/', confirm_payment, name='stripe-confirm-payment'),
+    
     path('payments/', include([
         path('my-payments/', PaymentViewSet.as_view({'get': 'my_payments'}), name='payment-my'),
         path('pending/', PaymentViewSet.as_view({'get': 'pending'}), name='payment-pending'),

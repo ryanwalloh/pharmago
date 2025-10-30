@@ -688,6 +688,32 @@ class ApiService {
       else AsyncStorage.removeItem('auth_token');
     } catch {}
   }
+
+  // Stripe payment methods
+  async createStripePaymentIntent(orderId: number): Promise<ApiResponse<any>> {
+    console.log('💳 Creating Stripe payment intent for order:', orderId);
+    return this.makeDirectRequest('/stripe/create-payment-intent/', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ order_id: orderId }),
+    });
+  }
+
+  async confirmStripePayment(orderId: number, paymentIntentId: string): Promise<ApiResponse<any>> {
+    console.log('💳 Confirming Stripe payment:', { orderId, paymentIntentId });
+    return this.makeDirectRequest('/stripe/confirm-payment/', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ 
+        order_id: orderId,
+        payment_intent_id: paymentIntentId 
+      }),
+    });
+  }
 }
 
 export const apiService = new ApiService();
