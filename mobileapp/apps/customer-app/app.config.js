@@ -8,12 +8,13 @@ try {
 } catch (_) {}
 
 const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY || '';
+const STRIPE_PUBLISHABLE_KEY = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY || 'pk_test_51SMVqmJAiW57btKoSHW90pbFU3X7p6gFFxSFBq1IpatB6vD3LtUsjDShOV470HrGTZnuIUyQt0PDperJ13XfG1ue00iSbUd3Dp';
 
 /** @type {import('@expo/config').ExpoConfig} */
 module.exports = {
   expo: {
-    name: 'mobileapp',
-    slug: 'mobileapp',
+    name: 'PharmGo Customer',
+    slug: 'pharmago-customer',
     version: '1.0.0',
     orientation: 'portrait',
     icon: './assets/images/icon.png',
@@ -49,6 +50,7 @@ module.exports = {
     },
     plugins: [
       'expo-router',
+      '@stripe/stripe-react-native',
       [
         'expo-splash-screen',
         {
@@ -94,10 +96,7 @@ module.exports = {
     extra: {
       // Also expose to JS runtime for reverse geocoding fallback
       googleMapsApiKey: GOOGLE_MAPS_API_KEY,
-      // Enable using process.env via expo-constants if needed
-      eas: {
-        projectId: 'local-dev',
-      },
+      stripePublishableKey: STRIPE_PUBLISHABLE_KEY,
     },
   },
 };
