@@ -193,6 +193,7 @@ def create_cart_order(request):
                 delivery_address=delivery_address,
                 order_status=Order.OrderStatus.PENDING,
                 payment_status=Order.PaymentStatus.UNPAID,
+                payment_method=payment_method,
                 delivery_type=Order.DeliveryType.STANDARD,
                 subtotal=subtotal,
                 tax_amount=service_fee,

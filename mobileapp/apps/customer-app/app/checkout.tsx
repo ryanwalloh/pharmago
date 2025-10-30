@@ -19,8 +19,9 @@ import MapView, { Marker, PROVIDER_GOOGLE, Region } from 'react-native-maps';
 import Svg, { Path } from 'react-native-svg';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
+import { useStripe } from '@stripe/stripe-react-native';
 import { fontFamily } from '../utils/fonts';
-import apiService from '../services/api';
+import { apiService } from '../services/api';
 
 // Back Arrow Icon
 const BackArrowIcon = ({ size = 24, color = '#000000' }) => (
@@ -122,23 +123,17 @@ const customMapStyle = [
 ];
 
 export default function CheckoutScreen() {
+  const { initPaymentSheet, presentPaymentSheet } = useStripe();
   const [loading, setLoading] = useState(true);
   const [orderData, setOrderData] = useState<any>(null);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('cod');
   const [userLocation, setUserLocation] = useState<any>(null);
   const [address, setAddress] = useState<string>('');
   const [placingOrder, setPlacingOrder] = useState(false);
+  const [paymentIntentClientSecret, setPaymentIntentClientSecret] = useState<string | null>(null);
 
   // Small Order Fee - matches backend default
   const BASE_SERVICE_FEE = 19.00;
-
-  // Calculate service fee - waived for senior citizens
-  const calculateServiceFee = () => {
-    if (orderData?.apply_senior_discount && orderData?.senior_id_image_url) {
-      return 0; // Waive service fee for senior citizens
-    }
-    return BASE_SERVICE_FEE;
-  };
 
   // Payment method expansion state
   const [paymentMethodExpanded, setPaymentMethodExpanded] = useState(false);
@@ -283,6 +278,83 @@ export default function CheckoutScreen() {
       }
     } catch (error) {
       console.error('Failed to reverse geocode:', error);
+    }
+  };
+
+  const initializeStripePaymentSheet = async (orderId: number) => {
+    try {
+      console.log('💳 Initializing Stripe payment sheet for order:', orderId);
+      
+      // Create payment intent on backend
+      const response = await apiService.createStripePaymentIntent(orderId);
+      
+      if (!response.success || !response.data) {
+        throw new Error(response.error || 'Failed to create payment intent');
+      }
+      
+      const { client_secret, amount } = response.data;
+      setPaymentIntentClientSecret(client_secret);
+      
+      console.log('✅ Payment intent created:', { amount });
+      
+      // Initialize payment sheet
+      const { error } = await initPaymentSheet({
+        merchantDisplayName: 'PharmGo',
+        paymentIntentClientSecret: client_secret,
+        defaultBillingDetails: {
+          name: orderData?.pharmacy?.pharmacy_name || 'Customer',
+        },
+        returnURL: 'mobileapp://checkout',
+      });
+      
+      if (error) {
+        throw new Error(error.message);
+      }
+      
+      console.log('✅ Payment sheet initialized');
+      return true;
+    } catch (error: any) {
+      console.error('❌ Error initializing payment sheet:', error);
+      Alert.alert('Payment Error', error.message || 'Failed to initialize payment');
+      return false;
+    }
+  };
+
+  const handleStripePayment = async (orderId: number) => {
+    try {
+      console.log('💳 Presenting Stripe payment sheet');
+      
+      // Present payment sheet
+      const { error } = await presentPaymentSheet();
+      
+      if (error) {
+        if (error.code === 'Canceled') {
+          console.log('ℹ️ Payment canceled by user');
+          return false;
+        }
+        throw new Error(error.message);
+      }
+      
+      console.log('✅ Payment completed successfully');
+      
+      // Confirm payment on backend
+      if (paymentIntentClientSecret) {
+        // Extract payment_intent_id from client_secret (format: pi_xxx_secret_yyy)
+        const paymentIntentId = paymentIntentClientSecret.split('_secret_')[0];
+        const confirmResponse = await apiService.confirmStripePayment(orderId, paymentIntentId);
+        
+        if (!confirmResponse.success) {
+          throw new Error(confirmResponse.error || 'Failed to confirm payment');
+        }
+        
+        console.log('✅ Payment confirmed on backend');
+      }
+      
+      return true;
+    } catch (error: any) {
+      console.error('❌ Payment error:', error);
+      Alert.alert('Payment Failed', error.message || 'Payment could not be completed');
+      return false;
     }
   };
 
@@ -463,6 +535,39 @@ export default function CheckoutScreen() {
       if (response.success && response.data?.order) {
         const createdOrder = response.data.order;
         console.log('✅ Order created successfully:', createdOrder.order_number);
+        
+        // Handle Stripe payment for card payment method
+        if (selectedPaymentMethod === 'card') {
+          console.log('💳 Card payment selected - initializing Stripe payment');
+          
+          // Initialize Stripe payment sheet
+          const initSuccess = await initializeStripePaymentSheet(createdOrder.order_id);
+          if (!initSuccess) {
+            throw new Error('Failed to initialize payment');
+          }
+          
+          // Present payment sheet and process payment
+          const paymentSuccess = await handleStripePayment(createdOrder.order_id);
+          if (!paymentSuccess) {
+            // Payment was canceled or failed
+            Alert.alert(
+              'Payment Incomplete',
+              'Your order was created but payment was not completed. You can complete payment later.',
+              [
+                {
+                  text: 'View Order',
+                  onPress: () => {
+                    router.replace(`/order-tracking/${createdOrder.order_id}` as any);
+                  }
+                }
+              ]
+            );
+            setPlacingOrder(false);
+            return;
+          }
+          
+          console.log('✅ Stripe payment completed successfully');
+        }
         
         // Clear pending order from storage
         await AsyncStorage.removeItem('pending_order');
