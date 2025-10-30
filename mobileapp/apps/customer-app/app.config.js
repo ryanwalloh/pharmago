@@ -23,6 +23,10 @@ module.exports = {
     newArchEnabled: true,
     ios: {
       supportsTablet: true,
+      bundleIdentifier: 'com.pharmago.customer',
+      config: {
+        googleMapsApiKey: GOOGLE_MAPS_API_KEY,
+      },
     },
     android: {
       adaptiveIcon: {
@@ -42,7 +46,7 @@ module.exports = {
       config: {
         googleMaps: GOOGLE_MAPS_API_KEY ? { apiKey: GOOGLE_MAPS_API_KEY } : undefined,
       },
-      package: 'com.anonymous.mobileapp',
+      package: 'com.pharmago.customer',
     },
     web: {
       output: 'static',
