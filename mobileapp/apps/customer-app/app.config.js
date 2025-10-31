@@ -20,7 +20,7 @@ module.exports = {
     icon: './assets/images/icon.png',
     scheme: 'mobileapp',
     userInterfaceStyle: 'automatic',
-    newArchEnabled: true,
+    newArchEnabled: false,
     ios: {
       supportsTablet: true,
       bundleIdentifier: 'com.pharmago.customer',
@@ -97,7 +97,7 @@ module.exports = {
     ],
     experiments: {
       typedRoutes: true,
-      reactCompiler: true,
+      reactCompiler: false,
     },
     fonts: [
       './assets/fonts/Nexa-ExtraLight.ttf',
