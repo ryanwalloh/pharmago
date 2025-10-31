@@ -17,8 +17,8 @@ module.exports = {
     slug: 'pharmago-customer',
     version: '1.0.0',
     orientation: 'portrait',
-    icon: './assets/icon.png',
-    scheme: 'pharmago',
+    icon: './assets/images/icon.png',
+    scheme: 'mobileapp',
     userInterfaceStyle: 'automatic',
     newArchEnabled: true,
     ios: {
