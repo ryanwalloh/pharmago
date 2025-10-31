@@ -87,6 +87,9 @@ module.exports = {
     ],
     extra: {
       googleMapsApiKey: GOOGLE_MAPS_API_KEY,
+      eas: {
+        projectId: '67a21424-bc39-4a97-b481-afd3667b467c',
+      },
     },
   },
 };
