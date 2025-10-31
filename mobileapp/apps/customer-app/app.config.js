@@ -44,7 +44,9 @@ module.exports = {
         'android.permission.ACCESS_COARSE_LOCATION',
       ],
       config: {
-        googleMaps: GOOGLE_MAPS_API_KEY ? { apiKey: GOOGLE_MAPS_API_KEY } : undefined,
+        googleMaps: {
+          apiKey: GOOGLE_MAPS_API_KEY,
+        },
       },
       package: 'com.pharmago.customer',
     },
