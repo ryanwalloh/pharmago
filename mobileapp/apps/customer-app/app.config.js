@@ -17,8 +17,8 @@ module.exports = {
     slug: 'pharmago-customer',
     version: '1.0.0',
     orientation: 'portrait',
-    icon: './assets/images/icon.png',
-    scheme: 'mobileapp',
+    icon: './assets/icon.png',
+    scheme: 'pharmago',
     userInterfaceStyle: 'automatic',
     newArchEnabled: true,
     ios: {
@@ -30,7 +30,7 @@ module.exports = {
     },
     android: {
       adaptiveIcon: {
-        backgroundColor: '#E6F4FE',
+        backgroundColor: '#FFFFFF',
         foregroundImage: './assets/images/android-icon-foreground.png',
         backgroundImage: './assets/images/android-icon-background.png',
         monochromeImage: './assets/images/android-icon-monochrome.png',
@@ -64,7 +64,7 @@ module.exports = {
       [
         'expo-splash-screen',
         {
-          image: './assets/images/splash-icon.png',
+          image: './assets/icon.png',
           imageWidth: 200,
           resizeMode: 'contain',
           backgroundColor: '#ffffff',
