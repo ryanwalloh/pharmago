@@ -87,9 +87,6 @@ module.exports = {
     ],
     extra: {
       googleMapsApiKey: GOOGLE_MAPS_API_KEY,
-      eas: {
-        projectId: 'PLACEHOLDER_WILL_BE_GENERATED',
-      },
     },
   },
 };
