@@ -8,13 +8,13 @@ try {
   // dotenv not available, will use process.env directly
 }
 
-const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY || '';
+const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY || 'AIzaSyCCuDLJMhB-23kQiXYpXwi-yYGvKz7OgSQ';
 const STRIPE_PUBLISHABLE_KEY = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY || 'pk_test_51SMVqmJAiW57btKoSHW90pbFU3X7p6gFFxSFBq1IpatB6vD3LtUsjDShOV470HrGTZnuIUyQt0PDperJ13XfG1ue00iSbUd3Dp';
 
 /** @type {import('@expo/config').ExpoConfig} */
 module.exports = {
   expo: {
-    name: 'PharmGo Customer',
+    name: 'PharmaGo',
     slug: 'pharmago-customer',
     version: '1.0.0',
     orientation: 'portrait',
@@ -32,9 +32,8 @@ module.exports = {
     android: {
       adaptiveIcon: {
         backgroundColor: '#FFFFFF',
-        foregroundImage: './assets/images/android-icon-foreground.png',
-        backgroundImage: './assets/images/android-icon-background.png',
-        monochromeImage: './assets/images/android-icon-monochrome.png',
+        foregroundImage: './assets/images/icon.png',
+        backgroundImage: './assets/images/icon.png',
       },
       edgeToEdgeEnabled: true,
       predictiveBackGestureEnabled: false,
