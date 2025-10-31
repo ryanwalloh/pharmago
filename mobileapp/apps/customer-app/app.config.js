@@ -3,9 +3,10 @@
 
 // Prefer dotenv if available; fall back to process.env
 try {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
   require('dotenv').config({ path: './.env' });
-} catch (_) {}
+} catch (_) {
+  // dotenv not available, will use process.env directly
+}
 
 const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY || '';
 const STRIPE_PUBLISHABLE_KEY = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY || 'pk_test_51SMVqmJAiW57btKoSHW90pbFU3X7p6gFFxSFBq1IpatB6vD3LtUsjDShOV470HrGTZnuIUyQt0PDperJ13XfG1ue00iSbUd3Dp';
@@ -99,10 +100,9 @@ module.exports = {
       typedRoutes: true,
       reactCompiler: false,
     },
-    fonts: [
-      './assets/fonts/Nexa-ExtraLight.ttf',
-      './assets/fonts/Nexa-Heavy.ttf',
-    ],
+    androidStatusBar: {
+      backgroundColor: '#ffffff',
+    },
     extra: {
       // Also expose to JS runtime for reverse geocoding fallback
       googleMapsApiKey: GOOGLE_MAPS_API_KEY,
