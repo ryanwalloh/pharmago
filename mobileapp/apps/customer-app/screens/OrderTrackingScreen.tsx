@@ -115,7 +115,7 @@ const OrderTrackingScreen: React.FC = () => {
   const chatFetchInFlightRef = useRef<boolean>(false);
   const typingTimerRef = useRef<any>(null);
   const isMountedRef = useRef<boolean>(true);
-  const [_showPriceApprove, setShowPriceApprove] = useState(false);
+  const [, setShowPriceApprove] = useState(false);
   const [approving, setApproving] = useState(false);
   const [dismissedPricingPrompt, setDismissedPricingPrompt] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -153,7 +153,7 @@ const OrderTrackingScreen: React.FC = () => {
         if (!isMountedRef.current) return;
         setChatError(msgs.error || 'Failed to load messages');
       }
-    } catch (_e) {
+    } catch {
       if (!isMountedRef.current) return;
       setChatError('Unexpected error loading messages');
     } finally {
@@ -645,7 +645,7 @@ const OrderTrackingScreen: React.FC = () => {
                       fetchChatMessages(room.id);
                     }, 12000);
                     setShowChatModal(true);
-                  } catch (_e) {
+                  } catch {
                     setChatError('Unexpected error opening chat');
                     setShowChatModal(true);
                   } finally {
@@ -975,7 +975,7 @@ const OrderTrackingScreen: React.FC = () => {
                           if (chatScrollRef.current) chatScrollRef.current.scrollToEnd({ animated: true });
                         });
                       }
-                    } catch (_e) {
+                    } catch {
                       setChatError('Unexpected error sending message');
                     } finally {
                       setChatSending(false);
@@ -1019,7 +1019,7 @@ const OrderTrackingScreen: React.FC = () => {
                           if (chatScrollRef.current) chatScrollRef.current.scrollToEnd({ animated: true });
                         });
                       }
-                    } catch (_e) {
+                    } catch {
                       setChatError('Unexpected error sending message');
                     } finally {
                       setChatSending(false);
