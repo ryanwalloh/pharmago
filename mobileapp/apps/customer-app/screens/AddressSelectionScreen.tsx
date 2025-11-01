@@ -11,15 +11,18 @@ import {
   ActivityIndicator,
   Modal,
   Animated,
+  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import * as Location from 'expo-location';
 import Constants from 'expo-constants';
-import MapView, { Marker, Region } from 'react-native-maps';
+import MapView, { Region } from 'react-native-maps';
 import { fontFamily } from '../utils/fonts';
 import { apiService } from '../services/api';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface AddressData {
   label: 'home' | 'work' | 'parent_house' | 'other';
@@ -42,14 +45,13 @@ const AddressSelectionScreen: React.FC = () => {
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [locationPermission, setLocationPermission] = useState<boolean | null>(null);
-  const [selectedLocation, setSelectedLocation] = useState<Region | null>(null);
   const [addressData, setAddressData] = useState<AddressData>({
     label: 'home',
     street_address: '',
     barangay: '',
     city: 'Iligan City',
     province: 'Lanao del Norte',
-    postal_code: '',
+    postal_code: '9200',
     latitude: 0,
     longitude: 0,
     building_name: '',
@@ -146,15 +148,18 @@ const AddressSelectionScreen: React.FC = () => {
         longitudeDelta: 0.01,
       };
 
-      setSelectedLocation(region);
       setAddressData(prev => ({ ...prev, latitude: coords.latitude, longitude: coords.longitude }));
 
       if (mapRef.current) {
         mapRef.current.animateToRegion(region, 750);
+        // Trigger reverse geocode after animation completes
+        setTimeout(() => {
+          reverseGeocode(coords.latitude, coords.longitude);
+        }, 800);
+      } else {
+        // Fallback if map ref not ready
+        reverseGeocode(coords.latitude, coords.longitude);
       }
-
-      // Also reverse geocode to prefill address
-      reverseGeocode(coords.latitude, coords.longitude);
     } catch (error) {
       console.error('💥 Error getting current location:', error);
       Alert.alert('Error', 'Failed to get your current location.');
@@ -163,23 +168,17 @@ const AddressSelectionScreen: React.FC = () => {
     }
   };
 
-  const handleMapPress = (event: any) => {
-    const { latitude, longitude } = event.nativeEvent.coordinate;
-    const region: Region = {
-      latitude,
-      longitude,
-      latitudeDelta: 0.01,
-      longitudeDelta: 0.01,
-    };
-
-    setSelectedLocation(region);
+  const handleMapRegionChangeComplete = (region: Region) => {
+    // Update location based on center of map
+    const { latitude, longitude } = region;
+    
     setAddressData(prev => ({
       ...prev,
       latitude,
       longitude,
     }));
 
-    console.log('📍 Location selected on map:', { latitude, longitude });
+    console.log('📍 Location updated from map center:', { latitude, longitude });
     reverseGeocode(latitude, longitude);
   };
 
@@ -468,27 +467,32 @@ const AddressSelectionScreen: React.FC = () => {
                 initialRegion={{
                   latitude: 8.2289, // Iligan City coordinates
                   longitude: 124.2452,
-                  latitudeDelta: 0.1,
-                  longitudeDelta: 0.1,
+                  latitudeDelta: 0.01,
+                  longitudeDelta: 0.01,
                 }}
-                onPress={handleMapPress}
+                onRegionChangeComplete={handleMapRegionChangeComplete}
                 showsUserLocation={locationPermission === true}
                 showsMyLocationButton={false}
+                scrollEnabled={true}
+                zoomEnabled={true}
+                pitchEnabled={false}
+                rotateEnabled={false}
               >
-                {selectedLocation && (
-                  <Marker
-                    coordinate={{
-                      latitude: selectedLocation.latitude,
-                      longitude: selectedLocation.longitude,
-                    }}
-                    title="Delivery Address"
-                    description="Tap and hold to move this marker"
-                  />
-                )}
+                {/* Map is empty - marker is rendered as overlay */}
               </MapView>
+              
+              {/* Centered Marker Overlay - Fixed Pin */}
+              <View style={styles.markerOverlay}>
+                <View style={styles.markerContainer}>
+                  <View style={styles.markerPin}>
+                    <View style={styles.markerDot} />
+                  </View>
+                  <View style={styles.markerPoint} />
+                </View>
+              </View>
             </View>
             <Text style={styles.mapInstruction}>
-              Tap anywhere on the map to set your delivery location
+              Pan the map to set your delivery location. The marker will stay centered.
             </Text>
           </View>
 
@@ -526,15 +530,13 @@ const AddressSelectionScreen: React.FC = () => {
               </View>
             </View>
 
-            {/* Street Address */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Street Address *</Text>
+            {/* Street Address - Hidden but still populated in background */}
+            <View style={styles.hiddenInputGroup}>
               <TextInput
-                style={styles.textInput}
-                placeholder="Enter your street address"
+                style={styles.hiddenInput}
                 value={addressData.street_address}
                 onChangeText={(value) => handleInputChange('street_address', value)}
-                multiline
+                editable={false}
               />
             </View>
 
@@ -544,6 +546,7 @@ const AddressSelectionScreen: React.FC = () => {
               <TextInput
                 style={styles.textInput}
                 placeholder="Enter your barangay"
+                placeholderTextColor="#999999"
                 value={addressData.barangay}
                 onChangeText={(value) => handleInputChange('barangay', value)}
               />
@@ -556,6 +559,7 @@ const AddressSelectionScreen: React.FC = () => {
                 <TextInput
                   style={styles.textInput}
                   placeholder="City"
+                  placeholderTextColor="#999999"
                   value={addressData.city}
                   onChangeText={(value) => handleInputChange('city', value)}
                 />
@@ -565,6 +569,7 @@ const AddressSelectionScreen: React.FC = () => {
                 <TextInput
                   style={styles.textInput}
                   placeholder="Province"
+                  placeholderTextColor="#999999"
                   value={addressData.province}
                   onChangeText={(value) => handleInputChange('province', value)}
                 />
@@ -576,7 +581,8 @@ const AddressSelectionScreen: React.FC = () => {
               <Text style={styles.inputLabel}>Postal Code</Text>
               <TextInput
                 style={styles.textInput}
-                placeholder="Postal code (optional)"
+                placeholder="Postal code"
+                placeholderTextColor="#999999"
                 value={addressData.postal_code}
                 onChangeText={(value) => handleInputChange('postal_code', value)}
                 keyboardType="numeric"
@@ -586,19 +592,21 @@ const AddressSelectionScreen: React.FC = () => {
             {/* Building Details */}
             <View style={styles.rowInputs}>
               <View style={styles.halfInput}>
-                <Text style={styles.inputLabel}>Building Name</Text>
+                <Text style={styles.inputLabel}>Building Name (Optional)</Text>
                 <TextInput
                   style={styles.textInput}
                   placeholder="Building name"
+                  placeholderTextColor="#999999"
                   value={addressData.building_name}
                   onChangeText={(value) => handleInputChange('building_name', value)}
                 />
               </View>
               <View style={styles.halfInput}>
-                <Text style={styles.inputLabel}>Floor/Unit</Text>
+                <Text style={styles.inputLabel}>Floor/Unit (Optional)</Text>
                 <TextInput
                   style={styles.textInput}
                   placeholder="Floor/Unit"
+                  placeholderTextColor="#999999"
                   value={addressData.floor_number}
                   onChangeText={(value) => handleInputChange('floor_number', value)}
                 />
@@ -607,10 +615,11 @@ const AddressSelectionScreen: React.FC = () => {
 
             {/* Landmark */}
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Landmark</Text>
+              <Text style={styles.inputLabel}>Landmark (Optional)</Text>
               <TextInput
                 style={styles.textInput}
-                placeholder="Nearby landmark (optional)"
+                placeholder="Nearby landmark"
+                placeholderTextColor="#999999"
                 value={addressData.landmark}
                 onChangeText={(value) => handleInputChange('landmark', value)}
               />
@@ -724,8 +733,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    paddingHorizontal: 20,
-    paddingBottom: 100, // Space for the fixed button
+    paddingHorizontal: SCREEN_WIDTH * 0.05, // 5% responsive padding
+    paddingBottom: 120, // Extra space for the fixed button
   },
   headerSection: {
     alignItems: 'center',
@@ -733,8 +742,8 @@ const styles = StyleSheet.create({
     marginBottom: 30,
   },
   headerImage: {
-    width: 100,
-    height: 100,
+    width: Math.min(SCREEN_WIDTH * 0.25, 100), // Responsive, max 100
+    height: Math.min(SCREEN_WIDTH * 0.25, 100),
     marginBottom: 16,
   },
   headerTextContainer: {
@@ -765,7 +774,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#9DD49D',
     borderRadius: 12,
     paddingVertical: 15,
-    paddingHorizontal: 20,
+    paddingHorizontal: SCREEN_WIDTH * 0.05, // 5% responsive padding
     marginBottom: 8,
   },
   currentLocationIcon: {
@@ -798,14 +807,70 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   mapContainer: {
-    height: 200,
+    height: Math.max(SCREEN_WIDTH * 0.5, 200), // Responsive height, min 200
     borderRadius: 12,
     overflow: 'hidden',
     borderWidth: 2,
     borderColor: '#E9ECEF',
+    position: 'relative',
   },
   map: {
     flex: 1,
+  },
+  markerOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    pointerEvents: 'none',
+  },
+  markerContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 50,
+    height: 60,
+  },
+  markerPin: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#9DD49D',
+    borderWidth: 4,
+    borderColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+  },
+  markerDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#FFFFFF',
+  },
+  markerPoint: {
+    width: 0,
+    height: 0,
+    backgroundColor: 'transparent',
+    borderStyle: 'solid',
+    borderLeftWidth: 8,
+    borderRightWidth: 8,
+    borderTopWidth: 12,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderTopColor: '#9DD49D',
+    marginTop: -2,
+    zIndex: 1,
   },
   mapInstruction: {
     fontSize: 12,
@@ -822,6 +887,14 @@ const styles = StyleSheet.create({
   },
   inputGroup: {
     marginBottom: 16,
+  },
+  hiddenInputGroup: {
+    height: 0,
+    opacity: 0,
+    overflow: 'hidden',
+  },
+  hiddenInput: {
+    height: 0,
   },
   rowInputs: {
     flexDirection: 'row',
@@ -841,7 +914,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 2,
     borderColor: '#E9ECEF',
-    paddingHorizontal: 16,
+    paddingHorizontal: SCREEN_WIDTH * 0.04, // 4% responsive padding
     paddingVertical: 12,
     fontSize: 16,
     fontFamily: fontFamily.light,
@@ -860,7 +933,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 2,
     borderColor: '#E9ECEF',
-    paddingHorizontal: 12,
+    paddingHorizontal: SCREEN_WIDTH * 0.03, // 3% responsive padding
     paddingVertical: 8,
   },
   selectedLabelOption: {
@@ -889,7 +962,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#E9ECEF',
-    padding: 16,
+    padding: SCREEN_WIDTH * 0.04, // 4% responsive padding
   },
   summaryLabel: {
     fontSize: 14,
@@ -910,7 +983,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     backgroundColor: '#FFFFFF',
-    paddingHorizontal: 20,
+    paddingHorizontal: SCREEN_WIDTH * 0.05, // 5% responsive padding
     paddingVertical: 15,
     borderTopWidth: 1,
     borderTopColor: '#E9ECEF',
@@ -950,8 +1023,8 @@ const styles = StyleSheet.create({
   modalContent: {
     backgroundColor: '#FFFFFF',
     borderRadius: 20,
-    padding: 30,
-    width: '100%',
+    padding: SCREEN_WIDTH * 0.07, // 7% responsive padding
+    width: '90%',
     maxWidth: 400,
     alignItems: 'center',
     shadowColor: '#000',

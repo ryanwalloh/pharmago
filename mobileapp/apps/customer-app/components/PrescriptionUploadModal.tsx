@@ -10,11 +10,16 @@ import {
   ActivityIndicator,
   ScrollView,
   Image,
+  StatusBar,
+  Dimensions,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { prescriptionService, PrescriptionData } from '../services/prescriptionService';
 import { fontFamily } from '../utils/fonts';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
+
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 interface PrescriptionUploadModalProps {
   visible: boolean;
@@ -125,7 +130,9 @@ export default function PrescriptionUploadModal({
         presentationStyle="pageSheet"
         onRequestClose={handleClose}
       >
-        <View style={styles.container}>
+        <SafeAreaView style={styles.container}>
+          <StatusBar barStyle="dark-content" />
+          
           {/* Header */}
           <View style={styles.header}>
             <Text style={styles.title}>Upload Prescription</Text>
@@ -314,7 +321,7 @@ export default function PrescriptionUploadModal({
               )}
             </TouchableOpacity>
           </View>
-        </View>
+        </SafeAreaView>
       </Modal>
 
       {/* Prescription Guide Modal */}
@@ -392,7 +399,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
+    paddingHorizontal: SCREEN_WIDTH * 0.05, // 5% responsive padding
     paddingVertical: 15,
     borderBottomWidth: 1,
     borderBottomColor: '#E0E0E0',
@@ -416,7 +423,7 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    paddingHorizontal: 20,
+    paddingHorizontal: SCREEN_WIDTH * 0.05, // 5% responsive padding
   },
   section: {
     marginBottom: 20,
@@ -440,7 +447,7 @@ const styles = StyleSheet.create({
   },
   selectedImage: {
     width: '100%',
-    height: 200,
+    height: Math.min(SCREEN_HEIGHT * 0.25, 200), // Responsive height, max 200
     borderRadius: 10,
     marginBottom: 15,
   },
@@ -487,14 +494,14 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#FFFFFF',
     borderRadius: 24,
-    padding: 20,
+    padding: SCREEN_WIDTH * 0.04, // 4% responsive padding
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: 80,
   },
   cameraIconContainer: {
-    width: 110,
-    height: 110,
+    width: Math.min(SCREEN_WIDTH * 0.25, 110), // Max 110, responsive down to 25% of screen
+    height: Math.min(SCREEN_WIDTH * 0.25, 110),
     backgroundColor: '#FFFFFF',
     borderRadius: 22,
     alignItems: 'center',
@@ -507,16 +514,16 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   cameraIconBackground: {
-    width: 66,
-    height: 66,
+    width: Math.min(SCREEN_WIDTH * 0.15, 66), // Responsive
+    height: Math.min(SCREEN_WIDTH * 0.15, 66),
     backgroundColor: '#9DD49D',
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
   },
   cameraIconImage: {
-    width: 35,
-    height: 35,
+    width: Math.min(SCREEN_WIDTH * 0.08, 35), // Responsive
+    height: Math.min(SCREEN_WIDTH * 0.08, 35),
   },
   cameraButtonLabel: {
     fontSize: 14,
@@ -534,14 +541,14 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#FFFFFF',
     borderRadius: 24,
-    padding: 20,
+    padding: SCREEN_WIDTH * 0.04, // 4% responsive padding
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: 80,
   },
   galleryIconContainer: {
-    width: 110,
-    height: 110,
+    width: Math.min(SCREEN_WIDTH * 0.25, 110), // Max 110, responsive down to 25% of screen
+    height: Math.min(SCREEN_WIDTH * 0.25, 110),
     backgroundColor: '#FFFFFF',
     borderRadius: 22,
     alignItems: 'center',
@@ -554,16 +561,16 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   galleryIconBackground: {
-    width: 66,
-    height: 66,
+    width: Math.min(SCREEN_WIDTH * 0.15, 66), // Responsive
+    height: Math.min(SCREEN_WIDTH * 0.15, 66),
     backgroundColor: '#F8BBD9',
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
   },
   galleryIconImage: {
-    width: 35,
-    height: 35,
+    width: Math.min(SCREEN_WIDTH * 0.08, 35), // Responsive
+    height: Math.min(SCREEN_WIDTH * 0.08, 35),
   },
   galleryButtonLabel: {
     fontSize: 14,
@@ -675,7 +682,7 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
   },
   footer: {
-    paddingHorizontal: 20,
+    paddingHorizontal: SCREEN_WIDTH * 0.05, // 5% responsive padding
     paddingVertical: 15,
     borderTopWidth: 1,
     borderTopColor: '#E0E0E0',
@@ -705,11 +712,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#2A2A2A',
     borderTopLeftRadius: 34,
     borderTopRightRadius: 34,
-    padding: 24,
+    paddingHorizontal: SCREEN_WIDTH * 0.05, // 5% responsive padding
+    paddingTop: 24,
     paddingBottom: 34,
     alignItems: 'center',
     width: '100%',
-    height: '90%',
+    maxHeight: SCREEN_HEIGHT * 0.9, // 90% of screen height
+    minHeight: Math.min(SCREEN_HEIGHT * 0.7, 500), // Responsive min height
     flexDirection: 'column',
   },
   guideContentContainer: {
@@ -729,7 +738,7 @@ const styles = StyleSheet.create({
   guideImage: {
     width: '80%',
     padding: 20,
-    height: 370,
+    height: Math.min(SCREEN_HEIGHT * 0.4, 370), // Responsive height, max 370
     marginBottom: 40,
     borderRadius: 20,
   },

@@ -8,6 +8,7 @@ import {
   RefreshControl,
   ActivityIndicator,
   StatusBar,
+  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -16,6 +17,9 @@ import { fontFamily } from '../../utils/fonts';
 import { apiService } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import Svg, { Path } from 'react-native-svg';
+import PrescriptionUploadModal from '../../components/PrescriptionUploadModal';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface OrderItem {
   order_id: number;
@@ -39,6 +43,7 @@ export default function OrderHistoryScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showPrescriptionModal, setShowPrescriptionModal] = useState(false);
 
   const fetchOrders = async () => {
     if (!user?.customer_id) {
@@ -48,21 +53,34 @@ export default function OrderHistoryScreen() {
     }
 
     try {
+      console.log('📋 Fetching orders for customer ID:', user.customer_id);
       const response = await apiService.getCustomerOrders(user.customer_id);
       
+      console.log('📦 API Response:', {
+        success: response.success,
+        hasData: !!response.data,
+        data: response.data
+      });
+      
       if (response.success && response.data) {
-        setActiveOrders(response.data.active_orders || []);
-        setRecentOrders(response.data.recent_orders || []);
+        // Handle nested data structure from backend
+        const ordersData = response.data.data || response.data;
+        
+        console.log('📊 Orders data:', ordersData);
+        
+        setActiveOrders(ordersData.active_orders || []);
+        setRecentOrders(ordersData.recent_orders || []);
         setError(null);
         console.log('✅ Loaded orders:', {
-          active: response.data.active_orders?.length || 0,
-          recent: response.data.recent_orders?.length || 0
+          active: ordersData.active_orders?.length || 0,
+          recent: ordersData.recent_orders?.length || 0
         });
       } else {
         setError(response.error || 'Failed to load orders');
+        console.error('❌ Failed to load orders:', response.error);
       }
     } catch (err) {
-      console.error('Error fetching orders:', err);
+      console.error('❌ Error fetching orders:', err);
       setError('Network error. Please try again.');
     } finally {
       setLoading(false);
@@ -77,6 +95,21 @@ export default function OrderHistoryScreen() {
   const onRefresh = () => {
     setRefreshing(true);
     fetchOrders();
+  };
+
+  const handlePrescriptionUpload = () => {
+    console.log('📋 Opening prescription upload modal...');
+    setShowPrescriptionModal(true);
+  };
+
+  const handlePrescriptionSuccess = (prescriptionId: string) => {
+    console.log('✅ Prescription uploaded successfully:', prescriptionId);
+    setShowPrescriptionModal(false);
+  };
+
+  const handlePrescriptionModalClose = () => {
+    console.log('❌ Closing prescription upload modal...');
+    setShowPrescriptionModal(false);
   };
 
   const getStatusColor = (status: string) => {
@@ -267,7 +300,7 @@ export default function OrderHistoryScreen() {
           </View>
 
           {/* Bottom padding for nav bar */}
-          <View style={{ height: 100 }} />
+          <View style={{ height: 120 }} />
         </View>
       </ScrollView>
 
@@ -281,7 +314,10 @@ export default function OrderHistoryScreen() {
           <CompareIcon size={24} color="#FFFFFF" />
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.bottomNavItem}>
+        <TouchableOpacity 
+          style={styles.bottomNavItem}
+          onPress={handlePrescriptionUpload}
+        >
           <AddPrescriptionIcon size={24} color="#FFFFFF" />
         </TouchableOpacity>
 
@@ -289,6 +325,13 @@ export default function OrderHistoryScreen() {
           <ProfileIcon size={24} color="#FFFFFF" />
         </TouchableOpacity>
       </View>
+
+      {/* Prescription Upload Modal */}
+      <PrescriptionUploadModal
+        visible={showPrescriptionModal}
+        onClose={handlePrescriptionModalClose}
+        onSuccess={handlePrescriptionSuccess}
+      />
     </SafeAreaView>
   );
 }
@@ -338,7 +381,7 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
+    paddingHorizontal: SCREEN_WIDTH * 0.05, // 5% responsive padding
     paddingVertical: 16,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
@@ -362,7 +405,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    padding: 20,
+    paddingHorizontal: SCREEN_WIDTH * 0.05, // 5% responsive padding
+    paddingVertical: 20,
   },
   loadingContainer: {
     flex: 1,

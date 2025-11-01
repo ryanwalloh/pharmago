@@ -1,10 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Image, StyleSheet, Animated } from 'react-native';
-import LoginPage from '../components/LoginPage';
+import { router } from 'expo-router';
 import { loadFonts } from '../utils/fonts';
 
 export default function LandingPage() {
-  const [showLogin, setShowLogin] = useState(false);
   const fadeAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -23,17 +22,13 @@ export default function LandingPage() {
         duration: 500,
         useNativeDriver: true,
       }).start(() => {
-        // Show login page after fade out completes
-        setShowLogin(true);
+        // Navigate to welcome page after fade out completes
+        router.replace('/welcome' as any);
       });
     }, 2000);
 
     return () => clearTimeout(timer);
   }, [fadeAnim]);
-
-  if (showLogin) {
-    return <LoginPage />;
-  }
 
   return (
     <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
