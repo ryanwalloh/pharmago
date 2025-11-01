@@ -11,7 +11,6 @@ import {
   TextInput,
   Modal,
   Alert,
-  NativeModules,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -20,7 +19,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { apiService, ApiResponse } from '../services/api';
 import { fontFamily } from '../utils/fonts';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import Constants from 'expo-constants';
 
 interface OrderData {
   order_id: number;
@@ -48,39 +46,6 @@ interface OrderData {
   actual_delivery: string | null;
   notes: string;
 }
-
-// Helper function to get backend URL (same logic as apiService)
-const getBackendBaseUrl = (): string => {
-  // Web (localhost)
-  if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
-    return 'http://localhost:8000';
-  }
-
-  // Optional: EXPO_PUBLIC_API_BASE override
-  const envBase: string | undefined = process.env.EXPO_PUBLIC_API_BASE as string | undefined;
-  if (envBase) {
-    return envBase.endsWith('/') ? envBase.slice(0, -1) : envBase;
-  }
-
-  // Try to derive host from Expo packager/SourceCode script URL
-  try {
-    const expHostUri: string | undefined = (Constants as any)?.expoConfig?.hostUri
-      || (Constants as any)?.manifest?.debuggerHost
-      || (NativeModules as any)?.SourceCode?.scriptURL;
-
-    if (expHostUri) {
-      const withoutScheme = expHostUri.replace(/^\w+:\/\//, '');
-      const host = withoutScheme.split(':')[0].split('/')[0];
-      if (host && /^(\d{1,3}\.){3}\d{1,3}$/.test(host)) {
-        return `http://${host}:8000`;
-      }
-    }
-  } catch {}
-
-  // Fallback: Use Railway backend for production/testing
-  // For local development, set EXPO_PUBLIC_API_BASE environment variable
-  return 'https://pharmago-backend-production.up.railway.app';
-};
 
 const OrderTrackingScreen: React.FC = () => {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -279,6 +244,7 @@ const OrderTrackingScreen: React.FC = () => {
         const payload: any = response.data;
         const order = payload?.data || payload; // handle direct or wrapped shape
         setOrderData(order);
+        setStorefrontImageError(false); // Reset error state when new order data loads
         console.log('✅ Order data loaded:', order.order_number || order.order_id);
         console.log('🏥 Pharmacy data:', {
           name: order.pharmacy_name,
@@ -581,38 +547,48 @@ const OrderTrackingScreen: React.FC = () => {
           <View style={styles.pharmacyCard}>
             <View style={styles.pharmacyInfo}>
               <View style={styles.pharmacyImageContainer}>
-                {orderData.pharmacy_storefront_image_url && !storefrontImageError ? (
-                  <Image 
-                    source={{ 
-                      uri: (() => {
-                        const url = orderData.pharmacy_storefront_image_url;
-                        // Check if it's a Cloudinary URL or already a full URL
-                        if (url.includes('cloudinary.com') || url.startsWith('http://') || url.startsWith('https://')) {
-                          console.log('Using Cloudinary/full URL for storefront:', url);
-                          return url;
-                        }
-                        // Otherwise, it's a relative path - prepend backend URL
-                        const backendUrl = getBackendBaseUrl();
-                        const fullUrl = url.startsWith('/') ? `${backendUrl}${url}` : `${backendUrl}/${url}`;
-                        console.log('Using backend proxy URL for storefront:', fullUrl);
-                        return fullUrl;
-                      })()
-                    }} 
-                    style={styles.pharmacyImage}
-                    resizeMode="cover"
-                    onError={(e) => {
-                      console.log('Failed to load pharmacy storefront image:', orderData.pharmacy_storefront_image_url);
-                      console.log('Error details:', e.nativeEvent);
-                      setStorefrontImageError(true);
-                    }}
-                  />
-                ) : (
-                  <Image 
-                    source={require('../assets/drugstore.png')} 
-                    style={styles.pharmacyImage}
-                    resizeMode="contain"
-                  />
-                )}
+                {(() => {
+                  const imageUrl = orderData.pharmacy_storefront_image_url;
+                  console.log('🖼️ Rendering pharmacy image:', {
+                    hasUrl: !!imageUrl,
+                    url: imageUrl,
+                    urlType: typeof imageUrl,
+                    urlLength: imageUrl?.length,
+                    hasError: storefrontImageError,
+                    pharmacyName: orderData.pharmacy_name
+                  });
+                  
+                  if (imageUrl && !storefrontImageError) {
+                    return (
+                      <Image 
+                        source={{ uri: imageUrl }} 
+                        style={styles.pharmacyImage}
+                        resizeMode="cover"
+                        onError={(e) => {
+                          console.log('❌ Failed to load pharmacy storefront image');
+                          console.log('  URL:', imageUrl);
+                          console.log('  Error:', e.nativeEvent.error);
+                          setStorefrontImageError(true);
+                        }}
+                        onLoad={() => {
+                          console.log('✅ Pharmacy storefront image loaded successfully:', imageUrl?.substring(0, 50));
+                        }}
+                        onLoadStart={() => {
+                          console.log('⏳ Started loading pharmacy storefront image...');
+                        }}
+                      />
+                    );
+                  } else {
+                    console.log('📦 Using fallback drugstore image. Reason:', !imageUrl ? 'No URL' : 'Error occurred');
+                    return (
+                      <Image 
+                        source={require('../assets/drugstore.png')} 
+                        style={styles.pharmacyImage}
+                        resizeMode="cover"
+                      />
+                    );
+                  }
+                })()}
               </View>
               <View style={styles.pharmacyDetails}>
                 <Text style={styles.pharmacyName}>{orderData.pharmacy_name}</Text>

@@ -365,7 +365,7 @@ def get_order_status(request, order_id):
                     # Check if it's a Cloudinary URL - use it directly
                     if 'cloudinary.com' in storefront_doc.file_url or storefront_doc.file_url.startswith('http'):
                         pharmacy_storefront_image_url = storefront_doc.file_url
-                        logger.info(f"Using Cloudinary URL for pharmacy {pharmacy.id} storefront: {pharmacy_storefront_image_url}")
+                        logger.info(f"✅ Using Cloudinary URL for pharmacy {pharmacy.id} storefront: {pharmacy_storefront_image_url}")
                     else:
                         # Legacy S3 URL - generate presigned URL or use backend proxy
                         try:
@@ -399,10 +399,12 @@ def get_order_status(request, order_id):
                                 pharmacy_storefront_image_url = request.build_absolute_uri(f"/api/document/{storefront_doc.id}/")
                             logger.info(f"Using backend proxy URL for pharmacy {pharmacy.id}: {pharmacy_storefront_image_url}")
                 else:
-                    logger.info(f"No storefront image found for pharmacy {pharmacy.id}")
+                    logger.warning(f"⚠️ Storefront document found but no file_url for pharmacy {pharmacy.id}")
+            else:
+                logger.warning(f"⚠️ No storefront document found for pharmacy {pharmacy.id}")
                         
             except Exception as e:
-                logger.warning(f"Could not fetch pharmacy storefront image: {str(e)}")
+                logger.error(f"❌ Could not fetch pharmacy storefront image: {str(e)}", exc_info=True)
         
         # Normalize prescription image URL to absolute
         absolute_prescription_url = None
@@ -451,6 +453,9 @@ def get_order_status(request, order_id):
         except Exception:
             items_data = []
 
+        # Log final response data for pharmacy storefront
+        logger.info(f"📦 Returning order status with pharmacy_storefront_image_url: {pharmacy_storefront_image_url}")
+        
         return JsonResponse({
             'success': True,
             'data': {

@@ -285,6 +285,10 @@ export default function CheckoutScreen() {
     try {
       console.log('💳 Initializing Stripe payment sheet for order:', orderId);
       
+      // Get user data from AsyncStorage for billing details
+      const userData = await AsyncStorage.getItem('user');
+      const user = userData ? JSON.parse(userData) : null;
+      
       // Create payment intent on backend
       const response = await apiService.createStripePaymentIntent(orderId);
       
@@ -292,17 +296,37 @@ export default function CheckoutScreen() {
         throw new Error(response.error || 'Failed to create payment intent');
       }
       
-      const { client_secret, amount } = response.data;
+      // Extract payment intent data (handle nested response structure)
+      const paymentData = response.data.data || response.data;
+      const { client_secret, amount } = paymentData;
+      
+      if (!client_secret) {
+        throw new Error('No client secret received from backend');
+      }
+      
       setPaymentIntentClientSecret(client_secret);
       
-      console.log('✅ Payment intent created:', { amount });
+      console.log('✅ Payment intent created:', { amount, client_secret: client_secret.substring(0, 20) + '...' });
       
-      // Initialize payment sheet
+      // Prepare billing details with customer information
+      const deliveryInfo = orderData?.deliveryInfo || {};
+      const customerName = user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() : 'Customer';
+      
+      // Initialize payment sheet with pre-filled billing details
       const { error } = await initPaymentSheet({
         merchantDisplayName: 'PharmGo',
         paymentIntentClientSecret: client_secret,
         defaultBillingDetails: {
-          name: orderData?.pharmacy?.pharmacy_name || 'Customer',
+          name: customerName || 'Customer',
+          email: user?.email || undefined,
+          phone: user?.phone || undefined,
+          address: {
+            country: 'PH', // Philippines
+            city: deliveryInfo?.city || 'Iligan City',
+            postalCode: deliveryInfo?.postal_code || undefined,
+            line1: deliveryInfo?.street_address || address || undefined,
+            state: deliveryInfo?.province || 'Lanao del Norte',
+          },
         },
         returnURL: 'mobileapp://checkout',
       });
@@ -311,7 +335,7 @@ export default function CheckoutScreen() {
         throw new Error(error.message);
       }
       
-      console.log('✅ Payment sheet initialized');
+      console.log('✅ Payment sheet initialized with billing details');
       return true;
     } catch (error: any) {
       console.error('❌ Error initializing payment sheet:', error);
@@ -324,6 +348,9 @@ export default function CheckoutScreen() {
     try {
       console.log('💳 Presenting Stripe payment sheet');
       
+      // Small delay to ensure payment sheet is ready (helps with StripeKeepJsAwakeTask warning)
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
       // Present payment sheet
       const { error } = await presentPaymentSheet();
       
@@ -332,6 +359,7 @@ export default function CheckoutScreen() {
           console.log('ℹ️ Payment canceled by user');
           return false;
         }
+        console.error('❌ presentPaymentSheet error:', error);
         throw new Error(error.message);
       }
       
