@@ -267,8 +267,9 @@ export default function CreateAccountPage({ onBack, onRegistrationSuccess }: Cre
         
         // Store user data in session (including customer_id from response)
         try {
-          // Extract user ID from nested response structure
-          const userId = response.data?.user?.id || response.data?.customer_id || response.data?.id;
+          // Extract customer_id and user_id from response
+          const customerId = response.data?.user?.customer_id || response.data?.customer_id;
+          const userId = response.data?.user?.id || response.data?.id;
           
           const userData = {
             username: username.trim(),
@@ -276,9 +277,9 @@ export default function CreateAccountPage({ onBack, onRegistrationSuccess }: Cre
             firstName: firstName.trim(),
             lastName: lastName.trim(),
             phone: normalizedPhone,
-            // Save customer_id from API response for address management
-            customer_id: userId,
-            id: userId,
+            // Save customer_id from API response for cart/address management
+            customer_id: customerId || userId, // Prefer customer_id, fallback to user_id
+            id: userId, // User ID for general use
             user_id: userId,
           };
           

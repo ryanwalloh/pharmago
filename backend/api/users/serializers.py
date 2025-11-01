@@ -16,15 +16,22 @@ logger = logging.getLogger(__name__)
 
 class UserSerializer(serializers.ModelSerializer):
     """User serializer for general use"""
+    customer_id = serializers.SerializerMethodField()
     
     class Meta:
         model = User
         fields = [
             'id', 'username', 'email', 'first_name', 'last_name',
             'phone_number', 'role', 'status', 'is_email_verified', 'is_phone_verified',
-            'created_at', 'updated_at'
+            'created_at', 'updated_at', 'customer_id'
         ]
-        read_only_fields = ['id', 'is_email_verified', 'is_phone_verified', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'is_email_verified', 'is_phone_verified', 'created_at', 'updated_at', 'customer_id']
+    
+    def get_customer_id(self, obj):
+        """Get the customer ID if user is a customer"""
+        if obj.role == 'customer' and hasattr(obj, 'customer'):
+            return obj.customer.id
+        return None
     
     def validate_username(self, value):
         if User.objects.filter(username=value).exists():
