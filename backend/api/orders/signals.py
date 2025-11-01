@@ -66,6 +66,7 @@ def on_orderline_deleted(sender, instance: OrderLine, **kwargs):
 def auto_dispatch_on_order_acceptance(sender, instance: Order, created, **kwargs):
     """
     Automatically dispatch order to riders when status changes to 'accepted'.
+    Also broadcasts WebSocket updates to customer tracking the order.
     
     This signal is triggered when:
     - Customer approves the price quote from pharmacy
@@ -75,6 +76,17 @@ def auto_dispatch_on_order_acceptance(sender, instance: Order, created, **kwargs
     """
     # DEBUG: Log every save
     logger.info(f"📝 Order saved: {instance.order_number} | created={created} | status={instance.order_status}")
+    
+    # Broadcast order status update via WebSocket to customer
+    try:
+        from api.delivery.websocket_service import broadcast_order_update
+        broadcast_order_update(
+            order_id=instance.id,
+            order_status=instance.order_status,
+            updated_at=instance.updated_at
+        )
+    except Exception as e:
+        logger.warning(f"Failed to broadcast order update via WebSocket: {str(e)}")
     
     # Only trigger for existing orders (not newly created)
     if created:

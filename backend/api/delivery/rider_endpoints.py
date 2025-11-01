@@ -389,6 +389,34 @@ def update_rider_location(request):
         
         logger.debug(f"📍 Updated location for {rider.full_name}: ({lat:.6f}, {lng:.6f})")
         
+        # Broadcast location to customers tracking orders assigned to this rider
+        try:
+            from api.delivery.models import OrderRiderAssignment
+            from api.delivery.websocket_service import broadcast_rider_location
+            
+            # Get all active assignments for this rider
+            active_assignments = OrderRiderAssignment.objects.filter(
+                assignment__rider=rider,
+                assignment__status__in=['picked_up', 'delivering'],
+                delivered_at__isnull=True
+            ).select_related('order')
+            
+            # Broadcast location to each order's tracking channel
+            for order_assignment in active_assignments:
+                broadcast_rider_location(
+                    order_id=order_assignment.order.id,
+                    latitude=lat,
+                    longitude=lng,
+                    heading=data.get('heading'),
+                    speed=data.get('speed')
+                )
+            
+            if active_assignments.exists():
+                logger.debug(f"📡 Broadcasted rider location to {active_assignments.count()} order(s)")
+                
+        except Exception as e:
+            logger.warning(f"Failed to broadcast rider location: {str(e)}")
+        
         return JsonResponse({
             'success': True,
             'message': 'Location updated',

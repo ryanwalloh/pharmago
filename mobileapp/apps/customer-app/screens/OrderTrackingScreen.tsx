@@ -11,6 +11,7 @@ import {
   TextInput,
   Modal,
   Alert,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -19,6 +20,38 @@ import { Ionicons } from '@expo/vector-icons';
 import { apiService, ApiResponse } from '../services/api';
 import { fontFamily } from '../utils/fonts';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { orderTrackingWS } from '../services/orderTrackingWebSocket';
+
+interface RiderInfo {
+  rider_id: number;
+  rider_name: string;
+  rider_phone: string | null;
+  vehicle_type: string;
+  vehicle_plate: string | null;
+}
+
+interface AssignmentStatus {
+  status: string;
+  accepted_at: string | null;
+  picked_up_at: string | null;
+  delivered_at: string | null;
+}
+
+interface RiderLocation {
+  latitude: number;
+  longitude: number;
+  heading: number | null;
+  speed: number | null;
+  timestamp: string;
+}
+
+interface OrderItem {
+  name: string;
+  quantity: number;
+  unit_price: number;
+  total_price: number;
+  prescription_required?: boolean;
+}
 
 interface OrderData {
   order_id: number;
@@ -26,7 +59,12 @@ interface OrderData {
   order_status: string;
   prescription_status: string;
   payment_status: string;
+  subtotal: number;
+  tax_amount: number;
+  delivery_fee: number;
+  discount_amount: number;
   total_amount: number;
+  items?: OrderItem[];
   pharmacy_name: string;
   pharmacy_id?: number;
   pharmacy_barangay?: string;
@@ -45,6 +83,13 @@ interface OrderData {
   estimated_delivery: string | null;
   actual_delivery: string | null;
   notes: string;
+  senior_discount_requested: boolean;
+  senior_discount_status: string;
+  senior_citizen_id_image?: string;
+  // Rider assignment and tracking
+  rider_info: RiderInfo | null;
+  assignment_status: AssignmentStatus | null;
+  rider_location: RiderLocation | null;
 }
 
 const OrderTrackingScreen: React.FC = () => {
@@ -75,6 +120,10 @@ const OrderTrackingScreen: React.FC = () => {
   const chatScrollRef = useRef<ScrollView | null>(null);
   const [chatInput, setChatInput] = useState('');
   const [chatSending, setChatSending] = useState(false);
+  
+  // Route tracking for rider
+  const [routeCoordinates, setRouteCoordinates] = useState<{latitude: number, longitude: number}[]>([]);
+  const [routeLoading, setRouteLoading] = useState(false);
   const [chatTyping, setChatTyping] = useState<{ customer?: boolean; pharmacy?: boolean }>({});
   const chatTypingPollRef = useRef<any>(null);
   const chatFetchInFlightRef = useRef<boolean>(false);
@@ -86,6 +135,84 @@ const OrderTrackingScreen: React.FC = () => {
   const [unreadCount, setUnreadCount] = useState(0);
   const unreadPollRef = useRef<any>(null);
   const [autoOpenedChat, setAutoOpenedChat] = useState(false);
+
+  // Fetch route from rider to customer using Google Directions API
+  const fetchRiderRoute = useCallback(async () => {
+    if (!orderData?.rider_location || !orderData?.delivery_latitude || !orderData?.delivery_longitude) {
+      return;
+    }
+
+    setRouteLoading(true);
+    try {
+      const origin = `${orderData.rider_location.latitude},${orderData.rider_location.longitude}`;
+      const destination = `${orderData.delivery_latitude},${orderData.delivery_longitude}`;
+      
+      // Use the configured Google Maps API key from app.config.js
+      const apiKey = process.env.GOOGLE_MAPS_API_KEY || 'AIzaSyCCuDLJMhB-23kQiXYpXwi-yYGvKz7OgSQ';
+
+      console.log('🗺️ Fetching route from rider to customer...');
+      const response = await fetch(
+        `https://maps.googleapis.com/maps/api/directions/json?origin=${origin}&destination=${destination}&key=${apiKey}&mode=driving`
+      );
+      const data = await response.json();
+
+      if (data.routes && data.routes.length > 0) {
+        const points = data.routes[0].overview_polyline.points;
+        const decodedPoints = decodePolyline(points);
+        setRouteCoordinates(decodedPoints);
+        console.log('✅ Route fetched successfully:', decodedPoints.length, 'points');
+      } else if (data.error_message) {
+        console.warn('⚠️ Google Directions API error:', data.error_message);
+        // Fallback to straight line
+        setRouteCoordinates([
+          { latitude: orderData.rider_location.latitude, longitude: orderData.rider_location.longitude },
+          { latitude: orderData.delivery_latitude, longitude: orderData.delivery_longitude }
+        ]);
+      }
+    } catch (error) {
+      console.error('❌ Failed to fetch route:', error);
+      // Fallback to straight line if API fails
+      if (orderData?.rider_location && orderData?.delivery_latitude && orderData?.delivery_longitude) {
+        setRouteCoordinates([
+          { latitude: orderData.rider_location.latitude, longitude: orderData.rider_location.longitude },
+          { latitude: orderData.delivery_latitude, longitude: orderData.delivery_longitude }
+        ]);
+        console.log('📍 Using fallback straight line route');
+      }
+    } finally {
+      setRouteLoading(false);
+    }
+  }, [orderData?.rider_location, orderData?.delivery_latitude, orderData?.delivery_longitude]);
+
+  // Decode Google polyline
+  const decodePolyline = (encoded: string) => {
+    const coords: {latitude: number, longitude: number}[] = [];
+    let index = 0, lat = 0, lng = 0;
+
+    while (index < encoded.length) {
+      let b, shift = 0, result = 0;
+      do {
+        b = encoded.charCodeAt(index++) - 63;
+        result |= (b & 0x1f) << shift;
+        shift += 5;
+      } while (b >= 0x20);
+      const dlat = ((result & 1) ? ~(result >> 1) : (result >> 1));
+      lat += dlat;
+
+      shift = 0;
+      result = 0;
+      do {
+        b = encoded.charCodeAt(index++) - 63;
+        result |= (b & 0x1f) << shift;
+        shift += 5;
+      } while (b >= 0x20);
+      const dlng = ((result & 1) ? ~(result >> 1) : (result >> 1));
+      lng += dlng;
+
+      coords.push({ latitude: lat / 1e5, longitude: lng / 1e5 });
+    }
+    return coords;
+  };
 
   // Fetch chat messages - can optionally take roomId parameter
   const fetchChatMessages = useCallback(async (roomId?: number) => {
@@ -444,6 +571,138 @@ const OrderTrackingScreen: React.FC = () => {
     }
   };
 
+  // Get status display info (title, subtitle, image)
+  const getStatusInfo = () => {
+    if (!orderData) return { title: 'Loading...', subtitle: '', showMap: false };
+
+    switch (orderData.order_status) {
+      case 'pending':
+        return {
+          title: 'Order Placed',
+          subtitle: 'Your order is waiting for pharmacy confirmation',
+          image: require('../assets/pending.png'),
+          showMap: false
+        };
+      case 'accepted':
+      case 'preparing':
+        return {
+          title: 'Being Prepared',
+          subtitle: 'The pharmacy is preparing your medicines',
+          image: require('../assets/accepted.png'),
+          showMap: false
+        };
+      case 'ready_for_pickup':
+        return {
+          title: 'Ready for Pickup',
+          subtitle: 'Your order is ready and waiting for the rider',
+          image: require('../assets/ready_for_pickup.png'),
+          showMap: false
+        };
+      case 'picked_up':
+        return {
+          title: 'Out for Delivery',
+          subtitle: '', // No subtitle for map view
+          showMap: true
+        };
+      case 'delivered':
+        return {
+          title: 'Delivered Successfully',
+          subtitle: 'Your order has been delivered. Get well soon!',
+          image: require('../assets/delivered.png'),
+          showMap: false
+        };
+      case 'cancelled':
+        return {
+          title: 'Order Cancelled',
+          subtitle: 'This order has been cancelled',
+          image: require('../assets/pending.png'),
+          showMap: false
+        };
+      default:
+        return {
+          title: 'Processing',
+          subtitle: 'Your order is being processed',
+          image: require('../assets/pending.png'),
+          showMap: false
+        };
+    }
+  };
+
+  // Determine if we should show pharmacy or rider card
+  const showRiderCard = orderData?.order_status === 'picked_up' && orderData?.rider_info;
+
+  // Update route when rider location changes
+  useEffect(() => {
+    if (orderData?.order_status === 'picked_up' && orderData?.rider_location) {
+      fetchRiderRoute();
+    }
+  }, [orderData?.order_status, orderData?.rider_location, fetchRiderRoute]);
+
+  // WebSocket connection for real-time updates (replaces polling)
+  useEffect(() => {
+    if (!id || !orderData) return;
+
+    console.log('🔌 Setting up WebSocket for order', id);
+
+    // Connect to WebSocket
+    orderTrackingWS.connect(id);
+
+    // Handler for order status updates
+    const handleStatusUpdate = (data: any) => {
+      console.log('📨 Order status updated via WebSocket:', data.order_status);
+      // Refresh order data to get full updated info
+      fetchOrderData();
+    };
+
+    // Handler for rider assignment
+    const handleRiderAssigned = (data: any) => {
+      console.log('🚴 Rider assigned via WebSocket:', data.rider_info);
+      fetchOrderData();
+    };
+
+    // Handler for rider location updates
+    const handleRiderLocation = (data: any) => {
+      console.log('📍 Rider location updated via WebSocket');
+      
+      // Update order data with new rider location
+      if (orderData) {
+        setOrderData(prev => prev ? {
+          ...prev,
+          rider_location: data.location
+        } : null);
+        
+        // Fetch new route with updated location
+        if (orderData.order_status === 'picked_up') {
+          fetchRiderRoute();
+        }
+      }
+    };
+
+    // Handler for order completion
+    const handleOrderComplete = (data: any) => {
+      console.log('✅ Order completed via WebSocket');
+      fetchOrderData();
+    };
+
+    // Register handlers
+    orderTrackingWS.on('order_status_update', handleStatusUpdate);
+    orderTrackingWS.on('rider_assigned', handleRiderAssigned);
+    orderTrackingWS.on('rider_location_update', handleRiderLocation);
+    orderTrackingWS.on('order_complete', handleOrderComplete);
+
+    // Cleanup
+    return () => {
+      console.log('🔌 Cleaning up WebSocket handlers');
+      orderTrackingWS.off('order_status_update', handleStatusUpdate);
+      orderTrackingWS.off('rider_assigned', handleRiderAssigned);
+      orderTrackingWS.off('rider_location_update', handleRiderLocation);
+      orderTrackingWS.off('order_complete', handleOrderComplete);
+      
+      // Disconnect when component unmounts
+      orderTrackingWS.disconnect();
+    };
+  }, [id, orderData?.order_status, fetchOrderData, fetchRiderRoute]);
+
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
@@ -494,233 +753,329 @@ const OrderTrackingScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* Google Map - Full Width */}
-        <View style={styles.mapContainer}>
-          <MapView
-            style={styles.map}
-            region={mapRegion}
-            showsUserLocation={Boolean(!orderData?.delivery_latitude && !orderData?.delivery_longitude)}
-            showsMyLocationButton={Boolean(!orderData?.delivery_latitude && !orderData?.delivery_longitude)}
-          >
-            {/* Pharmacy Marker */}
-            {orderData.pharmacy_latitude && orderData.pharmacy_longitude && (
-              <Marker
-                coordinate={{
-                  latitude: orderData.pharmacy_latitude,
-                  longitude: orderData.pharmacy_longitude,
+        {/* Dynamic Status Display - Image or Map */}
+        <View style={styles.statusDisplayContainer}>
+          {getStatusInfo().showMap && orderData.rider_location ? (
+            // Show map with rider tracking when picked_up
+            <View style={styles.trackingMapContainer}>
+              <MapView
+                style={styles.trackingMap}
+                region={{
+                  latitude: (orderData.rider_location.latitude + (orderData.delivery_latitude || 0)) / 2,
+                  longitude: (orderData.rider_location.longitude + (orderData.delivery_longitude || 0)) / 2,
+                  latitudeDelta: 0.05,
+                  longitudeDelta: 0.05,
                 }}
-                title={orderData.pharmacy_name}
-                description="Pharmacy Location"
-                pinColor="red"
-              />
-            )}
-            
-            {/* Customer Marker */}
-            {customerLocation && (
-              <Marker
-                coordinate={customerLocation}
-                title="Delivery Location"
-                description={orderData.delivery_address}
-                pinColor="blue"
-              />
-            )}
+                showsUserLocation={false}
+              >
+                {/* Rider Marker */}
+                <Marker
+                  coordinate={{
+                    latitude: orderData.rider_location.latitude,
+                    longitude: orderData.rider_location.longitude,
+                  }}
+                  title={orderData.rider_info?.rider_name || 'Your Rider'}
+                  description={`${orderData.rider_info?.vehicle_type || 'Vehicle'} - ${orderData.rider_info?.vehicle_plate || ''}`}
+                >
+                  <View style={styles.riderMarker}>
+                    <Ionicons name="bicycle" size={30} color="#00bf63" />
+                  </View>
+                </Marker>
+                
+                {/* Customer Delivery Marker */}
+                {orderData.delivery_latitude && orderData.delivery_longitude && (
+                  <Marker
+                    coordinate={{
+                      latitude: orderData.delivery_latitude,
+                      longitude: orderData.delivery_longitude,
+                    }}
+                    title="Your Location"
+                    description={orderData.delivery_address}
+                    pinColor="blue"
+                  />
+                )}
 
-            {/* Connecting line between pharmacy and customer */}
-            {orderData.pharmacy_latitude && orderData.pharmacy_longitude && customerLocation && (
-              <Polyline
-                coordinates={[
-                  { latitude: orderData.pharmacy_latitude, longitude: orderData.pharmacy_longitude },
-                  { latitude: customerLocation.latitude, longitude: customerLocation.longitude }
-                ]}
-                strokeColor="#00bf63"
-                strokeWidth={4}
-                geodesic
-                lineDashPattern={[6, 4]}
+                {/* Route polyline from rider to customer */}
+                {routeCoordinates.length > 0 && (
+                  <Polyline
+                    coordinates={routeCoordinates}
+                    strokeColor="#00bf63"
+                    strokeWidth={5}
+                    geodesic
+                  />
+                )}
+              </MapView>
+              
+              {/* Status Title Overlay */}
+              <View style={styles.mapOverlay}>
+                <Text style={styles.mapOverlayTitle}>{getStatusInfo().title}</Text>
+                {orderData.rider_info && (
+                  <Text style={styles.mapOverlaySubtitle}>
+                    {orderData.rider_info.rider_name} is on the way
+                  </Text>
+                )}
+              </View>
+            </View>
+          ) : (
+            // Show status image for other states
+            <View style={styles.statusImageContainer}>
+              <Image
+                source={getStatusInfo().image}
+                style={styles.statusImage}
+                resizeMode="contain"
               />
-            )}
-          </MapView>
+              <Text style={styles.statusDisplayTitle}>{getStatusInfo().title}</Text>
+              {getStatusInfo().subtitle && (
+                <Text style={styles.statusDisplaySubtitle}>{getStatusInfo().subtitle}</Text>
+              )}
+            </View>
+          )}
         </View>
 
         <View style={styles.content}>
 
-          {/* Pharmacy Calling Card */}
-          <View style={styles.pharmacyCard}>
-            <View style={styles.pharmacyInfo}>
-              <View style={styles.pharmacyImageContainer}>
-                {(() => {
-                  const imageUrl = orderData.pharmacy_storefront_image_url;
-                  console.log('🖼️ Rendering pharmacy image:', {
-                    hasUrl: !!imageUrl,
-                    url: imageUrl,
-                    urlType: typeof imageUrl,
-                    urlLength: imageUrl?.length,
-                    hasError: storefrontImageError,
-                    pharmacyName: orderData.pharmacy_name
-                  });
-                  
-                  if (imageUrl && !storefrontImageError) {
-                    return (
-                      <Image 
-                        source={{ uri: imageUrl }} 
-                        style={styles.pharmacyImage}
-                        resizeMode="cover"
-                        onError={(e) => {
-                          console.log('❌ Failed to load pharmacy storefront image');
-                          console.log('  URL:', imageUrl);
-                          console.log('  Error:', e.nativeEvent.error);
-                          setStorefrontImageError(true);
-                        }}
-                        onLoad={() => {
-                          console.log('✅ Pharmacy storefront image loaded successfully:', imageUrl?.substring(0, 50));
-                        }}
-                        onLoadStart={() => {
-                          console.log('⏳ Started loading pharmacy storefront image...');
-                        }}
-                      />
-                    );
-                  } else {
-                    console.log('📦 Using fallback drugstore image. Reason:', !imageUrl ? 'No URL' : 'Error occurred');
-                    return (
-                      <Image 
-                        source={require('../assets/drugstore.png')} 
-                        style={styles.pharmacyImage}
-                        resizeMode="cover"
-                      />
-                    );
-                  }
-                })()}
+          {/* Dynamic Calling Card - Pharmacy or Rider */}
+          {showRiderCard ? (
+            // RIDER CARD
+            <View style={styles.pharmacyCard}>
+              <View style={styles.pharmacyInfo}>
+                <View style={styles.pharmacyImageContainer}>
+                  <View style={styles.riderAvatarContainer}>
+                    <Ionicons name="person" size={40} color="#00bf63" />
+                  </View>
+                </View>
+                <View style={styles.pharmacyDetails}>
+                  <Text style={styles.cardLabel}>Your Rider</Text>
+                  <Text style={styles.pharmacyName}>{orderData.rider_info?.rider_name}</Text>
+                  <Text style={styles.pharmacyPhone}>
+                    {orderData.rider_info?.vehicle_type} • {orderData.rider_info?.vehicle_plate || 'N/A'}
+                  </Text>
+                </View>
               </View>
-              <View style={styles.pharmacyDetails}>
-                <Text style={styles.pharmacyName}>{orderData.pharmacy_name}</Text>
-                <Text style={styles.pharmacyPhone}>
-                  {orderData.pharmacy_phone || 'No phone available'}
-                </Text>
+              <View style={styles.pharmacyActions}>
+                <TouchableOpacity
+                  style={styles.actionIcon}
+                  onPress={() => {
+                    const phoneNumber = orderData.rider_info?.rider_phone;
+                    if (phoneNumber) {
+                      Linking.openURL(`tel:${phoneNumber}`);
+                    } else {
+                      Alert.alert('No Phone Number', 'Rider phone number not available');
+                    }
+                  }}
+                >
+                  <Ionicons name="call-outline" size={24} color="#00bf63" />
+                </TouchableOpacity>
               </View>
             </View>
-            <View style={styles.pharmacyActions}>
-              <TouchableOpacity
-                style={styles.actionIcon}
-                onPress={async () => {
-                  try {
-                    setChatError(null);
-                    setChatLoading(true);
-                    const roomRes = await apiService.getOrCreateOrderChatRoom(orderData.order_id, orderData.pharmacy_id);
-                    if (!roomRes.success || !roomRes.data?.room) {
-                      setChatError(roomRes.error || 'Failed to open chat');
-                      setShowChatModal(true);
-                      setChatLoading(false);
-                      return;
+          ) : (
+            // PHARMACY CARD
+            <View style={styles.pharmacyCard}>
+              <View style={styles.pharmacyInfo}>
+                <View style={styles.pharmacyImageContainer}>
+                  {(() => {
+                    const imageUrl = orderData.pharmacy_storefront_image_url;
+                    console.log('🖼️ Rendering pharmacy image:', {
+                      hasUrl: !!imageUrl,
+                      url: imageUrl,
+                      urlType: typeof imageUrl,
+                      urlLength: imageUrl?.length,
+                      hasError: storefrontImageError,
+                      pharmacyName: orderData.pharmacy_name
+                    });
+                    
+                    if (imageUrl && !storefrontImageError) {
+                      return (
+                        <Image 
+                          source={{ uri: imageUrl }} 
+                          style={styles.pharmacyImage}
+                          resizeMode="cover"
+                          onError={(e) => {
+                            console.log('❌ Failed to load pharmacy storefront image');
+                            console.log('  URL:', imageUrl);
+                            console.log('  Error:', e.nativeEvent.error);
+                            setStorefrontImageError(true);
+                          }}
+                          onLoad={() => {
+                            console.log('✅ Pharmacy storefront image loaded successfully:', imageUrl?.substring(0, 50));
+                          }}
+                          onLoadStart={() => {
+                            console.log('⏳ Started loading pharmacy storefront image...');
+                          }}
+                        />
+                      );
+                    } else {
+                      console.log('📦 Using fallback drugstore image. Reason:', !imageUrl ? 'No URL' : 'Error occurred');
+                      return (
+                        <Image 
+                          source={require('../assets/drugstore.png')} 
+                          style={styles.pharmacyImage}
+                          resizeMode="cover"
+                        />
+                      );
                     }
-                    const room = roomRes.data.room;
-                    setChatRoom(room);
-                    // Pass room ID directly to fetchChatMessages to fix timing issue
-                    await fetchChatMessages(room.id);
-                    // start polling
-                    if (chatPollRef.current) clearInterval(chatPollRef.current);
-                    chatPollRef.current = setInterval(() => {
-                      fetchChatMessages(room.id);
-                    }, 12000);
-                    setShowChatModal(true);
-                  } catch {
-                    setChatError('Unexpected error opening chat');
-                    setShowChatModal(true);
-                  } finally {
-                    setChatLoading(false);
-                  }
-                }}
-              >
-                <Ionicons name="chatbubble-outline" size={24} color="#00bf63" />
-                {/* Unread badge */}
-                {unreadCount > 0 && (
-                  <View style={styles.badge}>
-                    <Text style={styles.badgeText}>
-                      {unreadCount > 9 ? '9+' : unreadCount}
+                  })()}
+                </View>
+                <View style={styles.pharmacyDetails}>
+                  <Text style={styles.pharmacyName}>{orderData.pharmacy_name}</Text>
+                  <Text style={styles.pharmacyPhone}>
+                    {orderData.pharmacy_phone || 'No phone available'}
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.pharmacyActions}>
+                <TouchableOpacity
+                  style={styles.actionIcon}
+                  onPress={async () => {
+                    try {
+                      setChatError(null);
+                      setChatLoading(true);
+                      const roomRes = await apiService.getOrCreateOrderChatRoom(orderData.order_id, orderData.pharmacy_id);
+                      if (!roomRes.success || !roomRes.data?.room) {
+                        setChatError(roomRes.error || 'Failed to open chat');
+                        setShowChatModal(true);
+                        setChatLoading(false);
+                        return;
+                      }
+                      const room = roomRes.data.room;
+                      setChatRoom(room);
+                      // Pass room ID directly to fetchChatMessages to fix timing issue
+                      await fetchChatMessages(room.id);
+                      // start polling
+                      if (chatPollRef.current) clearInterval(chatPollRef.current);
+                      chatPollRef.current = setInterval(() => {
+                        fetchChatMessages(room.id);
+                      }, 12000);
+                      setShowChatModal(true);
+                    } catch {
+                      setChatError('Unexpected error opening chat');
+                      setShowChatModal(true);
+                    } finally {
+                      setChatLoading(false);
+                    }
+                  }}
+                >
+                  <Ionicons name="chatbubble-outline" size={24} color="#00bf63" />
+                  {/* Unread badge */}
+                  {unreadCount > 0 && (
+                    <View style={styles.badge}>
+                      <Text style={styles.badgeText}>
+                        {unreadCount > 9 ? '9+' : unreadCount}
+                      </Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.actionIcon}>
+                  <Ionicons name="call-outline" size={24} color="#00bf63" />
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
+          {/* Order Summary */}
+          <View style={styles.orderSummary}>
+            <Text style={styles.orderSummaryTitle}>Order Summary</Text>
+            
+            {/* Order Number & Date */}
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Order Number</Text>
+              <Text style={styles.summaryValue}>#{orderData.order_number}</Text>
+            </View>
+            
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Order Date</Text>
+              <Text style={styles.summaryValue}>{new Date(orderData.created_at).toLocaleDateString()}</Text>
+            </View>
+
+            {/* Items Section - Dynamic based on order type */}
+            {orderData.items && orderData.items.length > 0 && (
+              <View style={styles.itemsSection}>
+                <Text style={styles.sectionTitle}>Items</Text>
+                {orderData.items.map((item: any, index: number) => (
+                  <View key={index} style={styles.itemRow}>
+                    <Text style={styles.itemName}>
+                      {item.quantity}x {item.name}
+                    </Text>
+                    <Text style={styles.itemPrice}>
+                      ₱{item.total_price?.toFixed(2) || '0.00'}
                     </Text>
                   </View>
-                )}
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.actionIcon}>
-                <Ionicons name="call-outline" size={24} color="#00bf63" />
-              </TouchableOpacity>
-            </View>
-          </View>
+                ))}
+              </View>
+            )}
 
-          {/* Order Status Panel */}
-          <View style={styles.statusPanel}>
-            <View style={styles.statusItem}>
-              <View style={styles.statusItemLeft}>
-                <View style={[
-                  styles.statusIconContainer,
-                  orderData?.order_status === 'pending' ? styles.activeStatus : null
-                ]}>
-                  <Ionicons name="document-text-outline" size={24} color="#FFFFFF" />
-                </View>
-                <View style={styles.statusConnector} />
-              </View>
-              <View style={styles.statusItemRight}>
-                <Text style={styles.statusTitle}>Order Under Review</Text>
-                <Text style={styles.statusSubtitle}>#{orderData.order_number}</Text>
-                <Text style={styles.statusTime}>{formatTime(orderData.created_at)}</Text>
-              </View>
-            </View>
-
-            <View style={styles.statusItem}>
-              <View style={styles.statusItemLeft}>
-                <View style={[
-                  styles.statusIconContainer,
-                  (orderData?.order_status === 'accepted' || orderData?.order_status === 'preparing') ? styles.activeStatus : null
-                ]}>
-                  <Ionicons name="cog-outline" size={24} color="#666666" />
-                </View>
-                <View style={styles.statusConnector} />
-              </View>
-              <View style={styles.statusItemRight}>
-                <Text style={styles.statusTitle}>Order Processing</Text>
-                <Text style={styles.statusSubtitle}>Processing order</Text>
-                <Text style={styles.statusTime}>
-                  {orderData?.updated_at ? formatTime(orderData.updated_at) : '-'}
+            {/* Prescription Info - For prescription orders */}
+            {orderData.prescription_image_url && (
+              <View style={styles.prescriptionSection}>
+                <Text style={styles.sectionTitle}>Prescription Order</Text>
+                <Text style={styles.prescriptionNote}>
+                  {orderData.prescription_notes || 'Prescription will be verified by pharmacy'}
                 </Text>
               </View>
-            </View>
+            )}
 
-            <View style={styles.statusItem}>
-              <View style={styles.statusItemLeft}>
-                <View style={styles.statusIconContainer}>
-                  <Ionicons name="time-outline" size={24} color="#666666" />
-                </View>
-                <View style={styles.statusConnector} />
-              </View>
-              <View style={styles.statusItemRight}>
-                <Text style={styles.statusTitle}>Pick Up</Text>
-                <Text style={styles.statusSubtitle}>Waiting for rider</Text>
-                <Text style={styles.statusTime}>-</Text>
-              </View>
-            </View>
-
-            <View style={styles.statusItem}>
-              <View style={styles.statusItemLeft}>
-                <View style={styles.statusIconContainer}>
-                  <Ionicons name="bicycle-outline" size={24} color="#666666" />
-                </View>
-                <View style={styles.statusConnector} />
-              </View>
-              <View style={styles.statusItemRight}>
-                <Text style={styles.statusTitle}>Delivering</Text>
-                <Text style={styles.statusSubtitle}>Delivering to {orderData.delivery_address}</Text>
-                <Text style={styles.statusTime}>-</Text>
-              </View>
-            </View>
-
-            <View style={styles.statusItem}>
-              <View style={styles.statusItemLeft}>
-                <View style={styles.statusIconContainer}>
-                  <Ionicons name="checkmark-circle-outline" size={24} color="#666666" />
+            {/* Senior Discount Info */}
+            {orderData.senior_discount_requested && (
+              <View style={styles.discountSection}>
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>Senior Discount</Text>
+                  <Text style={[
+                    styles.summaryValue,
+                    orderData.senior_discount_status === 'approved' && styles.approvedText,
+                    orderData.senior_discount_status === 'rejected' && styles.rejectedText
+                  ]}>
+                    {orderData.senior_discount_status === 'pending' && '⏳ Pending'}
+                    {orderData.senior_discount_status === 'approved' && `✓ Approved (-₱${orderData.discount_amount?.toFixed(2) || '0.00'})`}
+                    {orderData.senior_discount_status === 'rejected' && '✗ Not Applicable'}
+                  </Text>
                 </View>
               </View>
-              <View style={styles.statusItemRight}>
-                <Text style={styles.statusTitle}>Delivered Successfully</Text>
-                <Text style={styles.statusSubtitle}>Get Well Soon</Text>
-                <Text style={styles.statusTime}>-</Text>
+            )}
+
+            {/* Delivery Address */}
+            <View style={styles.addressSection}>
+              <Text style={styles.sectionTitle}>Delivery Address</Text>
+              <Text style={styles.addressText}>{orderData.delivery_address}</Text>
+            </View>
+
+            {/* Payment Summary */}
+            <View style={styles.paymentSummary}>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Subtotal</Text>
+                <Text style={styles.summaryValue}>₱{orderData.subtotal?.toFixed(2) || '0.00'}</Text>
+              </View>
+              
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Service Fee</Text>
+                <Text style={styles.summaryValue}>₱{orderData.tax_amount?.toFixed(2) || '0.00'}</Text>
+              </View>
+              
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Delivery Fee</Text>
+                <Text style={styles.summaryValue}>₱{orderData.delivery_fee?.toFixed(2) || '0.00'}</Text>
+              </View>
+              
+              {orderData.discount_amount > 0 && (
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>Discount</Text>
+                  <Text style={[styles.summaryValue, styles.discountValue]}>
+                    -₱{orderData.discount_amount?.toFixed(2) || '0.00'}
+                  </Text>
+                </View>
+              )}
+              
+              <View style={styles.divider} />
+              
+              <View style={styles.summaryRow}>
+                <Text style={styles.totalLabel}>Total Amount</Text>
+                <Text style={styles.totalValue}>₱{orderData.total_amount?.toFixed(2) || '0.00'}</Text>
+              </View>
+              
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Payment Method</Text>
+                <Text style={styles.summaryValue}>
+                  {orderData.payment_status === 'paid' ? 'Paid via Card' : 'Cash on Delivery'}
+                </Text>
               </View>
             </View>
           </View>
@@ -1269,7 +1624,7 @@ const styles = StyleSheet.create({
   // Pharmacy Card Styles
   pharmacyCard: {
 
-    backgroundColor: '#ededed',
+    backgroundColor: '#FFFFFF',
     borderRadius: 24,
     padding: 8,
     marginBottom: 20,
@@ -1293,6 +1648,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginRight: 12,
     overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
   },
   pharmacyImage: {
     width: 60,
@@ -1607,6 +1964,230 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     fontFamily: fontFamily.heavy,
+  },
+  
+  // NEW STYLES FOR REDESIGNED UI
+  statusDisplayContainer: {
+    width: '100%',
+    backgroundColor: '#F8F9FA',
+  },
+  statusImageContainer: {
+    alignItems: 'center',
+    paddingVertical: 40,
+    paddingHorizontal: 20,
+  },
+  statusImage: {
+    width: 200,
+    height: 200,
+    marginBottom: 20,
+  },
+  statusDisplayTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#2B2B2B',
+    marginBottom: 8,
+    fontFamily: fontFamily.heavy,
+    textAlign: 'center',
+  },
+  statusDisplaySubtitle: {
+    fontSize: 14,
+    color: '#666666',
+    textAlign: 'center',
+    fontFamily: fontFamily.light,
+    paddingHorizontal: 20,
+  },
+  trackingMapContainer: {
+    width: '100%',
+    height: 350,
+    position: 'relative',
+  },
+  trackingMap: {
+    width: '100%',
+    height: '100%',
+  },
+  mapOverlay: {
+    position: 'absolute',
+    top: 20,
+    left: 20,
+    right: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    padding: 16,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  mapOverlayTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#2B2B2B',
+    marginBottom: 4,
+    fontFamily: fontFamily.heavy,
+  },
+  mapOverlaySubtitle: {
+    fontSize: 14,
+    color: '#00bf63',
+    fontFamily: fontFamily.light,
+  },
+  riderMarker: {
+    width: 50,
+    height: 50,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 25,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 3,
+    borderColor: '#00bf63',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  riderAvatarContainer: {
+    width: 60,
+    height: 60,
+    backgroundColor: '#E8F5E9',
+    borderRadius: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardLabel: {
+    fontSize: 12,
+    color: '#999999',
+    marginBottom: 4,
+    fontFamily: fontFamily.light,
+  },
+  
+  // Order Summary Styles
+  orderSummary: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  orderSummaryTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#2B2B2B',
+    marginBottom: 16,
+    fontFamily: fontFamily.heavy,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  summaryLabel: {
+    fontSize: 14,
+    color: '#666666',
+    fontFamily: fontFamily.light,
+  },
+  summaryValue: {
+    fontSize: 14,
+    color: '#2B2B2B',
+    fontWeight: '500',
+    fontFamily: fontFamily.light,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#2B2B2B',
+    marginTop: 16,
+    marginBottom: 8,
+    fontFamily: fontFamily.heavy,
+  },
+  itemsSection: {
+    marginTop: 8,
+  },
+  itemRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 6,
+    paddingLeft: 8,
+  },
+  itemName: {
+    fontSize: 14,
+    color: '#2B2B2B',
+    flex: 1,
+    fontFamily: fontFamily.light,
+  },
+  itemPrice: {
+    fontSize: 14,
+    color: '#2B2B2B',
+    fontWeight: '500',
+    fontFamily: fontFamily.light,
+  },
+  prescriptionSection: {
+    marginTop: 8,
+    padding: 12,
+    backgroundColor: '#F0F9FF',
+    borderRadius: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: '#00bf63',
+  },
+  prescriptionNote: {
+    fontSize: 13,
+    color: '#666666',
+    fontStyle: 'italic',
+    fontFamily: fontFamily.light,
+  },
+  discountSection: {
+    marginTop: 8,
+    padding: 12,
+    backgroundColor: '#FFF7ED',
+    borderRadius: 8,
+  },
+  addressSection: {
+    marginTop: 8,
+    padding: 12,
+    backgroundColor: '#F8F9FA',
+    borderRadius: 8,
+  },
+  addressText: {
+    fontSize: 13,
+    color: '#2B2B2B',
+    fontFamily: fontFamily.light,
+  },
+  paymentSummary: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#E0E0E0',
+  },
+  divider: {
+    height: 1,
+    backgroundColor: '#E0E0E0',
+    marginVertical: 12,
+  },
+  totalLabel: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#2B2B2B',
+    fontFamily: fontFamily.heavy,
+  },
+  totalValue: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#00bf63',
+    fontFamily: fontFamily.heavy,
+  },
+  approvedText: {
+    color: '#00bf63',
+  },
+  rejectedText: {
+    color: '#EF4444',
+  },
+  discountValue: {
+    color: '#00bf63',
   },
 });
 
