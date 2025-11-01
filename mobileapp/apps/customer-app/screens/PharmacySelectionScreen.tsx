@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Alert,
   TextInput,
+  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -17,6 +18,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { fontFamily } from '../utils/fonts';
 import { apiService } from '../services/api';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface Pharmacy {
   id: string;
@@ -329,8 +332,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    padding: 20,
-    paddingBottom: 100, // Space for bottom button
+    paddingHorizontal: SCREEN_WIDTH * 0.05, // 5% responsive padding
+    paddingVertical: 20,
+    paddingBottom: 120, // Space for bottom button
   },
   // Header Section Styles
   headerSection: {
@@ -338,8 +342,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   headerImage: {
-    width: 200,
-    height: 200,
+    width: Math.min(SCREEN_WIDTH * 0.5, 200), // Responsive, max 200
+    height: Math.min(SCREEN_WIDTH * 0.5, 200),
     marginBottom: 16,
   },
   headerTextContainer: {
@@ -370,7 +374,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
-    paddingHorizontal: 16,
+    paddingHorizontal: SCREEN_WIDTH * 0.04, // 4% responsive padding
     paddingVertical: 14,
     borderWidth: 2,
     borderColor: '#E9ECEF',
@@ -445,14 +449,14 @@ const styles = StyleSheet.create({
   },
   pharmacyCardGradient: {
     borderRadius: 10,
-    padding: 16,
+    padding: SCREEN_WIDTH * 0.04, // 4% responsive padding
   },
   pharmacyCardContent: {
     backgroundColor: 'rgba(255, 255, 255, 0.85)',
     borderRadius: 8,
     paddingTop: 12,
     paddingBottom: 12,
-    paddingLeft: 12,
+    paddingLeft: SCREEN_WIDTH * 0.03, // 3% responsive padding
     paddingRight: 0,
     position: 'relative',
     overflow: 'hidden',
@@ -544,9 +548,18 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     backgroundColor: '#FFFFFF',
-    padding: 20,
+    paddingHorizontal: SCREEN_WIDTH * 0.05, // 5% responsive padding
+    paddingVertical: 20,
     borderTopWidth: 1,
     borderTopColor: '#E9ECEF',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: -2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 5,
   },
   proceedButton: {
     backgroundColor: '#9DD49D',

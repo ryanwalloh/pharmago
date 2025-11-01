@@ -8,6 +8,8 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
+  ScrollView,
+  ImageBackground,
 } from 'react-native';
 import { apiService } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
@@ -35,7 +37,6 @@ export default function CreateAccountPage({ onBack, onRegistrationSuccess }: Cre
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [isTestingConnection, setIsTestingConnection] = useState(false);
   const [errors, setErrors] = useState<{[key: string]: string}>({});
 
   // Log API configuration when component mounts
@@ -118,39 +119,6 @@ export default function CreateAccountPage({ onBack, onRegistrationSuccess }: Cre
     setPhoneNumber(formatted);
   };
 
-  // Test connection to backend
-  const handleTestConnection = async () => {
-    console.log('🧪 Testing backend connection...');
-    setIsTestingConnection(true);
-    
-    try {
-      const response = await apiService.testConnection();
-      
-      if (response.success) {
-        Alert.alert(
-          'Connection Test',
-          `✅ Backend connection successful!\n\nStatus: ${response.data?.status}\nMessage: ${response.message}`,
-          [{ text: 'OK' }]
-        );
-      } else {
-        Alert.alert(
-          'Connection Test',
-          `❌ Backend connection failed!\n\nError: ${response.error}`,
-          [{ text: 'OK' }]
-        );
-      }
-    } catch (error) {
-      console.error('💥 Connection test error:', error);
-      Alert.alert(
-        'Connection Test',
-        `💥 Connection test failed!\n\nError: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        [{ text: 'OK' }]
-      );
-    } finally {
-      setIsTestingConnection(false);
-    }
-  };
-
   // Form validation
   const validateForm = () => {
     const newErrors: {[key: string]: string} = {};
@@ -226,10 +194,6 @@ export default function CreateAccountPage({ onBack, onRegistrationSuccess }: Cre
     setErrors({});
 
     try {
-      // Generate default values for required fields that mobile app doesn't collect
-      const today = new Date();
-      const defaultDateOfBirth = new Date(today.getFullYear() - 25, 0, 1); // Default to 25 years ago
-      
       // Normalize phone number for backend
       const normalizedPhone = normalizePhoneForBackend(phoneNumber.trim());
       
@@ -327,8 +291,28 @@ export default function CreateAccountPage({ onBack, onRegistrationSuccess }: Cre
 
   return (
     <View style={styles.container}>
+      {/* Top Section - Logo and Background */}
+      <ImageBackground
+        source={require('../assets/createaccount.png')}
+        style={styles.topSection}
+        resizeMode="cover"
+      >
+        {/* Dark Overlay */}
+        <View style={styles.overlay} />
+        <Image
+          source={require('../assets/pharmalogo.png')}
+          style={styles.logo}
+          resizeMode="contain"
+        />
+      </ImageBackground>
+      
+      {/* Bottom Modal Container */}
+      <View style={styles.bottomModalContainer}>
+        <ScrollView 
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+        >
       {/* Title with colored text */}
-      <View style={styles.backgroundCircle}></View>
       <View style={styles.titleContainer}>
         <Text style={styles.titleCreate}>Create</Text>
         <Text style={styles.titleAccount}> Account</Text>
@@ -336,7 +320,7 @@ export default function CreateAccountPage({ onBack, onRegistrationSuccess }: Cre
       
       {/* Subtitle */}
       <Text style={styles.subtitle}>
-        Fill your details or continue with google account
+            Fill your details to get started
       </Text>
       
       {/* Username Input with Floating Label */}
@@ -562,19 +546,6 @@ export default function CreateAccountPage({ onBack, onRegistrationSuccess }: Cre
         </View>
         {errors.confirmPassword && <Text style={styles.errorText}>{errors.confirmPassword}</Text>}
       </View>
-      
-      {/* Connection Test Button */}
-      <TouchableOpacity 
-        style={[styles.testConnectionButton, isTestingConnection && styles.testConnectionButtonDisabled]} 
-        onPress={handleTestConnection}
-        disabled={isTestingConnection}
-      >
-        {isTestingConnection ? (
-          <ActivityIndicator color="#FFFFFF" />
-        ) : (
-          <Text style={styles.testConnectionButtonText}>Test Backend Connection</Text>
-        )}
-      </TouchableOpacity>
 
       {/* Sign Up Button */}
       <TouchableOpacity 
@@ -589,16 +560,6 @@ export default function CreateAccountPage({ onBack, onRegistrationSuccess }: Cre
         )}
       </TouchableOpacity>
       
-      {/* Google Sign Up Button */}
-      <TouchableOpacity style={styles.googleButton}>
-        <Image
-          source={require('../assets/googlelogo.png')}
-          style={styles.googleLogo}
-          resizeMode="contain"
-        />
-        <Text style={styles.googleButtonText}>Sign up with Google</Text>
-      </TouchableOpacity>
-      
       {/* Already Have Account Link */}
       <View style={styles.loginLinkContainer}>
         <Text style={styles.loginLinkText}>Already Have Account? </Text>
@@ -606,8 +567,8 @@ export default function CreateAccountPage({ onBack, onRegistrationSuccess }: Cre
           <Text style={styles.loginLink}>Log In</Text>
         </TouchableOpacity>
       </View>
-      
-      
+        </ScrollView>
+      </View>
     </View>
   );
 }
@@ -615,50 +576,62 @@ export default function CreateAccountPage({ onBack, onRegistrationSuccess }: Cre
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 20,
+    backgroundColor: '#FFFFFF', // Green background for top section
   },
-  backgroundCircle: {
-    width: 280,
-    height: 280,
-    borderRadius: '50%',
-    backgroundColor: '#00bf63',
-    position: 'absolute',
-    top: -60,
-    left: 140,
-    right: 0,
-    bottom: 0,
-    opacity: 0.2,
-    transform: [
-      { translateY: 0 },
-      { translateX: 90 }, // Move the circle up by 100px
-    ],
+  topSection: {
+    flex: 0.3,
+    justifyContent: 'center',
+    alignItems: 'center',
+  
+  },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)', // 50% dark overlay
+  },
+  logo: {
+    width: 120,
+    height: 120,
+    marginBottom: 10,
+    zIndex: 1,
+    right: 120,
+  },
+  bottomModalContainer: {
+    flex: 0.8,
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    top: -40,
+  },
+  scrollContent: {
+    paddingHorizontal: 24,
+    paddingTop: 20,
+    paddingBottom: 40,
   },
   titleContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginTop: 100,
     marginBottom: 5,
   },
   titleCreate: {
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: 'bold',
     color: '#00bf63',
   },
   titleAccount: {
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: 'bold',
     color: '#2B2B2B',
   },
   subtitle: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#999999',
     textAlign: 'center',
-    marginBottom: 60,
-    lineHeight: 22,
+    marginBottom: 16,
+    lineHeight: 20,
+    paddingHorizontal: 10,
   },
   inputContainer: {
-    marginBottom: 20,
+    marginBottom: 14,
     position: 'relative',
   },
   floatingLabel: {
@@ -725,11 +698,19 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 50,
     backgroundColor: '#00bf63',
-    borderRadius: 8,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 15,
-    marginTop: 10,
+    marginBottom: 16,
+    marginTop: 8,
+    shadowColor: '#00bf63',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
   },
   signUpButtonText: {
     color: '#FFFFFF',
@@ -740,52 +721,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#CCCCCC',
     opacity: 0.6,
   },
-  testConnectionButton: {
-    width: '100%',
-    height: 50,
-    backgroundColor: '#007AFF',
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 10,
-    marginTop: 10,
-  },
-  testConnectionButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  testConnectionButtonDisabled: {
-    backgroundColor: '#CCCCCC',
-    opacity: 0.6,
-  },
-  googleButton: {
-    width: '100%',
-    height: 50,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderRadius: 8,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  googleLogo: {
-    width: 30,
-    height: 30,
-    marginRight: 10,
-  },
-  googleButtonText: {
-    color: '#333333',
-    fontSize: 16,
-    fontWeight: '500',
-  },
   loginLinkContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 10,
   },
   loginLinkText: {
     fontSize: 14,

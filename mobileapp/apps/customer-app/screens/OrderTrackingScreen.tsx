@@ -12,6 +12,7 @@ import {
   Modal,
   Alert,
   Linking,
+  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -21,6 +22,8 @@ import { apiService, ApiResponse } from '../services/api';
 import { fontFamily } from '../utils/fonts';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { orderTrackingWS } from '../services/orderTrackingWebSocket';
+
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 interface RiderInfo {
   rider_id: number;
@@ -558,19 +561,6 @@ const OrderTrackingScreen: React.FC = () => {
   }, [showChatModal, chatRoom?.id]);
 
 
-  const formatTime = (dateString: string) => {
-    try {
-      const date = new Date(dateString);
-      return date.toLocaleTimeString('en-US', {
-        hour: 'numeric',
-        minute: '2-digit',
-        hour12: true,
-      });
-    } catch {
-      return '-';
-    }
-  };
-
   // Get status display info (title, subtitle, image)
   const getStatusInfo = () => {
     if (!orderData) return { title: 'Loading...', subtitle: '', showMap: false };
@@ -701,6 +691,7 @@ const OrderTrackingScreen: React.FC = () => {
       // Disconnect when component unmounts
       orderTrackingWS.disconnect();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, orderData?.order_status, fetchOrderData, fetchRiderRoute]);
 
   if (loading) {
@@ -1543,13 +1534,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   headerContainer: {
-    paddingHorizontal: 20,
+    paddingHorizontal: SCREEN_WIDTH * 0.05, // 5% responsive padding
     paddingTop: 10,
     paddingBottom: 10,
     backgroundColor: '#FFFFFF',
   },
   content: {
-    padding: 20,
+    paddingHorizontal: SCREEN_WIDTH * 0.05, // 5% responsive padding
+    paddingVertical: 20,
     borderTopLeftRadius: 32,
     borderTopRightRadius: 32,
     backgroundColor: '#FFFFFF',
@@ -1570,7 +1562,8 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    paddingHorizontal: SCREEN_WIDTH * 0.1, // 10% responsive padding
+    paddingVertical: 20,
   },
   errorTitle: {
     fontSize: 20,
@@ -1623,10 +1616,9 @@ const styles = StyleSheet.create({
   },
   // Pharmacy Card Styles
   pharmacyCard: {
-
     backgroundColor: '#FFFFFF',
     borderRadius: 24,
-    padding: 8,
+    padding: SCREEN_WIDTH * 0.02, // 2% responsive padding
     marginBottom: 20,
     borderWidth: 1,
     borderColor: '#E0E0E0',
@@ -1640,9 +1632,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   pharmacyImageContainer: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: Math.min(SCREEN_WIDTH * 0.15, 60), // Responsive, max 60
+    height: Math.min(SCREEN_WIDTH * 0.15, 60),
+    borderRadius: Math.min(SCREEN_WIDTH * 0.075, 30),
     backgroundColor: '#F8F9FA',
     justifyContent: 'center',
     alignItems: 'center',
@@ -1652,9 +1644,9 @@ const styles = StyleSheet.create({
     borderColor: '#E0E0E0',
   },
   pharmacyImage: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: Math.min(SCREEN_WIDTH * 0.15, 60), // Responsive, max 60
+    height: Math.min(SCREEN_WIDTH * 0.15, 60),
+    borderRadius: Math.min(SCREEN_WIDTH * 0.075, 30),
   },
   pharmacyDetails: {
     flex: 1,
@@ -1709,7 +1701,7 @@ const styles = StyleSheet.create({
   statusPanel: {
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
-    padding: 16,
+    padding: SCREEN_WIDTH * 0.04, // 4% responsive padding
     marginBottom: 20,
     borderWidth: 1,
     borderColor: '#E0E0E0',
@@ -1767,11 +1759,13 @@ const styles = StyleSheet.create({
   actionButtons: {
     marginTop: 20,
     gap: 12,
+    marginBottom: 20, // Extra bottom margin
   },
   refreshButton: {
     backgroundColor: '#00bf63',
     borderRadius: 12,
-    padding: 16,
+    paddingVertical: 16,
+    paddingHorizontal: SCREEN_WIDTH * 0.04, // 4% responsive padding
     alignItems: 'center',
   },
   refreshButtonText: {
@@ -1783,7 +1777,8 @@ const styles = StyleSheet.create({
   homeButton: {
     backgroundColor: '#F8F9FA',
     borderRadius: 12,
-    padding: 16,
+    paddingVertical: 16,
+    paddingHorizontal: SCREEN_WIDTH * 0.04, // 4% responsive padding
     alignItems: 'center',
     borderWidth: 1,
     borderColor: '#E0E0E0',
@@ -1811,7 +1806,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   chatHeader: {
-    paddingHorizontal: 16,
+    paddingHorizontal: SCREEN_WIDTH * 0.04, // 4% responsive padding
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#E0E0E0',
@@ -1899,8 +1894,8 @@ const styles = StyleSheet.create({
   customModalContainer: {
     backgroundColor: 'white',
     borderRadius: 16,
-    padding: 24,
-    width: '100%',
+    padding: SCREEN_WIDTH * 0.06, // 6% responsive padding
+    width: '90%',
     maxWidth: 400,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
@@ -1974,13 +1969,14 @@ const styles = StyleSheet.create({
   statusImageContainer: {
     alignItems: 'center',
     paddingVertical: 20,
-    paddingHorizontal: 20,
+    paddingHorizontal: SCREEN_WIDTH * 0.05, // 5% responsive padding
     paddingBottom: 50,
   },
   statusImage: {
-    width: 200,
-    height: 200,
+    width: Math.min(SCREEN_WIDTH * 0.5, 200), // Responsive, max 200
+    height: Math.min(SCREEN_WIDTH * 0.5, 200),
     marginBottom: 20,
+    opacity: 0.8,
   },
   statusDisplayTitle: {
     fontSize: 24,
@@ -1999,7 +1995,7 @@ const styles = StyleSheet.create({
   },
   trackingMapContainer: {
     width: '100%',
-    height: 350,
+    height: Math.min(SCREEN_HEIGHT * 0.4, 350), // Responsive, max 350
     position: 'relative',
   },
   trackingMap: {
@@ -2009,10 +2005,10 @@ const styles = StyleSheet.create({
   mapOverlay: {
     position: 'absolute',
     top: 20,
-    left: 20,
-    right: 20,
+    left: SCREEN_WIDTH * 0.05, // 5% responsive margin
+    right: SCREEN_WIDTH * 0.05,
     backgroundColor: 'rgba(255, 255, 255, 0.95)',
-    padding: 16,
+    padding: SCREEN_WIDTH * 0.04, // 4% responsive padding
     borderRadius: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -2048,10 +2044,10 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   riderAvatarContainer: {
-    width: 60,
-    height: 60,
+    width: Math.min(SCREEN_WIDTH * 0.15, 60), // Responsive, max 60
+    height: Math.min(SCREEN_WIDTH * 0.15, 60),
     backgroundColor: '#E8F5E9',
-    borderRadius: 30,
+    borderRadius: Math.min(SCREEN_WIDTH * 0.075, 30),
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -2066,7 +2062,7 @@ const styles = StyleSheet.create({
   orderSummary: {
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
-    padding: 16,
+    padding: SCREEN_WIDTH * 0.04, // 4% responsive padding
     marginTop: 16,
     borderWidth: 1,
     borderColor: '#E0E0E0',
@@ -2126,7 +2122,7 @@ const styles = StyleSheet.create({
   },
   prescriptionSection: {
     marginTop: 8,
-    padding: 12,
+    padding: SCREEN_WIDTH * 0.03, // 3% responsive padding
     backgroundColor: '#F0F9FF',
     borderRadius: 8,
     borderLeftWidth: 3,
@@ -2140,13 +2136,13 @@ const styles = StyleSheet.create({
   },
   discountSection: {
     marginTop: 8,
-    padding: 12,
+    padding: SCREEN_WIDTH * 0.03, // 3% responsive padding
     backgroundColor: '#FFF7ED',
     borderRadius: 8,
   },
   addressSection: {
     marginTop: 8,
-    padding: 12,
+    padding: SCREEN_WIDTH * 0.03, // 3% responsive padding
     backgroundColor: '#F8F9FA',
     borderRadius: 8,
   },

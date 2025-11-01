@@ -466,11 +466,13 @@ def direct_search_medicines(request):
             }, status=400)
         
         # Search in pharmacy inventory (available items only)
+        # Include category name in search
         medicines = PharmacyInventory.objects.filter(
             Q(name__icontains=query) | 
             Q(custom_name__icontains=query) |
             Q(medicine__name__icontains=query) |
-            Q(medicine__generic_name__icontains=query),
+            Q(medicine__generic_name__icontains=query) |
+            Q(category__name__icontains=query),  # Search by category name
             is_available=True,
             pharmacy__status='approved'
         ).select_related('pharmacy', 'medicine', 'category').order_by('name', 'dosage', 'form').distinct('name', 'dosage', 'form')[:limit]
