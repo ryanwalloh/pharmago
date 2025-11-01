@@ -236,8 +236,11 @@ def create_cart_order(request):
                 if storefront_doc and storefront_doc.file_url:
                     if 'cloudinary.com' in storefront_doc.file_url or storefront_doc.file_url.startswith('http'):
                         pharmacy_storefront_url = storefront_doc.file_url
+                        logger.info(f"✅ Cart Order: Using Cloudinary URL for pharmacy {pharmacy.id}: {pharmacy_storefront_url}")
+                else:
+                    logger.warning(f"⚠️ Cart Order: No storefront document/URL found for pharmacy {pharmacy.id}")
             except Exception as e:
-                logger.warning(f"Could not fetch pharmacy storefront: {e}")
+                logger.error(f"❌ Cart Order: Could not fetch pharmacy storefront: {e}", exc_info=True)
             
             # Build items list for response
             items_list = []
@@ -249,6 +252,9 @@ def create_cart_order(request):
                     'total_price': float(line.total_price),
                     'prescription_required': line.prescription_required
                 })
+            
+            # Log what we're returning
+            logger.info(f"📦 Cart Order Response: pharmacy_storefront_image_url = {pharmacy_storefront_url}")
             
             return JsonResponse({
                 'success': True,
