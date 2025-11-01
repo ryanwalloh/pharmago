@@ -345,7 +345,6 @@ def get_order_status(request, order_id):
             try:
                 from api.users.models import UserDocument
                 import os
-                import boto3
                 from urllib.parse import urlparse
                 
                 # Look for storefront image document using the same pattern as active-pharmacies
@@ -369,6 +368,7 @@ def get_order_status(request, order_id):
                     else:
                         # Legacy S3 URL - generate presigned URL or use backend proxy
                         try:
+                            import boto3
                             from botocore.config import Config
                             bucket_name = os.getenv('AWS_STORAGE_BUCKET_NAME', 'pharmago-user-uploads')
                             region = os.getenv('AWS_S3_REGION_NAME', 'ap-southeast-2')
