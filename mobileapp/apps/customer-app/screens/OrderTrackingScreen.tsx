@@ -746,7 +746,7 @@ const OrderTrackingScreen: React.FC = () => {
               style={styles.backButton}
               onPress={() => router.back()}
             >
-              <Text style={styles.backButtonText}>← Back</Text>
+              <Text style={styles.backButtonText}>Back</Text>
             </TouchableOpacity>
             <Text style={styles.headerTitle}>Order Tracking</Text>
             <View style={styles.headerSpacer} />
@@ -1973,8 +1973,9 @@ const styles = StyleSheet.create({
   },
   statusImageContainer: {
     alignItems: 'center',
-    paddingVertical: 40,
+    paddingVertical: 20,
     paddingHorizontal: 20,
+    paddingBottom: 50,
   },
   statusImage: {
     width: 200,
@@ -2067,11 +2068,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     marginTop: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
   },
   orderSummaryTitle: {
     fontSize: 18,

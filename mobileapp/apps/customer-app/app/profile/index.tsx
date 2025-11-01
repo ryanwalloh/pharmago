@@ -1,10 +1,12 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, StatusBar } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, StatusBar, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
 import { apiService } from '../../services/api';
 import { router } from 'expo-router';
 import Svg, { Path } from 'react-native-svg';
+import { Ionicons } from '@expo/vector-icons';
+import { fontFamily } from '../../utils/fonts';
 
 export default function ProfileScreen() {
   const { user, logout } = useAuth();
@@ -18,38 +20,169 @@ export default function ProfileScreen() {
     } catch {}
   };
 
+  const getInitials = () => {
+    const firstName = user?.firstName || '';
+    const lastName = user?.lastName || '';
+    return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase() || '?';
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      
+      {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Profile</Text>
+        <Text style={styles.headerTitle}>My Profile</Text>
       </View>
 
-      <View style={styles.content}>
-        <View style={styles.card}>
-          <Text style={styles.label}>Username</Text>
-          <Text style={styles.value}>{user?.username || '-'}</Text>
+      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+        <View style={styles.content}>
+          {/* Profile Avatar Section */}
+          <View style={styles.avatarSection}>
+            <View style={styles.avatarContainer}>
+              <Text style={styles.avatarText}>{getInitials()}</Text>
+            </View>
+            <Text style={styles.profileName}>
+              {[user?.firstName, user?.lastName].filter(Boolean).join(' ') || 'User'}
+            </Text>
+            <Text style={styles.profileUsername}>@{user?.username || 'username'}</Text>
+          </View>
 
-          <View style={styles.divider} />
+          {/* Personal Information Card */}
+          <View style={styles.sectionCard}>
+            <Text style={styles.sectionTitle}>Personal Information</Text>
+            
+            <View style={styles.infoRow}>
+              <View style={styles.infoIcon}>
+                <Ionicons name="person-outline" size={20} color="#00bf63" />
+              </View>
+              <View style={styles.infoContent}>
+                <Text style={styles.infoLabel}>Full Name</Text>
+                <Text style={styles.infoValue}>
+                  {[user?.firstName, user?.lastName].filter(Boolean).join(' ') || 'Not set'}
+                </Text>
+              </View>
+            </View>
 
-          <Text style={styles.label}>Email</Text>
-          <Text style={styles.value}>{user?.email || '-'}</Text>
+            <View style={styles.infoDivider} />
 
-          <View style={styles.divider} />
+            <View style={styles.infoRow}>
+              <View style={styles.infoIcon}>
+                <Ionicons name="mail-outline" size={20} color="#00bf63" />
+              </View>
+              <View style={styles.infoContent}>
+                <Text style={styles.infoLabel}>Email Address</Text>
+                <Text style={styles.infoValue}>{user?.email || 'Not set'}</Text>
+              </View>
+            </View>
 
-          <Text style={styles.label}>Name</Text>
-          <Text style={styles.value}>{[user?.firstName, user?.lastName].filter(Boolean).join(' ') || '-'}</Text>
+            <View style={styles.infoDivider} />
 
-          <View style={styles.divider} />
+            <View style={styles.infoRow}>
+              <View style={styles.infoIcon}>
+                <Ionicons name="call-outline" size={20} color="#00bf63" />
+              </View>
+              <View style={styles.infoContent}>
+                <Text style={styles.infoLabel}>Phone Number</Text>
+                <Text style={styles.infoValue}>{user?.phone || 'Not set'}</Text>
+              </View>
+            </View>
 
-          <Text style={styles.label}>Phone</Text>
-          <Text style={styles.value}>{user?.phone || '-'}</Text>
+            {user?.customer_id && (
+              <>
+                <View style={styles.infoDivider} />
+                <View style={styles.infoRow}>
+                  <View style={styles.infoIcon}>
+                    <Ionicons name="card-outline" size={20} color="#00bf63" />
+                  </View>
+                  <View style={styles.infoContent}>
+                    <Text style={styles.infoLabel}>Customer ID</Text>
+                    <Text style={styles.infoValue}>#{user.customer_id}</Text>
+                  </View>
+                </View>
+              </>
+            )}
+          </View>
+
+          {/* Account Settings Card */}
+          <View style={styles.sectionCard}>
+            <Text style={styles.sectionTitle}>Account Settings</Text>
+            
+            <TouchableOpacity style={styles.settingRow}>
+              <View style={styles.settingLeft}>
+                <Ionicons name="location-outline" size={20} color="#666666" />
+                <Text style={styles.settingText}>Saved Addresses</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="#999999" />
+            </TouchableOpacity>
+
+            <View style={styles.infoDivider} />
+
+            <TouchableOpacity 
+              style={styles.settingRow}
+              onPress={() => router.push('/order-history' as any)}
+            >
+              <View style={styles.settingLeft}>
+                <Ionicons name="receipt-outline" size={20} color="#666666" />
+                <Text style={styles.settingText}>Order History</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="#999999" />
+            </TouchableOpacity>
+
+            <View style={styles.infoDivider} />
+
+            <TouchableOpacity style={styles.settingRow}>
+              <View style={styles.settingLeft}>
+                <Ionicons name="lock-closed-outline" size={20} color="#666666" />
+                <Text style={styles.settingText}>Change Password</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="#999999" />
+            </TouchableOpacity>
+          </View>
+
+          {/* App Information Card */}
+          <View style={styles.sectionCard}>
+            <Text style={styles.sectionTitle}>App Information</Text>
+            
+            <TouchableOpacity style={styles.settingRow}>
+              <View style={styles.settingLeft}>
+                <Ionicons name="shield-checkmark-outline" size={20} color="#666666" />
+                <Text style={styles.settingText}>Privacy Policy</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="#999999" />
+            </TouchableOpacity>
+
+            <View style={styles.infoDivider} />
+
+            <TouchableOpacity style={styles.settingRow}>
+              <View style={styles.settingLeft}>
+                <Ionicons name="document-text-outline" size={20} color="#666666" />
+                <Text style={styles.settingText}>Terms of Service</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="#999999" />
+            </TouchableOpacity>
+
+            <View style={styles.infoDivider} />
+
+            <View style={styles.settingRow}>
+              <View style={styles.settingLeft}>
+                <Ionicons name="information-circle-outline" size={20} color="#666666" />
+                <Text style={styles.settingText}>App Version</Text>
+              </View>
+              <Text style={styles.versionText}>1.0.0</Text>
+            </View>
+          </View>
+
+          {/* Logout Button */}
+          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+            <Ionicons name="log-out-outline" size={20} color="#FFFFFF" />
+            <Text style={styles.logoutText}>Logout</Text>
+          </TouchableOpacity>
+
+          {/* Bottom padding for nav bar */}
+          <View style={{ height: 20 }} />
         </View>
-
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-          <Text style={styles.logoutText}>Logout</Text>
-        </TouchableOpacity>
-      </View>
+      </ScrollView>
 
       {/* Bottom Navigation Bar */}
       <View style={styles.bottomNav}>
@@ -57,7 +190,10 @@ export default function ProfileScreen() {
           <HomeIcon size={24} color="#FFFFFF" />
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.bottomNavItem}>
+        <TouchableOpacity 
+          style={styles.bottomNavItem}
+          onPress={() => router.push('/order-history' as any)}
+        >
           <CompareIcon size={24} color="#FFFFFF" />
         </TouchableOpacity>
 
@@ -65,7 +201,7 @@ export default function ProfileScreen() {
           <AddPrescriptionIcon size={24} color="#FFFFFF" />
         </TouchableOpacity>
 
-        <TouchableOpacity style={[styles.bottomNavItem, styles.activeNavItem]} onPress={() => router.push('/profile' as any)}>
+        <TouchableOpacity style={[styles.bottomNavItem, styles.activeNavItem]}>
           <ProfileIcon size={24} color="#FFFFFF" />
         </TouchableOpacity>
       </View>
@@ -113,58 +249,158 @@ const ProfileIcon = ({ size = 24, color = '#999999' }) => (
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F8F9FA',
   },
   header: {
     paddingHorizontal: 20,
-    paddingVertical: 12,
+    paddingVertical: 16,
+    backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
-    borderBottomColor: '#EFEFEF',
+    borderBottomColor: '#E0E0E0',
   },
   headerTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#111827',
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#2B2B2B',
+    fontFamily: fontFamily.heavy,
+  },
+  scrollView: {
+    flex: 1,
   },
   content: {
-    flex: 1,
     padding: 20,
     paddingBottom: 120,
   },
-  card: {
-    backgroundColor: '#FAFAFA',
+  
+  // Avatar Section
+  avatarSection: {
+    alignItems: 'center',
+    paddingVertical: 30,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    marginBottom: 20,
     borderWidth: 1,
-    borderColor: '#F0F0F0',
+    borderColor: '#E0E0E0',
+  },
+  avatarContainer: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: '#00bf63',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  avatarText: {
+    fontSize: 36,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    fontFamily: fontFamily.heavy,
+  },
+  profileName: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#2B2B2B',
+    marginBottom: 4,
+    fontFamily: fontFamily.heavy,
+  },
+  profileUsername: {
+    fontSize: 14,
+    color: '#999999',
+    fontFamily: fontFamily.light,
+  },
+
+  // Section Cards
+  sectionCard: {
+    backgroundColor: '#FFFFFF',
     borderRadius: 12,
     padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
   },
-  label: {
-    fontSize: 12,
-    color: '#6B7280',
-  },
-  value: {
+  sectionTitle: {
     fontSize: 16,
-    color: '#111827',
+    fontWeight: 'bold',
+    color: '#2B2B2B',
+    marginBottom: 16,
+    fontFamily: fontFamily.heavy,
+  },
+
+  // Info Rows (with icons)
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  infoIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#E8F5E9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  infoContent: {
+    flex: 1,
+  },
+  infoLabel: {
+    fontSize: 12,
+    color: '#999999',
+    marginBottom: 4,
+    fontFamily: fontFamily.light,
+  },
+  infoValue: {
+    fontSize: 16,
+    color: '#2B2B2B',
     fontWeight: '600',
-    marginTop: 2,
+    fontFamily: fontFamily.heavy,
   },
-  divider: {
+  infoDivider: {
     height: 1,
-    backgroundColor: '#EDEDED',
-    marginVertical: 12,
+    backgroundColor: '#F0F0F0',
+    marginVertical: 16,
   },
+
+  // Settings Rows
+  settingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 4,
+  },
+  settingLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  settingText: {
+    fontSize: 15,
+    color: '#2B2B2B',
+    fontFamily: fontFamily.light,
+  },
+  versionText: {
+    fontSize: 14,
+    color: '#999999',
+    fontFamily: fontFamily.light,
+  },
+
+  // Logout Button (GREEN!)
   logoutButton: {
-    backgroundColor: '#FF3B30',
-    borderRadius: 8,
-    paddingVertical: 14,
+    backgroundColor: '#00bf63',
+    borderRadius: 12,
+    paddingVertical: 16,
+    flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 20,
+    marginTop: 8,
+    gap: 8,
   },
   logoutText: {
     color: '#FFFFFF',
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: 'bold',
+    fontFamily: fontFamily.heavy,
   },
   // Bottom Navigation Bar (mirrors MainPage)
   bottomNav: {

@@ -3,6 +3,7 @@ from . import views_read as views
 from . import views_ops as ops
 from . import address_views
 from . import cart_order_views
+from . import customer_orders_views
 from api.payments.stripe_views import create_payment_intent, stripe_webhook, confirm_payment
 
 app_name = 'direct'
@@ -48,6 +49,8 @@ urlpatterns = [
     path('customer-addresses/<int:customer_id>/', address_views.get_customer_addresses),
     path('default-address/<int:customer_id>/', address_views.get_default_address),
     path('update-address/<int:address_id>/', address_views.update_address),
+    # Customer orders endpoints
+    path('customer-orders/<int:customer_id>/', customer_orders_views.get_customer_orders),
     # Stripe payment endpoints
     path('stripe/create-payment-intent/', create_payment_intent),
     path('stripe/webhook/', stripe_webhook),
