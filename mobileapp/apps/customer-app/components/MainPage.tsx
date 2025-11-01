@@ -172,7 +172,7 @@ export default function MainPage() {
     { 
       id: 1, 
       type: 'featured',
-      discount: '15% Off',
+      discount: 'PharmaGo',
       title: 'Local Pharmacy',
       subtitle: 'Delivered with care',
       ctaText: 'Shop now',
@@ -423,7 +423,10 @@ export default function MainPage() {
           <HomeIcon size={24} color="#FFFFFF" />
         </TouchableOpacity>
         
-        <TouchableOpacity style={styles.bottomNavItem}>
+        <TouchableOpacity 
+          style={styles.bottomNavItem}
+          onPress={() => router.push('/order-history' as any)}
+        >
           <CompareIcon size={24} color="#FFFFFF" />
         </TouchableOpacity>
         
