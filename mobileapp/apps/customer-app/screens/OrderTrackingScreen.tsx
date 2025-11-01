@@ -101,7 +101,7 @@ const OrderTrackingScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [mapRegion, setMapRegion] = useState<Region>({
+  const [, setMapRegion] = useState<Region>({
     latitude: 8.2275, // Iligan City default
     longitude: 124.2456,
     latitudeDelta: 0.01,
@@ -126,7 +126,7 @@ const OrderTrackingScreen: React.FC = () => {
   
   // Route tracking for rider
   const [routeCoordinates, setRouteCoordinates] = useState<{latitude: number, longitude: number}[]>([]);
-  const [routeLoading, setRouteLoading] = useState(false);
+  const [, setRouteLoading] = useState(false);
   const [chatTyping, setChatTyping] = useState<{ customer?: boolean; pharmacy?: boolean }>({});
   const chatTypingPollRef = useRef<any>(null);
   const chatFetchInFlightRef = useRef<boolean>(false);

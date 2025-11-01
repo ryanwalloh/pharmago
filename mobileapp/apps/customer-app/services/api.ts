@@ -70,7 +70,7 @@ class ApiService {
     console.log('🔧 API Service initialized with base URL:', this.baseURL);
   }
 
-  private async makeRequest<T>(
+  public async makeRequest<T>(
     endpoint: string,
     options: RequestInit = {},
     suppressAuthLog: boolean = false
@@ -169,7 +169,7 @@ class ApiService {
   }
 
   // Make request against direct, auth-bypassing endpoints (per docs)
-  private async makeDirectRequest<T>(
+  public async makeDirectRequest<T>(
     endpoint: string,
     options: RequestInit = {}
   ): Promise<ApiResponse<T>> {
