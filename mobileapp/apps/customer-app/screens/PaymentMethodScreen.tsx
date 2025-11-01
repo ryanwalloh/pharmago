@@ -9,12 +9,15 @@ import {
   Alert,
   Switch,
   ActivityIndicator,
+  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import { fontFamily } from '../utils/fonts';
 import * as ImagePicker from 'expo-image-picker';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface PaymentMethod {
   id: string;
@@ -443,8 +446,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    paddingHorizontal: 20,
-    paddingBottom: 100, // Space for the fixed button
+    paddingHorizontal: SCREEN_WIDTH * 0.05, // 5% responsive padding
+    paddingBottom: 120, // Extra space for the fixed button
   },
   headerSection: {
     alignItems: 'center',
@@ -452,8 +455,8 @@ const styles = StyleSheet.create({
     marginBottom: 30,
   },
   headerImage: {
-    width: 100,
-    height: 100,
+    width: Math.min(SCREEN_WIDTH * 0.25, 100), // Responsive, max 100
+    height: Math.min(SCREEN_WIDTH * 0.25, 100),
     marginBottom: 16,
   },
   headerTextContainer: {
@@ -481,7 +484,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     backgroundColor: '#E3F2FD',
     borderRadius: 12,
-    padding: 16,
+    padding: SCREEN_WIDTH * 0.04, // 4% responsive padding
     borderWidth: 1,
     borderColor: '#BBDEFB',
   },
@@ -523,7 +526,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 2,
     borderColor: '#E9ECEF',
-    padding: 12,
+    padding: SCREEN_WIDTH * 0.03, // 3% responsive padding
   },
   selectedPaymentMethodCard: {
     borderColor: '#9DD49D',
@@ -544,8 +547,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   paymentMethodIcon: {
-    width: 40,
-    height: 40,
+    width: Math.min(SCREEN_WIDTH * 0.1, 40), // Responsive, max 40
+    height: Math.min(SCREEN_WIDTH * 0.1, 40),
     marginRight: 12,
   },
   paymentMethodTextContainer: {
@@ -594,7 +597,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#E9ECEF',
-    padding: 16,
+    padding: SCREEN_WIDTH * 0.04, // 4% responsive padding
   },
   pharmacyInfoName: {
     fontSize: 16,
@@ -620,7 +623,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     backgroundColor: '#FFFFFF',
-    paddingHorizontal: 20,
+    paddingHorizontal: SCREEN_WIDTH * 0.05, // 5% responsive padding
     paddingVertical: 15,
     borderTopWidth: 1,
     borderTopColor: '#E9ECEF',
@@ -675,7 +678,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8FFF8',
     borderRadius: 12,
     paddingVertical: 20,
-    paddingHorizontal: 15,
+    paddingHorizontal: SCREEN_WIDTH * 0.04, // 4% responsive padding
     alignItems: 'center',
     borderWidth: 1,
     borderColor: '#9DD49D',
@@ -700,7 +703,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#F8FFF8',
     borderRadius: 12,
-    padding: 15,
+    padding: SCREEN_WIDTH * 0.04, // 4% responsive padding
     borderWidth: 1,
     borderColor: '#9DD49D',
   },

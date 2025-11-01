@@ -12,6 +12,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Image,
+  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -22,6 +23,8 @@ import * as Location from 'expo-location';
 import { useStripe } from '@stripe/stripe-react-native';
 import { fontFamily } from '../utils/fonts';
 import { apiService } from '../services/api';
+
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 // Back Arrow Icon
 const BackArrowIcon = ({ size = 24, color = '#000000' }) => (
@@ -1118,7 +1121,8 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    paddingHorizontal: SCREEN_WIDTH * 0.1, // 10% responsive padding
+    paddingVertical: 20,
   },
   errorText: {
     fontSize: 16,
@@ -1140,7 +1144,7 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
+    paddingHorizontal: SCREEN_WIDTH * 0.05, // 5% responsive padding
     paddingVertical: 15,
     backgroundColor: '#FFFFFF',
   },
@@ -1165,9 +1169,9 @@ const styles = StyleSheet.create({
   section: {
     backgroundColor: '#FFFFFF',
     marginTop: 15,
-    paddingHorizontal: 20,
+    paddingHorizontal: SCREEN_WIDTH * 0.05, // 5% responsive padding
     paddingVertical: 20,
-    marginHorizontal: 20,
+    marginHorizontal: SCREEN_WIDTH * 0.05, // 5% responsive margin
     borderRadius: 12,
   },
   sectionHeader: {
@@ -1188,11 +1192,10 @@ const styles = StyleSheet.create({
   },
   // Map
   mapContainer: {
-    height: 200,
+    height: Math.max(SCREEN_WIDTH * 0.5, 200), // Responsive, min 200
     borderRadius: 12,
     overflow: 'hidden',
     marginBottom: 15,
-
   },
   map: {
     width: '100%',
@@ -1212,7 +1215,7 @@ const styles = StyleSheet.create({
     color: '#666666',
   },
   addressDetails: {
-    padding: 15,
+    padding: SCREEN_WIDTH * 0.04, // 4% responsive padding
     backgroundColor: '#F8F8F8',
     borderRadius: 12,
   },
@@ -1229,7 +1232,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 10,
+    padding: SCREEN_WIDTH * 0.03, // 3% responsive padding
     backgroundColor: '#F8F8F8',
     borderRadius: 12,
     marginTop: 15,
@@ -1252,7 +1255,7 @@ const styles = StyleSheet.create({
   paymentOption: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 10,
+    padding: SCREEN_WIDTH * 0.03, // 3% responsive padding
     borderRadius: 12,
     marginBottom: 12,
   },
@@ -1266,7 +1269,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F5F5F5',
   },
   paymentIcon: {
-    width: 50,
+    width: Math.min(SCREEN_WIDTH * 0.12, 50), // Responsive, max 50
     height: 32,
     opacity: 0.7,
   },
@@ -1394,9 +1397,9 @@ const styles = StyleSheet.create({
   },
   // Terms
   termsContainer: {
-    padding: 20,
+    padding: SCREEN_WIDTH * 0.05, // 5% responsive padding
     backgroundColor: '#FFF9E6',
-    marginHorizontal: 20,
+    marginHorizontal: SCREEN_WIDTH * 0.05, // 5% responsive margin
     marginTop: 15,
     borderRadius: 12,
   },
@@ -1412,11 +1415,19 @@ const styles = StyleSheet.create({
   },
   // Bottom Container
   bottomContainer: {
-    paddingHorizontal: 20,
+    paddingHorizontal: SCREEN_WIDTH * 0.05, // 5% responsive padding
     paddingVertical: 15,
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
     borderTopColor: '#F0F0F0',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: -2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 5,
   },
   placeOrderButton: {
     backgroundColor: '#00bf63',
@@ -1444,7 +1455,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
+    paddingHorizontal: SCREEN_WIDTH * 0.05, // 5% responsive padding
     paddingVertical: 15,
     borderBottomWidth: 1,
     borderBottomColor: '#E0E0E0',
@@ -1470,7 +1481,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   modalMapContainer: {
-    height: 200,
+    height: Math.max(SCREEN_HEIGHT * 0.25, 200), // Responsive, min 200
     position: 'relative',
   },
   modalMap: {
@@ -1500,7 +1511,7 @@ const styles = StyleSheet.create({
   },
   modalForm: {
     flex: 1,
-    paddingHorizontal: 20,
+    paddingHorizontal: SCREEN_WIDTH * 0.05, // 5% responsive padding
     paddingTop: 20,
   },
   formSection: {
@@ -1516,7 +1527,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E0E0E0',
     borderRadius: 8,
-    paddingHorizontal: 15,
+    paddingHorizontal: SCREEN_WIDTH * 0.04, // 4% responsive padding
     paddingVertical: 12,
     fontSize: 16,
     color: '#333333',
@@ -1537,7 +1548,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   labelButton: {
-    paddingHorizontal: 16,
+    paddingHorizontal: SCREEN_WIDTH * 0.04, // 4% responsive padding
     paddingVertical: 8,
     borderRadius: 20,
     borderWidth: 1,

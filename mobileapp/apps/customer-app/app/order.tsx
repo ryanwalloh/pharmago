@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   Switch,
   Alert,
+  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -18,6 +19,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import { fontFamily } from '../utils/fonts';
 import { apiService } from '../services/api';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 // Back Arrow Icon
 const BackArrowIcon = ({ size = 24, color = '#000000' }) => (
@@ -858,12 +861,11 @@ const styles = StyleSheet.create({
   // Combined Pharmacy Details Container (Header + Details)
   pharmacyDetailsContainer: {
     backgroundColor: '#FFFFFF',
-    paddingHorizontal: 20,
+    paddingHorizontal: SCREEN_WIDTH * 0.05, // 5% responsive padding
     paddingTop: 15,
     paddingBottom: 20,
     borderBottomWidth: 1,
     borderBottomColor: '#F0F0F0',
-  
   },
   // Top Row: Back Button Only
   headerRow: {
@@ -893,8 +895,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   pharmacyImageWrapper: {
-    width: 60,
-    height: 60,
+    width: Math.min(SCREEN_WIDTH * 0.15, 60), // Responsive, max 60
+    height: Math.min(SCREEN_WIDTH * 0.15, 60),
     borderRadius: 12,
     overflow: 'hidden',
     marginRight: 12,
@@ -939,7 +941,7 @@ const styles = StyleSheet.create({
   },
   // Search Field
   searchContainer: {
-    paddingHorizontal: 20,
+    paddingHorizontal: SCREEN_WIDTH * 0.05, // 5% responsive padding
     paddingVertical: 15,
     backgroundColor: '#F8F8F8',
   },
@@ -948,7 +950,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#F8F8F8',
     borderRadius: 25,
-    paddingHorizontal: 20,
+    paddingHorizontal: SCREEN_WIDTH * 0.05, // 5% responsive padding
     height: 45,
     borderWidth: 1,
     borderColor: '#E0E0E0',
@@ -986,7 +988,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: 12,
-    paddingHorizontal: 15,
+    paddingHorizontal: SCREEN_WIDTH * 0.04, // 4% responsive padding
     borderBottomWidth: 1,
     borderBottomColor: '#F5F5F5',
   },
@@ -1030,7 +1032,7 @@ const styles = StyleSheet.create({
   // Products Container
   productsContainer: {
     backgroundColor: '#F8F8F8',
-    paddingHorizontal: 20,
+    paddingHorizontal: SCREEN_WIDTH * 0.05, // 5% responsive padding
     paddingVertical: 20,
     marginBottom: 20,
   },
@@ -1043,7 +1045,7 @@ const styles = StyleSheet.create({
   emptyCart: {
     backgroundColor: '#FFFFFF',
     borderRadius: 15,
-    padding: 40,
+    padding: SCREEN_WIDTH * 0.1, // 10% responsive padding
     alignItems: 'center',
   },
   emptyCartText: {
@@ -1054,7 +1056,7 @@ const styles = StyleSheet.create({
   cartItem: {
     backgroundColor: '#FFFFFF',
     borderRadius: 15,
-    padding: 15,
+    padding: SCREEN_WIDTH * 0.04, // 4% responsive padding
     marginBottom: 12,
     flexDirection: 'row',
     alignItems: 'center',
@@ -1112,8 +1114,8 @@ const styles = StyleSheet.create({
   summaryContainer: {
     backgroundColor: '#FFFFFF',
     borderRadius: 15,
-    padding: 20,
-    marginHorizontal: 20,
+    padding: SCREEN_WIDTH * 0.05, // 5% responsive padding
+    marginHorizontal: SCREEN_WIDTH * 0.05, // 5% responsive margin
     marginBottom: 20,
     borderWidth: 1,
     borderColor: '#E0E0E0',
@@ -1176,11 +1178,19 @@ const styles = StyleSheet.create({
   },
   // Bottom Container
   bottomContainer: {
-    paddingHorizontal: 20,
+    paddingHorizontal: SCREEN_WIDTH * 0.05, // 5% responsive padding
     paddingVertical: 15,
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
     borderTopColor: '#F0F0F0',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: -2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 5,
   },
   placeOrderButton: {
     backgroundColor: '#00bf63',
@@ -1206,7 +1216,8 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    paddingHorizontal: SCREEN_WIDTH * 0.1, // 10% responsive padding
+    paddingVertical: 20,
   },
   errorText: {
     fontSize: 16,
@@ -1228,8 +1239,8 @@ const styles = StyleSheet.create({
   seniorDiscountSection: {
     backgroundColor: '#FFFFFF',
     borderRadius: 15,
-    padding: 20,
-    marginHorizontal: 20,
+    padding: SCREEN_WIDTH * 0.05, // 5% responsive padding
+    marginHorizontal: SCREEN_WIDTH * 0.05, // 5% responsive margin
     marginBottom: 20,
     borderWidth: 1,
     borderColor: '#E0E0E0',
@@ -1258,7 +1269,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F0F9F4',
     borderRadius: 12,
     paddingVertical: 20,
-    paddingHorizontal: 15,
+    paddingHorizontal: SCREEN_WIDTH * 0.04, // 4% responsive padding
     alignItems: 'center',
     borderWidth: 1,
     borderColor: '#00bf63',
@@ -1283,7 +1294,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#F0F9F4',
     borderRadius: 12,
-    padding: 15,
+    padding: SCREEN_WIDTH * 0.04, // 4% responsive padding
     borderWidth: 1,
     borderColor: '#00bf63',
   },

@@ -8,15 +8,20 @@ import {
   Image,
   ScrollView,
   FlatList,
+  Modal,
+  Dimensions,
 } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../contexts/AuthContext';
 import { apiService } from '../services/api';
 import { fontFamily } from '../utils/fonts';
+import { Ionicons } from '@expo/vector-icons';
 import PrescriptionUploadModal from './PrescriptionUploadModal';
 import Svg, { Path } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 // SVG Icon Components
 const SearchIcon = ({ size = 20, color = '#999999' }) => (
@@ -99,6 +104,20 @@ export default function MainPage() {
   
   const [currentBanner, setCurrentBanner] = useState(0);
   const [showPrescriptionModal, setShowPrescriptionModal] = useState(false);
+  const [showNotificationModal, setShowNotificationModal] = useState(false);
+  const [selectedNotification, setSelectedNotification] = useState<any | null>(null);
+  const [showCartModal, setShowCartModal] = useState(false);
+  const [notifications, setNotifications] = useState([
+    {
+      id: 1,
+      title: 'Welcome to PharmaGo',
+      preview: 'Welcome to PharmaGo...',
+      message: `Welcome to PharmaGo! 🎉\n\nWe're thrilled to have you here. Your health and wellness journey just got easier!\n\nWith PharmaGo, you can:\n• Order medicines from local pharmacies\n• Upload prescriptions for quick processing\n• Track your orders in real-time\n• Enjoy convenient delivery to your doorstep\n\nNeed help? Our support team is here for you 24/7.\n\nStay healthy! 💊`,
+      timestamp: new Date().toISOString(),
+      isRead: false,
+      type: 'welcome'
+    }
+  ]);
 
   // Log user details for debugging backend connection
   React.useEffect(() => {
@@ -153,6 +172,49 @@ export default function MainPage() {
     setShowPrescriptionModal(false);
   };
 
+  const handleNotificationClick = (notification: any) => {
+    // Mark as read
+    setNotifications(prev => prev.map(n => 
+      n.id === notification.id ? { ...n, isRead: true } : n
+    ));
+    setSelectedNotification(notification);
+  };
+
+  const handleCloseNotificationDetail = () => {
+    setSelectedNotification(null);
+  };
+
+  const getUnreadCount = () => {
+    return notifications.filter(n => !n.isRead).length;
+  };
+
+  const formatNotificationTime = (timestamp: string) => {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours}h ago`;
+    const diffDays = Math.floor(diffHours / 24);
+    return `${diffDays}d ago`;
+  };
+
+  const handleCartClick = () => {
+    setShowCartModal(true);
+  };
+
+  const handleCloseCartModal = () => {
+    setShowCartModal(false);
+  };
+
+  const handleShopNow = () => {
+    setShowCartModal(false);
+    router.push('/supersearch' as any);
+  };
+
   // Mock data for categories
   const categories = [
     'Pain Relief', 'Cold & Flu', 'Vitamins', 'Skin Care', 
@@ -163,14 +225,14 @@ export default function MainPage() {
   const bestSellingMedicines = [
     { id: 1, name: 'Paracetamol 500mg', price: '₱10.99', image: require('../assets/paracetamol.png') },
     { id: 2, name: 'Ibuprofen 200mg', price: '₱75.49', image: require('../assets/ibuprofen.png') },
-    { id: 3, name: 'Vitamin C 1000mg', price: '$12.99', image: 'green' },
-    { id: 4, name: 'Aspirin 75mg', price: '$4.99', image: 'green' },
+    { id: 3, name: 'Vitamin C 1000mg', price: '₱12.99', image: require('../assets/vitaminc.png') },
+    { id: 4, name: 'Aspirin 75mg', price: '₱4.99', image: require('../assets/aspirin.png') },
   ];
 
   // Mock banner data
   const banners = [
-    { 
-      id: 1, 
+    {
+      id: 1,
       type: 'featured',
       discount: 'PharmaGo',
       title: 'Local Pharmacy',
@@ -179,7 +241,16 @@ export default function MainPage() {
       image: require('../assets/carousel1.png'),
       gradientColors: ['#9DD49D', '#B8E6B8', '#C8F0C8', '#F8BBD9']
     },
-    { id: 2, color: '#00bf63' },
+    {
+      id: 2,
+      type: 'featured',
+      discount: 'Promotional',
+      title: 'Soti Delivery',
+      subtitle: 'Food Within App',
+      ctaText: 'Coming Soon',
+      image: require('../assets/banner2.png'),
+      gradientColors: ['#FF6B9D', '#FF8FAB', '#FFB3C6', '#FFC9D9']
+    },
     { id: 3, color: '#00bf63' },
     { id: 4, color: '#00bf63' },
   ];
@@ -237,8 +308,27 @@ export default function MainPage() {
     );
   };
 
+  const handleCategoryClick = (category: string) => {
+    console.log('🏷️ Category clicked:', category);
+    router.push({
+      pathname: '/supersearch' as any,
+      params: { category }
+    });
+  };
+
+  const handleMedicineClick = (medicineName: string) => {
+    console.log('💊 Medicine clicked:', medicineName);
+    router.push({
+      pathname: '/supersearch' as any,
+      params: { category: medicineName }
+    });
+  };
+
   const renderCategory = ({ item }: { item: string }) => (
-    <TouchableOpacity style={styles.categoryItem}>
+    <TouchableOpacity 
+      style={styles.categoryItem}
+      onPress={() => handleCategoryClick(item)}
+    >
       <Text style={styles.categoryText}>{item}</Text>
     </TouchableOpacity>
   );
@@ -270,7 +360,10 @@ export default function MainPage() {
           </View>
           
           <View style={styles.rightButtonsContainer}>
-            <TouchableOpacity style={styles.cartButton}>
+            <TouchableOpacity 
+              style={styles.cartButton}
+              onPress={handleCartClick}
+            >
               <Image
                 source={require('../assets/cartwhite.png')}
                 style={styles.cartIcon}
@@ -278,12 +371,22 @@ export default function MainPage() {
               />
             </TouchableOpacity>
             
-            <TouchableOpacity style={styles.notificationButton}>
+            <TouchableOpacity 
+              style={styles.notificationButton}
+              onPress={() => setShowNotificationModal(true)}
+            >
               <Image
                 source={require('../assets/bellwhite.png')}
                 style={styles.notificationIcon}
                 resizeMode="contain"
               />
+              {getUnreadCount() > 0 && (
+                <View style={styles.notificationBadge}>
+                  <Text style={styles.notificationBadgeText}>
+                    {getUnreadCount() > 9 ? '9+' : getUnreadCount()}
+                  </Text>
+                </View>
+              )}
             </TouchableOpacity>
           </View>
         </View>
@@ -395,7 +498,11 @@ export default function MainPage() {
           
           <View style={styles.medicinesGrid}>
             {bestSellingMedicines.map((medicine) => (
-              <TouchableOpacity key={medicine.id} style={styles.medicineCard}>
+              <TouchableOpacity 
+                key={medicine.id} 
+                style={styles.medicineCard}
+                onPress={() => handleMedicineClick(medicine.name)}
+              >
                 <TouchableOpacity style={styles.heartIcon}>
                   <Text style={styles.heartIconText}>♡</Text>
                 </TouchableOpacity>
@@ -429,11 +536,14 @@ export default function MainPage() {
         >
           <CompareIcon size={24} color="#FFFFFF" />
         </TouchableOpacity>
-        
-        <TouchableOpacity style={styles.bottomNavItem}>
+
+        <TouchableOpacity 
+          style={styles.bottomNavItem}
+          onPress={handlePrescriptionUpload}
+        >
           <AddPrescriptionIcon size={24} color="#FFFFFF" />
         </TouchableOpacity>
-        
+
         <TouchableOpacity style={styles.bottomNavItem} onPress={() => router.push('/profile' as any)}>
           <ProfileIcon size={24} color="#FFFFFF" />
         </TouchableOpacity>
@@ -446,6 +556,159 @@ export default function MainPage() {
         onClose={handlePrescriptionModalClose}
         onSuccess={handlePrescriptionSuccess}
       />
+
+      {/* Notifications Modal */}
+      <Modal
+        visible={showNotificationModal && !selectedNotification}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowNotificationModal(false)}
+      >
+        <View style={styles.notificationModalOverlay}>
+          <View style={styles.notificationModalContainer}>
+            {/* Modal Header */}
+            <View style={styles.notificationModalHeader}>
+              <Text style={styles.notificationModalTitle}>Notifications</Text>
+              <TouchableOpacity onPress={() => setShowNotificationModal(false)}>
+                <Ionicons name="close" size={24} color="#2B2B2B" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Notification List */}
+            <ScrollView style={styles.notificationList}>
+              {notifications.map((notification) => (
+                <TouchableOpacity
+                  key={notification.id}
+                  style={[
+                    styles.notificationItem,
+                    !notification.isRead && styles.notificationItemUnread
+                  ]}
+                  onPress={() => handleNotificationClick(notification)}
+                >
+                  <View style={styles.notificationContent}>
+                    <View style={styles.notificationHeader}>
+                      <Text style={styles.notificationTitle}>{notification.title}</Text>
+                      <Text style={styles.notificationTime}>
+                        {formatNotificationTime(notification.timestamp)}
+                      </Text>
+                    </View>
+                    <Text 
+                      style={[
+                        styles.notificationPreview,
+                        !notification.isRead && styles.notificationPreviewUnread
+                      ]}
+                      numberOfLines={2}
+                    >
+                      {notification.preview}
+                    </Text>
+                  </View>
+                  {!notification.isRead && <View style={styles.unreadDot} />}
+                </TouchableOpacity>
+              ))}
+              
+              {notifications.length === 0 && (
+                <View style={styles.emptyNotifications}>
+                  <Ionicons name="notifications-off-outline" size={48} color="#CCCCCC" />
+                  <Text style={styles.emptyNotificationsText}>No notifications yet</Text>
+                </View>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Notification Detail Modal */}
+      <Modal
+        visible={!!selectedNotification}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={handleCloseNotificationDetail}
+      >
+        <View style={styles.notificationModalOverlay}>
+          <View style={styles.notificationDetailContainer}>
+            {/* Detail Header */}
+            <View style={styles.notificationDetailHeader}>
+              <TouchableOpacity onPress={handleCloseNotificationDetail}>
+                <Ionicons name="arrow-back" size={24} color="#2B2B2B" />
+              </TouchableOpacity>
+              <Text style={styles.notificationDetailTitle}>
+                {selectedNotification?.title}
+              </Text>
+              <View style={{ width: 24 }} />
+            </View>
+
+            {/* Detail Content */}
+            <ScrollView style={styles.notificationDetailContent}>
+              <View style={styles.messageContainer}>
+                <Text style={styles.messageTimestamp}>
+                  {selectedNotification?.timestamp && 
+                    new Date(selectedNotification.timestamp).toLocaleString('en-US', {
+                      month: 'short',
+                      day: 'numeric',
+                      year: 'numeric',
+                      hour: 'numeric',
+                      minute: '2-digit',
+                      hour12: true
+                    })
+                  }
+                </Text>
+                <View style={styles.messageBubble}>
+                  <Text style={styles.messageText}>
+                    {selectedNotification?.message}
+                  </Text>
+                </View>
+              </View>
+            </ScrollView>
+
+            {/* Close Button */}
+            <View style={styles.notificationDetailFooter}>
+              <TouchableOpacity
+                style={styles.closeNotificationButton}
+                onPress={handleCloseNotificationDetail}
+              >
+                <Text style={styles.closeNotificationButtonText}>Close</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Cart Modal */}
+      <Modal
+        visible={showCartModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={handleCloseCartModal}
+      >
+        <View style={styles.cartModalOverlay}>
+          <View style={styles.cartModalContainer}>
+            {/* Modal Header */}
+            <View style={styles.cartModalHeader}>
+              <Text style={styles.cartModalTitle}>Shopping Cart</Text>
+              <TouchableOpacity onPress={handleCloseCartModal}>
+                <Ionicons name="close" size={24} color="#2B2B2B" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Empty Cart Content */}
+            <View style={styles.emptyCartContainer}>
+              <Ionicons name="cart-outline" size={80} color="#CCCCCC" />
+              <Text style={styles.emptyCartTitle}>No items in the cart</Text>
+              <Text style={styles.emptyCartSubtitle}>
+                Start adding medicines to your cart
+              </Text>
+              
+              {/* Shop Now Button */}
+              <TouchableOpacity
+                style={styles.shopNowButton}
+                onPress={handleShopNow}
+              >
+                <Text style={styles.shopNowButtonText}>Shop Now</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </LinearGradient>
   );
 }
@@ -519,7 +782,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
+    paddingHorizontal: SCREEN_WIDTH * 0.05, // 5% padding
     paddingVertical: 10,
     marginTop: 0,
     backgroundColor: 'transparent',
@@ -589,13 +852,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: 120, // Extra space for bottom navigation
+    paddingBottom: 140, // Extra space for bottom navigation + safety margin
   },
   
   // Search Field
   searchContainer: {
     flexDirection: 'row',
-    paddingHorizontal: 20,
+    paddingHorizontal: SCREEN_WIDTH * 0.05, // 5% padding
     paddingVertical: 15,
     marginBottom: 10,
     alignItems: 'center',
@@ -798,7 +1061,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
+    paddingHorizontal: SCREEN_WIDTH * 0.05, // 5% padding
     marginBottom: 15,
   },
   sectionTitle: {
@@ -814,7 +1077,7 @@ const styles = StyleSheet.create({
   
   // Categories
   categoriesList: {
-    paddingHorizontal: 20,
+    paddingHorizontal: SCREEN_WIDTH * 0.05, // 5% padding
   },
   categoryItem: {
     backgroundColor: '#FFFFFF',
@@ -835,7 +1098,7 @@ const styles = StyleSheet.create({
   medicinesGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    paddingHorizontal: 20,
+    paddingHorizontal: SCREEN_WIDTH * 0.05, // 5% padding
     justifyContent: 'space-between',
   },
   medicineCard: {
@@ -921,6 +1184,252 @@ const styles = StyleSheet.create({
   
   // Bottom Spacing
   bottomSpacing: {
+    height: 30,
+  },
+
+  // Notification Badge
+  notificationBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: '#FF3B30',
+    borderRadius: 10,
+    minWidth: 20,
     height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  notificationBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontFamily: fontFamily.heavy,
+  },
+
+  // Notification Modal
+  notificationModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  notificationModalContainer: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    height: '80%',
+    paddingTop: 24,
+  },
+  notificationModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+  },
+  notificationModalTitle: {
+    fontSize: 20,
+    fontFamily: fontFamily.heavy,
+    color: '#2B2B2B',
+  },
+  notificationList: {
+    flex: 1,
+    paddingTop: 8,
+  },
+  notificationItem: {
+    backgroundColor: '#FFFFFF',
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F5F5F5',
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  notificationItemUnread: {
+    backgroundColor: '#F0FFF4',
+  },
+  notificationContent: {
+    flex: 1,
+  },
+  notificationHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  notificationTitle: {
+    fontSize: 16,
+    fontFamily: fontFamily.heavy,
+    color: '#2B2B2B',
+    flex: 1,
+    marginRight: 12,
+  },
+  notificationTime: {
+    fontSize: 12,
+    fontFamily: fontFamily.light,
+    color: '#999999',
+  },
+  notificationPreview: {
+    fontSize: 14,
+    fontFamily: fontFamily.light,
+    color: '#666666',
+    lineHeight: 20,
+  },
+  notificationPreviewUnread: {
+    fontFamily: fontFamily.heavy,
+    color: '#2B2B2B',
+  },
+  unreadDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#00bf63',
+    marginLeft: 12,
+  },
+  emptyNotifications: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 60,
+  },
+  emptyNotificationsText: {
+    fontSize: 16,
+    fontFamily: fontFamily.light,
+    color: '#CCCCCC',
+    marginTop: 16,
+  },
+
+  // Notification Detail Modal
+  notificationDetailContainer: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    height: '90%',
+    paddingTop: 16,
+  },
+  notificationDetailHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+  },
+  notificationDetailTitle: {
+    fontSize: 18,
+    fontFamily: fontFamily.heavy,
+    color: '#2B2B2B',
+    flex: 1,
+    textAlign: 'center',
+  },
+  notificationDetailContent: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingTop: 24,
+  },
+  messageContainer: {
+    marginBottom: 20,
+  },
+  messageTimestamp: {
+    fontSize: 12,
+    fontFamily: fontFamily.light,
+    color: '#999999',
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  messageBubble: {
+    backgroundColor: '#F0FFF4',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E0F2E9',
+  },
+  messageText: {
+    fontSize: 16,
+    fontFamily: fontFamily.light,
+    color: '#2B2B2B',
+    lineHeight: 24,
+  },
+  notificationDetailFooter: {
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#F0F0F0',
+  },
+  closeNotificationButton: {
+    backgroundColor: '#00bf63',
+    borderRadius: 12,
+    paddingVertical: 16,
+    alignItems: 'center',
+  },
+  closeNotificationButtonText: {
+    fontSize: 16,
+    fontFamily: fontFamily.heavy,
+    color: '#FFFFFF',
+  },
+
+  // Cart Modal
+  cartModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  cartModalContainer: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    minHeight: '60%',
+    maxHeight: '80%',
+  },
+  cartModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+  },
+  cartModalTitle: {
+    fontSize: 20,
+    fontFamily: fontFamily.heavy,
+    color: '#2B2B2B',
+  },
+  emptyCartContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 40,
+    paddingVertical: 60,
+  },
+  emptyCartTitle: {
+    fontSize: 20,
+    fontFamily: fontFamily.heavy,
+    color: '#2B2B2B',
+    marginTop: 24,
+    marginBottom: 8,
+  },
+  emptyCartSubtitle: {
+    fontSize: 14,
+    fontFamily: fontFamily.light,
+    color: '#999999',
+    textAlign: 'center',
+    marginBottom: 32,
+  },
+  shopNowButton: {
+    backgroundColor: '#00bf63',
+    borderRadius: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 48,
+    minWidth: 200,
+    alignItems: 'center',
+  },
+  shopNowButtonText: {
+    fontSize: 16,
+    fontFamily: fontFamily.heavy,
+    color: '#FFFFFF',
   },
 });

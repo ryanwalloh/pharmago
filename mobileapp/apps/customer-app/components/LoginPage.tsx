@@ -7,6 +7,9 @@ import {
   Image,
   StyleSheet,
   Switch,
+  Alert,
+  ActivityIndicator,
+  ImageBackground,
 } from 'react-native';
 import ForgotPasswordPage from './ForgotPasswordPage';
 import CreateAccountPage from './CreateAccountPage';
@@ -14,10 +17,9 @@ import Onboarding from './Onboarding';
 import MainPage from './MainPage';
 import { useAuth } from '../contexts/AuthContext';
 import { apiService } from '../services/api';
-import { Alert, ActivityIndicator } from 'react-native';
 
 function LoginPageContent() {
-  const { user, isLoggedIn, hasCompletedOnboarding, loading, login } = useAuth();
+  const { isLoggedIn, hasCompletedOnboarding, loading, login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [emailFocused, setEmailFocused] = useState(false);
@@ -26,7 +28,6 @@ function LoginPageContent() {
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [showCreateAccount, setShowCreateAccount] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
-  const [registeredUsername, setRegisteredUsername] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   const handleLogin = async () => {
@@ -131,15 +132,23 @@ function LoginPageContent() {
 
   return (
     <View style={styles.container}>
-      {/* Logo at top */}
-      <Image
-        source={require('../assets/logo2.png')}
-        style={styles.logo}
-        resizeMode="contain"
-      />
+      {/* Top Section - Logo and Background */}
+      <ImageBackground
+        source={require('../assets/login.png')}
+        style={styles.topSection}
+        resizeMode="cover"
+      >
+        {/* Dark Overlay */}
+        <View style={styles.overlay} />
+        <Image
+          source={require('../assets/pharmalogo.png')}
+          style={styles.logo}
+          resizeMode="contain"
+        />
+      </ImageBackground>
       
-      {/* Bottom Content Container */}
-      <View style={styles.bottomContent}>
+      {/* Bottom Modal Container */}
+      <View style={styles.bottomModalContainer}>
         {/* Title with colored text */}
         <View style={styles.titleContainer}>
           <Text style={styles.titleHello}>Hello</Text>
@@ -237,16 +246,6 @@ function LoginPageContent() {
           )}
         </TouchableOpacity>
         
-        {/* Google Sign In Button */}
-        <TouchableOpacity style={styles.googleButton}>
-          <Image
-            source={require('../assets/googlelogo.png')}
-            style={styles.googleLogo}
-            resizeMode="contain"
-          />
-          <Text style={styles.googleButtonText}>Sign in with Google</Text>
-        </TouchableOpacity>
-        
         {/* Create Account Link */}
         <View style={styles.createAccountContainer}>
           <Text style={styles.createAccountText}>New User? </Text>
@@ -254,7 +253,6 @@ function LoginPageContent() {
           <Text style={styles.createAccountLink}>Create Account</Text>
         </TouchableOpacity>
         </View>
-        
       </View>
     </View>
   );
@@ -267,25 +265,37 @@ export default function LoginPage() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 20,
+    backgroundColor: '#FFFFFF', // Green background for top section
+  },
+  topSection: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)', // 50% dark overlay
   },
   logo: {
-    width: 100,
-    height: 100,
-    alignSelf: 'center',
-    marginTop: 60,
-    marginBottom: 20,
+    width: 120,
+    height: 120,
+    top: -80,
+    zIndex: 1,
+    left: 110,
   },
-  bottomContent: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    paddingBottom: 120,
+  bottomModalContainer: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    paddingHorizontal: 24,
+    paddingTop: 30,
+    paddingBottom: 40,
+    top: -40,
   },
   titleContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginBottom: 5,
+    marginBottom: 8,
   },
   titleHello: {
     fontSize: 32,
@@ -301,11 +311,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#999999',
     textAlign: 'center',
-    marginBottom: 70,
+    marginBottom: 30,
     lineHeight: 22,
+    paddingHorizontal: 10,
   },
   inputContainer: {
-    marginBottom: 20,
+    marginBottom: 24,
     position: 'relative',
   },
   floatingLabel: {
@@ -381,13 +392,20 @@ const styles = StyleSheet.create({
   },
   signInButton: {
     width: '100%',
-    height: 50,
+    height: 54,
     backgroundColor: '#00bf63',
-    borderRadius: 8,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 15,
-
+    marginBottom: 20,
+    shadowColor: '#00bf63',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
   },
   signInButtonDisabled: {
     backgroundColor: '#CCCCCC',
@@ -397,28 +415,6 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: 'bold',
-  },
-  googleButton: {
-    width: '100%',
-    height: 50,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderRadius: 8,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  googleLogo: {
-    width: 30,
-    height: 30,
-    marginRight: 10,
-  },
-  googleButtonText: {
-    color: '#333333',
-    fontSize: 16,
-    fontWeight: '500',
   },
   createAccountContainer: {
     flexDirection: 'row',

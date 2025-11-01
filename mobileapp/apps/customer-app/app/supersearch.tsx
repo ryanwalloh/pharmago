@@ -11,14 +11,17 @@ import {
   ScrollView,
   Modal,
   Image,
+  Dimensions,
 } from 'react-native';
 import MapView, { PROVIDER_GOOGLE, Region, Marker } from 'react-native-maps';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import * as Location from 'expo-location';
 import { apiService } from '../services/api';
 import { LinearGradient } from 'expo-linear-gradient';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 // Back Arrow Icon
 const BackArrowIcon = ({ size = 24, color = '#000000' }) => (
@@ -150,6 +153,9 @@ interface SelectedMedicine {
 }
 
 export default function SuperSearch() {
+  const params = useLocalSearchParams();
+  const categoryParam = params.category as string | undefined;
+  
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const searchBounceAnim = useRef(new Animated.Value(0)).current;
   const markersBounceAnim = useRef(new Animated.Value(0)).current;
@@ -181,6 +187,7 @@ export default function SuperSearch() {
   const [sortBy, setSortBy] = useState<'open' | 'near' | 'price'>('open');
   
   const searchDebounceTimer = useRef<number | null>(null);
+  const categorySearchTriggered = useRef(false);
   
   // Overall loading state - true when either location or pharmacies are loading
   const isLoading = locationLoading || pharmaciesLoading;
@@ -198,8 +205,19 @@ export default function SuperSearch() {
     
     // Fetch pharmacies
     fetchPharmacies();
+    
+    // Handle category parameter - pre-populate search
+    if (categoryParam && !categorySearchTriggered.current) {
+      console.log('🏷️ Pre-populating search with category:', categoryParam);
+      setSearchQuery(categoryParam);
+      categorySearchTriggered.current = true;
+      // Trigger search after a short delay to ensure component is ready
+      setTimeout(() => {
+        performSearch(categoryParam);
+      }, 500);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [categoryParam]);
 
   // Trigger bounce animations when loading is complete
   useEffect(() => {
@@ -1412,7 +1430,7 @@ const styles = StyleSheet.create({
   },
   backButton: {
     marginTop: 10,
-    marginLeft: 20,
+    marginLeft: SCREEN_WIDTH * 0.05, // 5% responsive margin
     width: 44,
     height: 44,
     borderRadius: 22,
@@ -1431,8 +1449,8 @@ const styles = StyleSheet.create({
   searchContainer: {
     position: 'absolute',
     top: '30%',
-    left: 20,
-    right: 20,
+    left: SCREEN_WIDTH * 0.05, // 5% responsive margin
+    right: SCREEN_WIDTH * 0.05,
     zIndex: 5,
   },
   searchFieldContainer: {
@@ -1441,7 +1459,7 @@ const styles = StyleSheet.create({
   searchField: {
     backgroundColor: '#FFFFFF',
     borderRadius: 25,
-    paddingHorizontal: 15,
+    paddingHorizontal: SCREEN_WIDTH * 0.04, // 4% responsive padding
     paddingVertical: 8,
     minHeight: 50,
     shadowColor: '#000',
@@ -1509,7 +1527,7 @@ const styles = StyleSheet.create({
   suggestionItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 15,
+    padding: SCREEN_WIDTH * 0.04, // 4% responsive padding
     borderBottomWidth: 1,
     borderBottomColor: '#F0F0F0',
   },
@@ -1568,7 +1586,7 @@ const styles = StyleSheet.create({
   // Skeleton Loading Styles
   skeletonContainer: {
     flex: 1,
-    padding: 20,
+    padding: SCREEN_WIDTH * 0.05, // 5% responsive padding
   },
   skeletonBackButton: {
     marginTop: 10,
@@ -1659,7 +1677,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   topFilterContent: {
-    paddingHorizontal: 20,
+    paddingHorizontal: SCREEN_WIDTH * 0.05, // 5% responsive padding
     paddingBottom: 15,
   },
   topSearchFieldContainer: {
@@ -1669,7 +1687,7 @@ const styles = StyleSheet.create({
   topSearchField: {
     backgroundColor: '#FFFFFF',
     borderRadius: 25,
-    paddingHorizontal: 15,
+    paddingHorizontal: SCREEN_WIDTH * 0.04, // 4% responsive padding
     paddingVertical: 8,
     minHeight: 50,
     borderWidth: 1,
@@ -1722,7 +1740,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: 12,
-    paddingHorizontal: 15,
+    paddingHorizontal: SCREEN_WIDTH * 0.04, // 4% responsive padding
     borderBottomWidth: 1,
     borderBottomColor: '#F5F5F5',
   },
@@ -1816,7 +1834,7 @@ const styles = StyleSheet.create({
     minHeight: 300,
   },
   modalHeader: {
-    padding: 20,
+    padding: SCREEN_WIDTH * 0.05, // 5% responsive padding
     borderBottomWidth: 1,
     borderBottomColor: '#F0F0F0',
     alignItems: 'center',
@@ -1840,7 +1858,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   pharmacyListScroll: {
-    paddingHorizontal: 20,
+    paddingHorizontal: SCREEN_WIDTH * 0.05, // 5% responsive padding
   },
   pharmacyLoadingContainer: {
     paddingVertical: 40,
@@ -1864,7 +1882,7 @@ const styles = StyleSheet.create({
   pharmacyCard: {
     backgroundColor: '#F8F8F8',
     borderRadius: 15,
-    padding: 15,
+    padding: SCREEN_WIDTH * 0.04, // 4% responsive padding
     marginVertical: 8,
     borderWidth: 1,
     borderColor: '#E0E0E0',
@@ -1874,9 +1892,9 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   pharmacyImageContainer: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: Math.min(SCREEN_WIDTH * 0.15, 60), // Responsive, max 60
+    height: Math.min(SCREEN_WIDTH * 0.15, 60),
+    borderRadius: Math.min(SCREEN_WIDTH * 0.075, 30),
     overflow: 'hidden',
     marginRight: 12,
   },
@@ -1927,6 +1945,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#00bf63',
     borderRadius: 12,
     paddingVertical: 12,
+    paddingHorizontal: SCREEN_WIDTH * 0.04, // 4% responsive padding
     alignItems: 'center',
   },
   orderNowButtonText: {
@@ -1936,12 +1955,13 @@ const styles = StyleSheet.create({
   },
   // Pharmacy Shop Modal Styles
   pharmacyShopContent: {
-    padding: 20,
+    padding: SCREEN_WIDTH * 0.05, // 5% responsive padding
   },
   shopButton: {
     backgroundColor: '#00bf63',
     borderRadius: 12,
     paddingVertical: 12,
+    paddingHorizontal: SCREEN_WIDTH * 0.04, // 4% responsive padding
     alignItems: 'center',
   },
   shopButtonText: {
