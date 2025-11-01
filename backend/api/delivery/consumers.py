@@ -149,3 +149,127 @@ class DispatchConsumer(AsyncWebsocketConsumer):
         except Exception as e:
             logger.error(f"❌ Error sending offer update: {str(e)}", exc_info=True)
 
+
+class OrderTrackingConsumer(AsyncWebsocketConsumer):
+    """
+    WebSocket consumer for customer order tracking.
+    Each customer connects to their order's channel for real-time updates.
+    Channel: order_tracking_{order_id}
+    """
+    
+    async def connect(self):
+        """Handle WebSocket connection for order tracking."""
+        try:
+            # Get order_id from URL route
+            self.order_id = self.scope['url_route']['kwargs']['order_id']
+            self.room_group_name = f'order_tracking_{self.order_id}'
+            
+            # Join order tracking channel
+            await self.channel_layer.group_add(
+                self.room_group_name,
+                self.channel_name
+            )
+            
+            # Accept the WebSocket connection
+            await self.accept()
+            
+            logger.info(f"✅ Customer connected to order {self.order_id} tracking WebSocket")
+            
+            # Send connection confirmation
+            await self.send(text_data=json.dumps({
+                'type': 'connection_established',
+                'order_id': self.order_id,
+                'message': 'Connected to order tracking'
+            }))
+            
+        except Exception as e:
+            logger.error(f"❌ Error in order tracking WebSocket connect: {str(e)}", exc_info=True)
+            await self.close()
+    
+    async def disconnect(self, close_code):
+        """Handle WebSocket disconnection."""
+        try:
+            # Leave order tracking channel
+            await self.channel_layer.group_discard(
+                self.room_group_name,
+                self.channel_name
+            )
+            
+            logger.info(f"🔌 Customer disconnected from order {self.order_id} tracking (code: {close_code})")
+            
+        except Exception as e:
+            logger.error(f"❌ Error in order tracking disconnect: {str(e)}", exc_info=True)
+    
+    async def receive(self, text_data):
+        """Handle messages from customer (ping for keep-alive)."""
+        try:
+            data = json.loads(text_data)
+            message_type = data.get('type')
+            
+            if message_type == 'ping':
+                await self.send(text_data=json.dumps({
+                    'type': 'pong',
+                    'timestamp': json.dumps(str(__import__('django.utils').utils.timezone.now()), default=str)
+                }))
+            
+        except Exception as e:
+            logger.error(f"❌ Error processing customer message: {str(e)}", exc_info=True)
+    
+    # ========== Event Handlers (triggered from backend) ==========
+    
+    async def order_status_update(self, event):
+        """
+        Send order status update to customer.
+        Triggered when order status changes.
+        """
+        try:
+            logger.info(f"📤 Sending order status update to customer for order {self.order_id}")
+            
+            await self.send(text_data=json.dumps({
+                'type': 'order_status_update',
+                'order_id': self.order_id,
+                'order_status': event['order_status'],
+                'updated_at': event.get('updated_at'),
+            }))
+            
+        except Exception as e:
+            logger.error(f"❌ Error sending order status update: {str(e)}", exc_info=True)
+    
+    async def rider_assigned(self, event):
+        """Notify customer that a rider has been assigned."""
+        try:
+            await self.send(text_data=json.dumps({
+                'type': 'rider_assigned',
+                'order_id': self.order_id,
+                'rider_info': event['rider_info'],
+            }))
+            
+        except Exception as e:
+            logger.error(f"❌ Error sending rider assigned: {str(e)}", exc_info=True)
+    
+    async def rider_location_update(self, event):
+        """
+        Send rider location update to customer.
+        Triggered when rider sends location updates during delivery.
+        """
+        try:
+            await self.send(text_data=json.dumps({
+                'type': 'rider_location_update',
+                'order_id': self.order_id,
+                'location': event['location'],
+            }))
+            
+        except Exception as e:
+            logger.error(f"❌ Error sending rider location: {str(e)}", exc_info=True)
+    
+    async def order_complete(self, event):
+        """Notify customer that order is delivered."""
+        try:
+            await self.send(text_data=json.dumps({
+                'type': 'order_complete',
+                'order_id': self.order_id,
+                'delivered_at': event.get('delivered_at'),
+            }))
+            
+        except Exception as e:
+            logger.error(f"❌ Error sending order complete: {str(e)}", exc_info=True)
