@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, StatusBar, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, StatusBar, ScrollView, Dimensions, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
 import { apiService } from '../../services/api';
@@ -7,9 +7,13 @@ import { router } from 'expo-router';
 import Svg, { Path } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 import { fontFamily } from '../../utils/fonts';
+import PrescriptionUploadModal from '../../components/PrescriptionUploadModal';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export default function ProfileScreen() {
   const { user, logout } = useAuth();
+  const [showPrescriptionModal, setShowPrescriptionModal] = React.useState(false);
 
   const handleLogout = async () => {
     try {
@@ -20,10 +24,19 @@ export default function ProfileScreen() {
     } catch {}
   };
 
-  const getInitials = () => {
-    const firstName = user?.firstName || '';
-    const lastName = user?.lastName || '';
-    return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase() || '?';
+  const handlePrescriptionUpload = () => {
+    console.log('📋 Opening prescription upload modal...');
+    setShowPrescriptionModal(true);
+  };
+
+  const handlePrescriptionSuccess = (prescriptionId: string) => {
+    console.log('✅ Prescription uploaded successfully:', prescriptionId);
+    setShowPrescriptionModal(false);
+  };
+
+  const handlePrescriptionModalClose = () => {
+    console.log('❌ Closing prescription upload modal...');
+    setShowPrescriptionModal(false);
   };
 
   return (
@@ -40,7 +53,11 @@ export default function ProfileScreen() {
           {/* Profile Avatar Section */}
           <View style={styles.avatarSection}>
             <View style={styles.avatarContainer}>
-              <Text style={styles.avatarText}>{getInitials()}</Text>
+              <Image 
+                source={require('../../assets/profile.png')}
+                style={styles.avatarImage}
+                resizeMode="cover"
+              />
             </View>
             <Text style={styles.profileName}>
               {[user?.firstName, user?.lastName].filter(Boolean).join(' ') || 'User'}
@@ -180,7 +197,7 @@ export default function ProfileScreen() {
           </TouchableOpacity>
 
           {/* Bottom padding for nav bar */}
-          <View style={{ height: 20 }} />
+          <View style={{ height: 30 }} />
         </View>
       </ScrollView>
 
@@ -197,7 +214,10 @@ export default function ProfileScreen() {
           <CompareIcon size={24} color="#FFFFFF" />
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.bottomNavItem}>
+        <TouchableOpacity 
+          style={styles.bottomNavItem}
+          onPress={handlePrescriptionUpload}
+        >
           <AddPrescriptionIcon size={24} color="#FFFFFF" />
         </TouchableOpacity>
 
@@ -205,6 +225,13 @@ export default function ProfileScreen() {
           <ProfileIcon size={24} color="#FFFFFF" />
         </TouchableOpacity>
       </View>
+
+      {/* Prescription Upload Modal */}
+      <PrescriptionUploadModal
+        visible={showPrescriptionModal}
+        onClose={handlePrescriptionModalClose}
+        onSuccess={handlePrescriptionSuccess}
+      />
     </SafeAreaView>
   );
 }
@@ -252,7 +279,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8F9FA',
   },
   header: {
-    paddingHorizontal: 20,
+    paddingHorizontal: SCREEN_WIDTH * 0.05, // 5% responsive padding
     paddingVertical: 16,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
@@ -268,8 +295,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    padding: 20,
-    paddingBottom: 120,
+    paddingHorizontal: SCREEN_WIDTH * 0.05, // 5% responsive padding
+    paddingVertical: 20,
+    paddingBottom: 140, // Extra space for bottom nav
   },
   
   // Avatar Section
@@ -283,16 +311,22 @@ const styles = StyleSheet.create({
     borderColor: '#E0E0E0',
   },
   avatarContainer: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: '#00bf63',
+    width: Math.min(SCREEN_WIDTH * 0.25, 100), // Responsive, max 100
+    height: Math.min(SCREEN_WIDTH * 0.25, 100),
+    borderRadius: Math.min(SCREEN_WIDTH * 0.125, 50),
+    backgroundColor: '#B9F8B7',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
+    overflow: 'hidden',
+    padding: 10,
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
   },
   avatarText: {
-    fontSize: 36,
+    fontSize: Math.min(SCREEN_WIDTH * 0.09, 36), // Responsive, max 36
     fontWeight: 'bold',
     color: '#FFFFFF',
     fontFamily: fontFamily.heavy,
