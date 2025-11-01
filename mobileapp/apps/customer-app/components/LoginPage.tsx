@@ -62,6 +62,8 @@ function LoginPageContent() {
           lastName: userData.last_name || '',
           phone: userData.phone_number || '',
           hasCompletedOnboarding: true, // User logging in means they already completed onboarding during account creation
+          customer_id: userData.customer_id || null, // Include customer_id for cart orders
+          id: userData.id || null, // Include user id as fallback
         });
       } else {
         console.error('❌ Login failed:', response.error);
