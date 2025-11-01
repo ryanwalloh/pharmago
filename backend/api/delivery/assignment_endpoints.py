@@ -196,6 +196,13 @@ def mark_orders_picked_up(request, assignment_id):
                     order.order_status = Order.OrderStatus.PICKED_UP
                     order.save(update_fields=['order_status'])
                     logger.info(f"📦 Order {order.order_number} status updated to PICKED_UP")
+                    
+                    # Broadcast WebSocket update to customer
+                    try:
+                        from api.delivery.websocket_service import broadcast_order_update
+                        broadcast_order_update(order.id, Order.OrderStatus.PICKED_UP, updated_at=now)
+                    except Exception:
+                        pass
                 
                 # Update OrderRiderAssignment picked_up_at timestamp
                 order_assignment.picked_up_at = now
@@ -305,6 +312,13 @@ def mark_order_delivered(request, assignment_id, order_id):
             order.order_status = Order.OrderStatus.DELIVERED
             order.save(update_fields=['order_status'])
             logger.info(f"📦 Order {order.order_number} status updated to DELIVERED")
+            
+            # Broadcast WebSocket update to customer
+            try:
+                from api.delivery.websocket_service import OrderTrackingWebSocket
+                OrderTrackingWebSocket.notify_order_complete(order.id, delivered_at=now)
+            except Exception:
+                pass
             
             # Update OrderRiderAssignment
             order_assignment.delivered_at = now
