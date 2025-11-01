@@ -398,10 +398,10 @@ def get_order_status(request, order_id):
                             except Exception:
                                 pharmacy_storefront_image_url = request.build_absolute_uri(f"/api/document/{storefront_doc.id}/")
                             logger.info(f"Using backend proxy URL for pharmacy {pharmacy.id}: {pharmacy_storefront_image_url}")
-                else:
+                elif storefront_doc:
                     logger.warning(f"⚠️ Storefront document found but no file_url for pharmacy {pharmacy.id}")
-            else:
-                logger.warning(f"⚠️ No storefront document found for pharmacy {pharmacy.id}")
+                else:
+                    logger.warning(f"⚠️ No storefront document found for pharmacy {pharmacy.id}")
                         
             except Exception as e:
                 logger.error(f"❌ Could not fetch pharmacy storefront image: {str(e)}", exc_info=True)
