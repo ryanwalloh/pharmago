@@ -222,7 +222,7 @@ class PrescriptionService {
       console.log('📤 Uploading prescription to backend...');
       
       // Upload to backend
-      const response = await apiService.makeRequest('/prescriptions/upload/', {
+      const response = await apiService.makeRequest<{ id: number }>('/prescriptions/upload/', {
         method: 'POST',
         body: formData,
         headers: {
@@ -234,7 +234,7 @@ class PrescriptionService {
         console.log('✅ Prescription uploaded successfully:', response.data);
         return {
           success: true,
-          prescriptionId: response.data.id,
+          prescriptionId: response.data.id.toString(),
           imageUri: imageUri
         };
       } else {
