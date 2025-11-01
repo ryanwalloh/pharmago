@@ -714,6 +714,12 @@ class ApiService {
       }),
     });
   }
+
+  // Customer orders
+  async getCustomerOrders(customerId: number): Promise<ApiResponse<any>> {
+    console.log('📋 Fetching orders for customer:', customerId);
+    return this.makeDirectRequest(`/customer-orders/${customerId}/`);
+  }
 }
 
 export const apiService = new ApiService();
