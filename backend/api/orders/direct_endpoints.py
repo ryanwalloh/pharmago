@@ -453,6 +453,63 @@ def get_order_status(request, order_id):
         except Exception:
             items_data = []
 
+        # Get rider assignment info if order is assigned to a rider
+        rider_info = None
+        assignment_status = None
+        rider_location = None
+        
+        try:
+            from api.delivery.models import OrderRiderAssignment, RiderLocation
+            
+            # Check if order has an active rider assignment
+            order_assignment = OrderRiderAssignment.objects.filter(
+                order=order
+            ).select_related(
+                'assignment',
+                'assignment__rider',
+                'assignment__rider__user'
+            ).first()
+            
+            if order_assignment and order_assignment.assignment:
+                assignment = order_assignment.assignment
+                rider = assignment.rider
+                
+                # Build rider info
+                rider_info = {
+                    'rider_id': rider.id,
+                    'rider_name': rider.full_name,
+                    'rider_phone': rider.user.phone_number if rider.user else None,
+                    'vehicle_type': rider.vehicle_type,
+                    'vehicle_plate': rider.plate_number,
+                }
+                
+                # Assignment status and timing
+                assignment_status = {
+                    'status': assignment.status,
+                    'accepted_at': assignment.accepted_at.isoformat() if assignment.accepted_at else None,
+                    'picked_up_at': order_assignment.picked_up_at.isoformat() if order_assignment.picked_up_at else None,
+                    'delivered_at': order_assignment.delivered_at.isoformat() if order_assignment.delivered_at else None,
+                }
+                
+                # Get rider's latest location (for real-time tracking)
+                latest_location = RiderLocation.objects.filter(
+                    rider=rider,
+                    assignment=assignment
+                ).order_by('-timestamp').first()
+                
+                if latest_location:
+                    rider_location = {
+                        'latitude': float(latest_location.latitude),
+                        'longitude': float(latest_location.longitude),
+                        'heading': float(latest_location.heading) if latest_location.heading else None,
+                        'speed': float(latest_location.speed) if latest_location.speed else None,
+                        'timestamp': latest_location.timestamp.isoformat(),
+                    }
+                    logger.info(f"📍 Rider location available for order {order.order_number}")
+                
+        except Exception as e:
+            logger.warning(f"Could not fetch rider assignment info: {str(e)}")
+        
         # Log final response data for pharmacy storefront
         logger.info(f"📦 Returning order status with pharmacy_storefront_image_url: {pharmacy_storefront_image_url}")
         
@@ -491,7 +548,11 @@ def get_order_status(request, order_id):
                 # Senior citizen discount fields
                 'senior_discount_requested': order.senior_discount_requested,
                 'senior_discount_status': order.senior_discount_status,
-                'senior_citizen_id_image': absolute_senior_id_url
+                'senior_citizen_id_image': absolute_senior_id_url,
+                # Rider assignment and tracking (NEW!)
+                'rider_info': rider_info,
+                'assignment_status': assignment_status,
+                'rider_location': rider_location,
             }
         })
         
