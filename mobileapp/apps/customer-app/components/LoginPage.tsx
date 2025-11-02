@@ -11,18 +11,19 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
+import { useAuth } from '../contexts/AuthContext';
+import { apiService } from '../services/api';
 
-// MINIMAL TEST VERSION - Removed problematic imports
-// Testing if component loads without:
-// - useAuth from AuthContext
-// - apiService
-
-export default function LoginPage() {
+function LoginPageContent() {
+  const { isLoggedIn, hasCompletedOnboarding, loading, login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [emailFocused, setEmailFocused] = useState(false);
   const [passwordFocused, setPasswordFocused] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [showCreateAccount, setShowCreateAccount] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   const handleLogin = async () => {
@@ -31,8 +32,87 @@ export default function LoginPage() {
       return;
     }
 
-    Alert.alert('Test', 'Login function called - apiService disabled for testing');
+    setIsLoggingIn(true);
+    
+    try {
+      const response = await apiService.loginUser(email.trim(), password);
+
+      if (response.success && response.data) {
+        const userData = response.data.user || response.data;
+        
+        await login({
+          username: userData.username || email.trim(),
+          email: userData.email || email.trim(),
+          firstName: userData.first_name || '',
+          lastName: userData.last_name || '',
+          phone: userData.phone_number || '',
+          hasCompletedOnboarding: true,
+          customer_id: userData.customer_id || null,
+          id: userData.id || null,
+        });
+      } else {
+        Alert.alert('Login Failed', response.error || 'Invalid email or password');
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Network error. Please check your connection and try again.');
+    } finally {
+      setIsLoggingIn(false);
+    }
   };
+
+  // If user is logged in and completed onboarding, show main page
+  if (isLoggedIn && hasCompletedOnboarding) {
+    const MainPage = require('./MainPage').default;
+    return <MainPage />;
+  }
+
+  // If user is logged in but hasn't completed onboarding, show onboarding
+  if (isLoggedIn && !hasCompletedOnboarding) {
+    const Onboarding = require('./Onboarding').default;
+    return (
+      <Onboarding 
+        onComplete={() => {}} 
+        onNavigateToMain={() => {}}
+      />
+    );
+  }
+
+  // Show loading while checking auth status
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <ActivityIndicator size="large" color="#00bf63" />
+        <Text style={styles.loadingText}>Loading...</Text>
+      </View>
+    );
+  }
+
+  if (showForgotPassword) {
+    const ForgotPasswordPage = require('./ForgotPasswordPage').default;
+    return <ForgotPasswordPage onBack={() => setShowForgotPassword(false)} />;
+  }
+
+  if (showOnboarding) {
+    const Onboarding = require('./Onboarding').default;
+    return (
+      <Onboarding 
+        onComplete={() => setShowOnboarding(false)} 
+        onNavigateToMain={() => {}}
+      />
+    );
+  }
+
+  if (showCreateAccount) {
+    const CreateAccountPage = require('./CreateAccountPage').default;
+    return (
+      <CreateAccountPage 
+        onBack={() => setShowCreateAccount(false)}
+        onRegistrationSuccess={() => {
+          setShowOnboarding(true);
+        }}
+      />
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -134,7 +214,7 @@ export default function LoginPage() {
             <Text style={styles.rememberMeText}>Remember me</Text>
           </View>
           
-          <TouchableOpacity onPress={() => Alert.alert('Info', 'Forgot password functionality disabled for test')}>
+          <TouchableOpacity onPress={() => setShowForgotPassword(true)}>
             <Text style={styles.forgotPasswordText}>Forgot password?</Text>
           </TouchableOpacity>
         </View>
@@ -148,14 +228,14 @@ export default function LoginPage() {
           {isLoggingIn ? (
             <ActivityIndicator color="#FFFFFF" size="small" />
           ) : (
-            <Text style={styles.signInButtonText}>Sign In (Test)</Text>
+            <Text style={styles.signInButtonText}>Sign In</Text>
           )}
         </TouchableOpacity>
         
         {/* Create Account Link */}
         <View style={styles.createAccountContainer}>
           <Text style={styles.createAccountText}>New User? </Text>
-          <TouchableOpacity onPress={() => Alert.alert('Info', 'Create account disabled for test')}>
+          <TouchableOpacity onPress={() => setShowCreateAccount(true)}>
             <Text style={styles.createAccountLink}>Create Account</Text>
           </TouchableOpacity>
         </View>
@@ -164,15 +244,27 @@ export default function LoginPage() {
   );
 }
 
+export default function LoginPage() {
+  return <LoginPageContent />;
+}
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: '#666',
   },
   topSection: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    width: '100%',
   },
   overlay: {
     ...StyleSheet.absoluteFillObject,
@@ -181,9 +273,10 @@ const styles = StyleSheet.create({
   logo: {
     width: 120,
     height: 120,
-    top: -80,
+    position: 'absolute',
+    top: '20%',
+    alignSelf: 'center',
     zIndex: 1,
-    left: 110,
   },
   bottomModalContainer: {
     backgroundColor: '#FFFFFF',
@@ -192,7 +285,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 30,
     paddingBottom: 40,
-    top: -40,
+    width: '100%',
   },
   titleContainer: {
     flexDirection: 'row',

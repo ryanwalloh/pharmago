@@ -67,7 +67,7 @@ class ApiService {
 
   constructor(baseURL: string = API_BASE_URL) {
     this.baseURL = baseURL;
-    console.log('🔧 API Service initialized with base URL:', this.baseURL);
+    // Removed console.log from constructor to prevent import-time crashes in production builds
   }
 
   public async makeRequest<T>(
