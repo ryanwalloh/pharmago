@@ -21,7 +21,7 @@ import * as Location from 'expo-location';
 import { apiService } from '../services/api';
 import { LinearGradient } from 'expo-linear-gradient';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+// Removed Dimensions.get() at module level to prevent import-time crashes
 
 // Back Arrow Icon
 const BackArrowIcon = ({ size = 24, color = '#000000' }) => (
@@ -1430,7 +1430,7 @@ const styles = StyleSheet.create({
   },
   backButton: {
     marginTop: 10,
-    marginLeft: SCREEN_WIDTH * 0.05, // 5% responsive margin
+    marginLeft: 20, // Fixed margin (was 5%)
     width: 44,
     height: 44,
     borderRadius: 22,
@@ -1449,8 +1449,8 @@ const styles = StyleSheet.create({
   searchContainer: {
     position: 'absolute',
     top: '30%',
-    left: SCREEN_WIDTH * 0.05, // 5% responsive margin
-    right: SCREEN_WIDTH * 0.05,
+    left: 20, // Fixed margin (was 5%)
+    right: 20,
     zIndex: 5,
   },
   searchFieldContainer: {
@@ -1459,7 +1459,7 @@ const styles = StyleSheet.create({
   searchField: {
     backgroundColor: '#FFFFFF',
     borderRadius: 25,
-    paddingHorizontal: SCREEN_WIDTH * 0.04, // 4% responsive padding
+    paddingHorizontal: 16, // Fixed padding (was 4%)
     paddingVertical: 8,
     minHeight: 50,
     shadowColor: '#000',
@@ -1527,7 +1527,7 @@ const styles = StyleSheet.create({
   suggestionItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: SCREEN_WIDTH * 0.04, // 4% responsive padding
+    padding: 16, // Fixed padding (was 4%)
     borderBottomWidth: 1,
     borderBottomColor: '#F0F0F0',
   },
@@ -1586,7 +1586,7 @@ const styles = StyleSheet.create({
   // Skeleton Loading Styles
   skeletonContainer: {
     flex: 1,
-    padding: SCREEN_WIDTH * 0.05, // 5% responsive padding
+    padding: 20, // Fixed padding (was 5%)
   },
   skeletonBackButton: {
     marginTop: 10,
@@ -1677,7 +1677,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   topFilterContent: {
-    paddingHorizontal: SCREEN_WIDTH * 0.05, // 5% responsive padding
+    paddingHorizontal: 20, // Fixed padding (was 5%)
     paddingBottom: 15,
   },
   topSearchFieldContainer: {
@@ -1687,7 +1687,7 @@ const styles = StyleSheet.create({
   topSearchField: {
     backgroundColor: '#FFFFFF',
     borderRadius: 25,
-    paddingHorizontal: SCREEN_WIDTH * 0.04, // 4% responsive padding
+    paddingHorizontal: 16, // Fixed padding (was 4%)
     paddingVertical: 8,
     minHeight: 50,
     borderWidth: 1,
@@ -1740,7 +1740,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: 12,
-    paddingHorizontal: SCREEN_WIDTH * 0.04, // 4% responsive padding
+    paddingHorizontal: 16, // Fixed padding (was 4%)
     borderBottomWidth: 1,
     borderBottomColor: '#F5F5F5',
   },
@@ -1834,7 +1834,7 @@ const styles = StyleSheet.create({
     minHeight: 300,
   },
   modalHeader: {
-    padding: SCREEN_WIDTH * 0.05, // 5% responsive padding
+    padding: 20, // Fixed padding (was 5%)
     borderBottomWidth: 1,
     borderBottomColor: '#F0F0F0',
     alignItems: 'center',
@@ -1858,7 +1858,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   pharmacyListScroll: {
-    paddingHorizontal: SCREEN_WIDTH * 0.05, // 5% responsive padding
+    paddingHorizontal: 20, // Fixed padding (was 5%)
   },
   pharmacyLoadingContainer: {
     paddingVertical: 40,
@@ -1882,7 +1882,7 @@ const styles = StyleSheet.create({
   pharmacyCard: {
     backgroundColor: '#F8F8F8',
     borderRadius: 15,
-    padding: SCREEN_WIDTH * 0.04, // 4% responsive padding
+    padding: 16, // Fixed padding (was 4%)
     marginVertical: 8,
     borderWidth: 1,
     borderColor: '#E0E0E0',
@@ -1945,7 +1945,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#00bf63',
     borderRadius: 12,
     paddingVertical: 12,
-    paddingHorizontal: SCREEN_WIDTH * 0.04, // 4% responsive padding
+    paddingHorizontal: 16, // Fixed padding (was 4%)
     alignItems: 'center',
   },
   orderNowButtonText: {
@@ -1955,13 +1955,13 @@ const styles = StyleSheet.create({
   },
   // Pharmacy Shop Modal Styles
   pharmacyShopContent: {
-    padding: SCREEN_WIDTH * 0.05, // 5% responsive padding
+    padding: 20, // Fixed padding (was 5%)
   },
   shopButton: {
     backgroundColor: '#00bf63',
     borderRadius: 12,
     paddingVertical: 12,
-    paddingHorizontal: SCREEN_WIDTH * 0.04, // 4% responsive padding
+    paddingHorizontal: 16, // Fixed padding (was 4%)
     alignItems: 'center',
   },
   shopButtonText: {
