@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { SafeAreaView, StyleSheet } from 'react-native';
+import { StyleSheet } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import CreateAccountPage from '../components/CreateAccountPage';
 import Onboarding from '../components/Onboarding';
