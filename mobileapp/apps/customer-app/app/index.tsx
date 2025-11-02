@@ -1,19 +1,14 @@
 import React, { useEffect, useRef } from 'react';
 import { Image, StyleSheet, Animated } from 'react-native';
 import { router } from 'expo-router';
-import { loadFonts } from '../utils/fonts';
 
 export default function LandingPage() {
   const fadeAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
-    // Load fonts first
-    loadFonts().then(() => {
-      console.log('✅ Nexa fonts loaded successfully');
-    }).catch((error) => {
-      console.error('❌ Failed to load fonts:', error);
-    });
-
+    // Fonts are now loaded in _layout.tsx using useFonts hook
+    // This ensures fonts are ready before any component renders
+    
     // Start the transition after 2 seconds
     const timer = setTimeout(() => {
       // Fade out the landing page
