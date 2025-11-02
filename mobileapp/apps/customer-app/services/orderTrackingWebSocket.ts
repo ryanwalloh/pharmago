@@ -15,7 +15,7 @@ class OrderTrackingWebSocketService {
   private pingInterval: any = null;
 
   constructor() {
-    console.log('🔌 OrderTrackingWebSocket service initialized');
+    // Removed console.log to prevent import-time crashes in production builds
   }
 
   /**
@@ -210,5 +210,16 @@ class OrderTrackingWebSocketService {
 }
 
 // Export singleton instance
-export const orderTrackingWS = new OrderTrackingWebSocketService();
+// Lazy singleton - only create instance when first accessed
+let orderTrackingWSInstance: OrderTrackingWebSocketService | null = null;
+
+export const orderTrackingWS = new Proxy({} as OrderTrackingWebSocketService, {
+  get(target, prop) {
+    if (!orderTrackingWSInstance) {
+      orderTrackingWSInstance = new OrderTrackingWebSocketService();
+    }
+    const value = (orderTrackingWSInstance as any)[prop];
+    return typeof value === 'function' ? value.bind(orderTrackingWSInstance) : value;
+  }
+});
 
