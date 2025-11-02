@@ -1,4 +1,7 @@
 import React, { useState } from 'react';
+import { StyleSheet } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { router } from 'expo-router';
 import CreateAccountPage from '../components/CreateAccountPage';
 import Onboarding from '../components/Onboarding';
 
@@ -7,28 +10,38 @@ export default function SignupScreen() {
 
   if (showOnboarding) {
     return (
-      <Onboarding 
-        onComplete={() => {
-          // Onboarding complete - navigation handled by AuthContext
-        }} 
-        onNavigateToMain={() => {
-          // Navigation handled by AuthContext
-        }}
-      />
+      <SafeAreaView style={styles.container}>
+        <Onboarding 
+          onComplete={() => {
+            // Onboarding complete - navigation handled by AuthContext
+          }} 
+          onNavigateToMain={() => {
+            // Navigation handled by AuthContext
+          }}
+        />
+      </SafeAreaView>
     );
   }
 
   return (
-    <CreateAccountPage 
-      onBack={() => {
-        // Go back to welcome page
-        const { router } = require('expo-router');
-        router.back();
-      }}
-      onRegistrationSuccess={() => {
-        setShowOnboarding(true);
-      }}
-    />
+    <SafeAreaView style={styles.container}>
+      <CreateAccountPage 
+        onBack={() => {
+          // Go back to welcome page
+          router.back();
+        }}
+        onRegistrationSuccess={() => {
+          setShowOnboarding(true);
+        }}
+      />
+    </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
+});
 
