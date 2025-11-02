@@ -597,7 +597,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     zIndex: 1,
     top: '20%',
-    right: 120,
+    right: 220,
   },
   bottomModalContainer: {
     flex: 0.8,
