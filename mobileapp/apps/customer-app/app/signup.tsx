@@ -3,12 +3,12 @@ import { StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import CreateAccountPage from '../components/CreateAccountPage';
-import Onboarding from '../components/Onboarding';
 
 export default function SignupScreen() {
   const [showOnboarding, setShowOnboarding] = useState(false);
 
   if (showOnboarding) {
+    const Onboarding = require('../components/Onboarding').default;
     return (
       <SafeAreaView style={styles.container}>
         <Onboarding 

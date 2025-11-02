@@ -13,8 +13,6 @@ import {
 } from 'react-native';
 import ForgotPasswordPage from './ForgotPasswordPage';
 import CreateAccountPage from './CreateAccountPage';
-import Onboarding from './Onboarding';
-import MainPage from './MainPage';
 import { useAuth } from '../contexts/AuthContext';
 import { apiService } from '../services/api';
 
@@ -80,11 +78,13 @@ function LoginPageContent() {
 
   // If user is logged in and completed onboarding, show main page
   if (isLoggedIn && hasCompletedOnboarding) {
+    const MainPage = require('./MainPage').default;
     return <MainPage />;
   }
 
   // If user is logged in but hasn't completed onboarding, show onboarding
   if (isLoggedIn && !hasCompletedOnboarding) {
+    const Onboarding = require('./Onboarding').default;
     return (
       <Onboarding 
         onComplete={() => {}} 
@@ -109,6 +109,7 @@ function LoginPageContent() {
   }
 
   if (showOnboarding) {
+    const Onboarding = require('./Onboarding').default;
     return (
       <Onboarding 
         onComplete={() => setShowOnboarding(false)} 
