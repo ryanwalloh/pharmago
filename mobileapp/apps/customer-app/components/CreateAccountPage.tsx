@@ -593,8 +593,10 @@ const styles = StyleSheet.create({
   logo: {
     width: 120,
     height: 120,
+    position: 'absolute',
     marginBottom: 10,
     zIndex: 1,
+    top: '20%',
     right: 120,
   },
   bottomModalContainer: {
