@@ -9,8 +9,8 @@ import {
   Switch,
   Alert,
   ActivityIndicator,
-  ImageBackground,
 } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
 // Lazy-loaded in branches to avoid import-time crashes in release
 import { useAuth } from '../contexts/AuthContext';
 import { apiService } from '../services/api';
@@ -135,11 +135,14 @@ function LoginPageContent() {
   return (
     <View style={styles.container}>
       {/* Top Section - Logo and Background */}
-      <ImageBackground
-        source={require('../assets/login.webp')}
-        style={styles.topSection}
-        resizeMode="cover"
-      >
+      <View style={styles.topSection}>
+        <ExpoImage
+          source={require('../assets/login.png')}
+          style={StyleSheet.absoluteFill}
+          contentFit="cover"
+          transition={300}
+          cachePolicy="disk"
+        />
         {/* Dark Overlay */}
         <View style={styles.overlay} />
         <Image
@@ -147,7 +150,7 @@ function LoginPageContent() {
           style={styles.logo}
           resizeMode="contain"
         />
-      </ImageBackground>
+      </View>
       
       {/* Bottom Modal Container */}
       <View style={styles.bottomModalContainer}>
