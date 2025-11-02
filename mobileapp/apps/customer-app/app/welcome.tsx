@@ -42,7 +42,7 @@ export default function WelcomePage() {
           {/* Login Button */}
           <TouchableOpacity
             style={styles.loginButton}
-            onPress={() => router.push('/login' as any)}
+            onPress={() => router.push('/login')}
           >
             <Text style={styles.loginButtonText}>Login</Text>
           </TouchableOpacity>
@@ -50,7 +50,7 @@ export default function WelcomePage() {
           {/* Signup Button */}
           <TouchableOpacity
             style={styles.signupButton}
-            onPress={() => router.push('/signup' as any)}
+            onPress={() => router.push('/signup')}
           >
             <Text style={styles.signupButtonText}>Sign Up</Text>
           </TouchableOpacity>
