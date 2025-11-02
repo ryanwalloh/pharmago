@@ -134,7 +134,7 @@ function LoginPageContent() {
     <View style={styles.container}>
       {/* Top Section - Logo and Background */}
       <ImageBackground
-        source={require('../assets/login.png')}
+        source={require('../assets/login.webp')}
         style={styles.topSection}
         resizeMode="cover"
       >

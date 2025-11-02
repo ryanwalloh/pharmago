@@ -18,7 +18,7 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 export default function WelcomePage() {
   return (
     <ImageBackground
-      source={require('../assets/welcomepage.png')}
+      source={require('../assets/welcomepage.webp')}
       style={styles.backgroundImage}
       resizeMode="cover"
     >
