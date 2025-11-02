@@ -11,8 +11,7 @@ import {
   ActivityIndicator,
   ImageBackground,
 } from 'react-native';
-import ForgotPasswordPage from './ForgotPasswordPage';
-import CreateAccountPage from './CreateAccountPage';
+// Lazy-loaded in branches to avoid import-time crashes in release
 import { useAuth } from '../contexts/AuthContext';
 import { apiService } from '../services/api';
 
@@ -105,6 +104,7 @@ function LoginPageContent() {
   }
 
   if (showForgotPassword) {
+    const ForgotPasswordPage = require('./ForgotPasswordPage').default;
     return <ForgotPasswordPage onBack={() => setShowForgotPassword(false)} />;
   }
 
@@ -121,6 +121,7 @@ function LoginPageContent() {
   }
 
   if (showCreateAccount) {
+    const CreateAccountPage = require('./CreateAccountPage').default;
     return (
       <CreateAccountPage 
         onBack={() => setShowCreateAccount(false)}
