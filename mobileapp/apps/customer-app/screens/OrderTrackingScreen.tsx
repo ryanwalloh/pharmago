@@ -16,7 +16,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-import MapView, { Marker, Region, Polyline } from 'react-native-maps';
+// Lazy import to avoid import-time native module crash in production
+// import MapView, { Marker, Region, Polyline } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import { apiService, ApiResponse } from '../services/api';
 import { fontFamily } from '../utils/fonts';
@@ -27,6 +28,14 @@ import { orderTrackingWS } from '../services/orderTrackingWebSocket';
 const getDimensions = () => Dimensions.get('window');
 const getScreenWidth = () => getDimensions().width;
 const getScreenHeight = () => getDimensions().height;
+
+// Type for map region (from react-native-maps)
+interface Region {
+  latitude: number;
+  longitude: number;
+  latitudeDelta: number;
+  longitudeDelta: number;
+}
 
 interface RiderInfo {
   rider_id: number;
@@ -99,6 +108,10 @@ interface OrderData {
 }
 
 const OrderTrackingScreen: React.FC = () => {
+  // Lazy load react-native-maps to avoid import-time native module crash
+  const MapView = require('react-native-maps').default;
+  const { Marker, Polyline } = require('react-native-maps');
+  
   const { id } = useLocalSearchParams<{ id: string }>();
   const [orderData, setOrderData] = useState<OrderData | null>(null);
   const [loading, setLoading] = useState(true);
