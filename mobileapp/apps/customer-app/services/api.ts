@@ -4,44 +4,55 @@ import Constants from 'expo-constants';
 import { NativeModules } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+// Lazy initialization to avoid import-time crashes in production builds
+let cachedApiBaseUrl: string | null = null;
+
 const getApiBaseUrl = () => {
-  // Web (localhost)
-  if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
-    return 'http://localhost:8000/api/v1';
+  if (cachedApiBaseUrl) {
+    return cachedApiBaseUrl;
   }
 
-  // Optional: EXPO_PUBLIC_API_BASE override (e.g., http://192.168.1.10:8000)
-  const envBase: string | undefined = process.env.EXPO_PUBLIC_API_BASE;
-  if (envBase) {
-    const normalized = envBase.endsWith('/') ? envBase.slice(0, -1) : envBase;
-    return `${normalized}/api/v1`;
-  }
-
-  // Try to derive host from Expo packager/SourceCode script URL
   try {
-    const expHostUri: string | undefined = (Constants as any)?.expoConfig?.hostUri
-      || (Constants as any)?.manifest?.debuggerHost
-      || (NativeModules as any)?.SourceCode?.scriptURL;
-
-    if (expHostUri) {
-      // expHostUri examples:
-      //  - '192.168.0.5:8081'
-      //  - 'exp://192.168.0.5:8081'
-      //  - 'http://192.168.0.5:8081/index.bundle?...'
-      const withoutScheme = expHostUri.replace(/^\w+:\/\//, '');
-      const host = withoutScheme.split(':')[0].split('/')[0];
-      if (host && /^(\d{1,3}\.){3}\d{1,3}$/.test(host)) {
-        return `http://${host}:8000/api/v1`;
-      }
+    // Web (localhost)
+    if (typeof window !== 'undefined' && window?.location?.hostname === 'localhost') {
+      cachedApiBaseUrl = 'http://localhost:8000/api/v1';
+      return cachedApiBaseUrl;
     }
+
+    // Optional: EXPO_PUBLIC_API_BASE override (e.g., http://192.168.1.10:8000)
+    const envBase: string | undefined = process.env.EXPO_PUBLIC_API_BASE;
+    if (envBase) {
+      const normalized = envBase.endsWith('/') ? envBase.slice(0, -1) : envBase;
+      cachedApiBaseUrl = `${normalized}/api/v1`;
+      return cachedApiBaseUrl;
+    }
+
+    // Try to derive host from Expo packager/SourceCode script URL
+    try {
+      const expHostUri: string | undefined = (Constants as any)?.expoConfig?.hostUri
+        || (Constants as any)?.manifest?.debuggerHost
+        || (NativeModules as any)?.SourceCode?.scriptURL;
+
+      if (expHostUri) {
+        // expHostUri examples:
+        //  - '192.168.0.5:8081'
+        //  - 'exp://192.168.0.5:8081'
+        //  - 'http://192.168.0.5:8081/index.bundle?...'
+        const withoutScheme = expHostUri.replace(/^\w+:\/\//, '');
+        const host = withoutScheme.split(':')[0].split('/')[0];
+        if (host && /^(\d{1,3}\.){3}\d{1,3}$/.test(host)) {
+          cachedApiBaseUrl = `http://${host}:8000/api/v1`;
+          return cachedApiBaseUrl;
+        }
+      }
+    } catch {}
   } catch {}
 
   // Fallback: Use Railway backend for production/testing
   // For local development, set EXPO_PUBLIC_API_BASE environment variable
-  return 'https://pharmago-backend-production.up.railway.app/api/v1';
+  cachedApiBaseUrl = 'https://pharmago-backend-production.up.railway.app/api/v1';
+  return cachedApiBaseUrl;
 };
-
-const API_BASE_URL = getApiBaseUrl();
 
 export interface UserRegistrationData {
   username: string;
@@ -65,9 +76,9 @@ class ApiService {
   private baseURL: string;
   private authToken: string | null = null;
 
-  constructor(baseURL: string = API_BASE_URL) {
-    this.baseURL = baseURL;
-    // Removed console.log from constructor to prevent import-time crashes in production builds
+  constructor() {
+    // Lazy initialization - get URL when needed, not at import time
+    this.baseURL = getApiBaseUrl();
   }
 
   public async makeRequest<T>(
@@ -722,5 +733,17 @@ class ApiService {
   }
 }
 
-export const apiService = new ApiService();
+// Lazy singleton - only create instance when first accessed
+let apiServiceInstance: ApiService | null = null;
+
+export const apiService = new Proxy({} as ApiService, {
+  get(target, prop) {
+    if (!apiServiceInstance) {
+      apiServiceInstance = new ApiService();
+    }
+    const value = (apiServiceInstance as any)[prop];
+    return typeof value === 'function' ? value.bind(apiServiceInstance) : value;
+  }
+});
+
 export default apiService;
