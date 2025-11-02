@@ -5,12 +5,12 @@ import {
   TextInput,
   TouchableOpacity,
   Image,
+  ImageBackground,
   StyleSheet,
   Alert,
   ActivityIndicator,
   ScrollView,
 } from 'react-native';
-import { Image as ExpoImage } from 'expo-image';
 import { apiService } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -293,20 +293,19 @@ export default function CreateAccountPage({ onBack, onRegistrationSuccess }: Cre
     <View style={styles.container}>
       {/* Top Section - Logo and Background */}
       <View style={styles.topSection}>
-        <ExpoImage
+        <ImageBackground
           source={require('../assets/createaccount.png')}
           style={StyleSheet.absoluteFill}
-          contentFit="cover"
-          transition={300}
-          cachePolicy="disk"
-        />
-        {/* Dark Overlay */}
-        <View style={styles.overlay} />
-        <Image
-          source={require('../assets/pharmalogo.png')}
-          style={styles.logo}
-          resizeMode="contain"
-        />
+          resizeMode="cover"
+        >
+          {/* Dark Overlay */}
+          <View style={styles.overlay} />
+          <Image
+            source={require('../assets/pharmalogo.png')}
+            style={styles.logo}
+            resizeMode="contain"
+          />
+        </ImageBackground>
       </View>
       
       {/* Bottom Modal Container */}
