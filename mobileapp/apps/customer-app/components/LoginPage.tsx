@@ -11,20 +11,18 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-// Lazy-loaded in branches to avoid import-time crashes in release
-import { useAuth } from '../contexts/AuthContext';
-import { apiService } from '../services/api';
 
-function LoginPageContent() {
-  const { isLoggedIn, hasCompletedOnboarding, loading, login } = useAuth();
+// MINIMAL TEST VERSION - Removed problematic imports
+// Testing if component loads without:
+// - useAuth from AuthContext
+// - apiService
+
+export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [emailFocused, setEmailFocused] = useState(false);
   const [passwordFocused, setPasswordFocused] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [showForgotPassword, setShowForgotPassword] = useState(false);
-  const [showCreateAccount, setShowCreateAccount] = useState(false);
-  const [showOnboarding, setShowOnboarding] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   const handleLogin = async () => {
@@ -33,104 +31,8 @@ function LoginPageContent() {
       return;
     }
 
-    setIsLoggingIn(true);
-    
-    try {
-      console.log('🔐 Attempting login...');
-      const response = await apiService.loginUser(email.trim(), password);
-      
-      console.log('📨 Login response:', {
-        success: response.success,
-        error: response.error,
-        data: response.data,
-        timestamp: new Date().toISOString()
-      });
-
-      if (response.success && response.data) {
-        console.log('✅ Login successful!');
-        
-        // Extract user data from response (backend returns user data in 'user' field)
-        const userData = response.data.user || response.data;
-        
-        // Store user data in session
-        await login({
-          username: userData.username || email.trim(),
-          email: userData.email || email.trim(),
-          firstName: userData.first_name || '',
-          lastName: userData.last_name || '',
-          phone: userData.phone_number || '',
-          hasCompletedOnboarding: true, // User logging in means they already completed onboarding during account creation
-          customer_id: userData.customer_id || null, // Include customer_id for cart orders
-          id: userData.id || null, // Include user id as fallback
-        });
-      } else {
-        console.error('❌ Login failed:', response.error);
-        Alert.alert('Login Failed', response.error || 'Invalid email or password');
-      }
-    } catch (error) {
-      console.error('💥 Login error:', error);
-      Alert.alert('Error', 'Network error. Please check your connection and try again.');
-    } finally {
-      setIsLoggingIn(false);
-    }
+    Alert.alert('Test', 'Login function called - apiService disabled for testing');
   };
-
-  // If user is logged in and completed onboarding, show main page
-  if (isLoggedIn && hasCompletedOnboarding) {
-    const MainPage = require('./MainPage').default;
-    return <MainPage />;
-  }
-
-  // If user is logged in but hasn't completed onboarding, show onboarding
-  if (isLoggedIn && !hasCompletedOnboarding) {
-    const Onboarding = require('./Onboarding').default;
-    return (
-      <Onboarding 
-        onComplete={() => {}} 
-        onNavigateToMain={() => {
-          // Navigation handled by AuthContext
-        }}
-      />
-    );
-  }
-
-  // Show loading while checking auth status
-  if (loading) {
-    return (
-      <View style={styles.container}>
-        <Text>Loading...</Text>
-      </View>
-    );
-  }
-
-  if (showForgotPassword) {
-    const ForgotPasswordPage = require('./ForgotPasswordPage').default;
-    return <ForgotPasswordPage onBack={() => setShowForgotPassword(false)} />;
-  }
-
-  if (showOnboarding) {
-    const Onboarding = require('./Onboarding').default;
-    return (
-      <Onboarding 
-        onComplete={() => setShowOnboarding(false)} 
-        onNavigateToMain={() => {
-          // Navigation handled by AuthContext
-        }}
-      />
-    );
-  }
-
-  if (showCreateAccount) {
-    const CreateAccountPage = require('./CreateAccountPage').default;
-    return (
-      <CreateAccountPage 
-        onBack={() => setShowCreateAccount(false)}
-        onRegistrationSuccess={() => {
-          setShowOnboarding(true);
-        }}
-      />
-    );
-  }
 
   return (
     <View style={styles.container}>
@@ -232,7 +134,7 @@ function LoginPageContent() {
             <Text style={styles.rememberMeText}>Remember me</Text>
           </View>
           
-          <TouchableOpacity onPress={() => setShowForgotPassword(true)}>
+          <TouchableOpacity onPress={() => Alert.alert('Info', 'Forgot password functionality disabled for test')}>
             <Text style={styles.forgotPasswordText}>Forgot password?</Text>
           </TouchableOpacity>
         </View>
@@ -246,30 +148,26 @@ function LoginPageContent() {
           {isLoggingIn ? (
             <ActivityIndicator color="#FFFFFF" size="small" />
           ) : (
-            <Text style={styles.signInButtonText}>Sign In</Text>
+            <Text style={styles.signInButtonText}>Sign In (Test)</Text>
           )}
         </TouchableOpacity>
         
         {/* Create Account Link */}
         <View style={styles.createAccountContainer}>
           <Text style={styles.createAccountText}>New User? </Text>
-        <TouchableOpacity onPress={() => setShowCreateAccount(true)}>
-          <Text style={styles.createAccountLink}>Create Account</Text>
-        </TouchableOpacity>
+          <TouchableOpacity onPress={() => Alert.alert('Info', 'Create account disabled for test')}>
+            <Text style={styles.createAccountLink}>Create Account</Text>
+          </TouchableOpacity>
         </View>
       </View>
     </View>
   );
 }
 
-export default function LoginPage() {
-  return <LoginPageContent />;
-}
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF', // Green background for top section
+    backgroundColor: '#FFFFFF',
   },
   topSection: {
     flex: 1,
@@ -278,7 +176,7 @@ const styles = StyleSheet.create({
   },
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)', // 50% dark overlay
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
   logo: {
     width: 120,
