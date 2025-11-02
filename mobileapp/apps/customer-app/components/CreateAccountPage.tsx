@@ -293,7 +293,7 @@ export default function CreateAccountPage({ onBack, onRegistrationSuccess }: Cre
     <View style={styles.container}>
       {/* Top Section - Logo and Background */}
       <ImageBackground
-        source={require('../assets/createaccount.png')}
+        source={require('../assets/createaccount.webp')}
         style={styles.topSection}
         resizeMode="cover"
       >
