@@ -22,7 +22,7 @@ export default function SignupScreen() {
 
   // Delay import until user explicitly requests it
   if (showSignup) {
-    const CreateAccountPage = require('../components/CreateAccountPage').default;
+    const CreateAccountPage = require('../components/CreateAccountPage.MINIMAL').default;
     return (
       <CreateAccountPage 
         onBack={() => {
