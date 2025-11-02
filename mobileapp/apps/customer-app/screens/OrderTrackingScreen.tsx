@@ -23,7 +23,10 @@ import { fontFamily } from '../utils/fonts';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { orderTrackingWS } from '../services/orderTrackingWebSocket';
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+// Lazy initialization to avoid import-time crashes in production builds
+const getDimensions = () => Dimensions.get('window');
+const getScreenWidth = () => getDimensions().width;
+const getScreenHeight = () => getDimensions().height;
 
 interface RiderInfo {
   rider_id: number;
@@ -1534,13 +1537,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   headerContainer: {
-    paddingHorizontal: SCREEN_WIDTH * 0.05, // 5% responsive padding
+    paddingHorizontal: 20, // Fixed padding (was 5% responsive)
     paddingTop: 10,
     paddingBottom: 10,
     backgroundColor: '#FFFFFF',
   },
   content: {
-    paddingHorizontal: SCREEN_WIDTH * 0.05, // 5% responsive padding
+    paddingHorizontal: 20, // Fixed padding (was 5% responsive)
     paddingVertical: 20,
     borderTopLeftRadius: 32,
     borderTopRightRadius: 32,
@@ -1562,7 +1565,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: SCREEN_WIDTH * 0.1, // 10% responsive padding
+    paddingHorizontal: 40, // Fixed padding (was 10% responsive)
     paddingVertical: 20,
   },
   errorTitle: {
@@ -1618,7 +1621,7 @@ const styles = StyleSheet.create({
   pharmacyCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 24,
-    padding: SCREEN_WIDTH * 0.02, // 2% responsive padding
+    padding: 8, // Fixed padding (was 2% responsive)
     marginBottom: 20,
     borderWidth: 1,
     borderColor: '#E0E0E0',
@@ -1632,9 +1635,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   pharmacyImageContainer: {
-    width: Math.min(SCREEN_WIDTH * 0.15, 60), // Responsive, max 60
-    height: Math.min(SCREEN_WIDTH * 0.15, 60),
-    borderRadius: Math.min(SCREEN_WIDTH * 0.075, 30),
+    width: 60, // Fixed size (was responsive with max 60)
+    height: 60,
+    borderRadius: 30,
     backgroundColor: '#F8F9FA',
     justifyContent: 'center',
     alignItems: 'center',
@@ -1644,9 +1647,9 @@ const styles = StyleSheet.create({
     borderColor: '#E0E0E0',
   },
   pharmacyImage: {
-    width: Math.min(SCREEN_WIDTH * 0.15, 60), // Responsive, max 60
-    height: Math.min(SCREEN_WIDTH * 0.15, 60),
-    borderRadius: Math.min(SCREEN_WIDTH * 0.075, 30),
+    width: 60, // Fixed size (was responsive with max 60)
+    height: 60,
+    borderRadius: 30,
   },
   pharmacyDetails: {
     flex: 1,

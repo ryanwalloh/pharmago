@@ -143,7 +143,7 @@ function LoginPageContent() {
         
         {/* Subtitle */}
         <Text style={styles.subtitle}>
-          Your health, just a click away – Log in to order medicines now!
+          Your health, just a click away.Log in to order medicines now!
         </Text>
         
         {/* Email Input with Floating Label */}
