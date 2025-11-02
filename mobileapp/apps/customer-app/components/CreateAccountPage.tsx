@@ -9,8 +9,8 @@ import {
   Alert,
   ActivityIndicator,
   ScrollView,
-  ImageBackground,
 } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
 import { apiService } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -292,11 +292,14 @@ export default function CreateAccountPage({ onBack, onRegistrationSuccess }: Cre
   return (
     <View style={styles.container}>
       {/* Top Section - Logo and Background */}
-      <ImageBackground
-        source={require('../assets/createaccount.webp')}
-        style={styles.topSection}
-        resizeMode="cover"
-      >
+      <View style={styles.topSection}>
+        <ExpoImage
+          source={require('../assets/createaccount.png')}
+          style={StyleSheet.absoluteFill}
+          contentFit="cover"
+          transition={300}
+          cachePolicy="disk"
+        />
         {/* Dark Overlay */}
         <View style={styles.overlay} />
         <Image
@@ -304,7 +307,7 @@ export default function CreateAccountPage({ onBack, onRegistrationSuccess }: Cre
           style={styles.logo}
           resizeMode="contain"
         />
-      </ImageBackground>
+      </View>
       
       {/* Bottom Modal Container */}
       <View style={styles.bottomModalContainer}>
