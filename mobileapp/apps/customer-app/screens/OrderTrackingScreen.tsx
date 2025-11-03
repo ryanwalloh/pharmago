@@ -15,15 +15,25 @@ import { Ionicons } from '@expo/vector-icons';
 import { fontFamily } from '../utils/fonts';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// PHASE 1.8: Added AsyncStorage back
-// Testing if AsyncStorage causes the crash
+// PHASE 2: Added apiService with REAL data fetching (NO polling yet)
+// Lazy-load apiService to avoid import-time crashes
+const getApiService = () => require('../services/api').apiService;
+
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface OrderData {
   order_id: number;
   order_number: string;
   order_status: string;
+  prescription_status?: string;
+  payment_status?: string;
+  pharmacy_name: string;
+  delivery_address: string;
+  subtotal: number;
+  delivery_fee: number;
+  discount_amount: number;
   total_amount: number;
+  created_at: string;
 }
 
 const OrderTrackingScreen: React.FC = () => {
@@ -31,52 +41,54 @@ const OrderTrackingScreen: React.FC = () => {
   const [orderData, setOrderData] = useState<OrderData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const loadOrder = async () => {
-      try {
-        // Try to load from AsyncStorage
-        const stored = await AsyncStorage.getItem('currentOrder');
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          setOrderData({
-            order_id: parsed.order_id || parseInt(id as string) || 0,
-            order_number: parsed.order_number || `ORD-TEST-${id}`,
-            order_status: parsed.order_status || 'pending',
-            total_amount: parsed.total_amount || 500,
-          });
-        } else {
-          // Fallback test data
-          setOrderData({
-            order_id: parseInt(id as string) || 0,
-            order_number: `ORD-TEST-${id}`,
-            order_status: 'pending',
-            total_amount: 500,
-          });
+  const fetchOrderData = useCallback(async () => {
+    if (!id || id === 'undefined' || id === 'null') {
+      setError('Invalid order ID');
+      setLoading(false);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      console.log('📦 Fetching order data for ID:', id);
+      const apiService = getApiService();
+      const response = await apiService.getOrderStatus(id);
+
+      if (response.success && response.data) {
+        console.log('✅ Order data loaded successfully');
+        setOrderData(response.data);
+        
+        // Save to AsyncStorage
+        try {
+          await AsyncStorage.setItem('currentOrder', JSON.stringify(response.data));
+        } catch (storageError) {
+          console.warn('⚠️ Failed to save order to storage:', storageError);
         }
-      } catch (error) {
-        console.error('AsyncStorage error:', error);
-        // Fallback to test data on error
-        setOrderData({
-          order_id: parseInt(id as string) || 0,
-          order_number: `ORD-TEST-${id}`,
-          order_status: 'pending',
-          total_amount: 500,
-        });
-      } finally {
-        setLoading(false);
+      } else {
+        setError(response.error || 'Failed to load order data');
+        console.error('❌ Failed to load order:', response.error);
       }
-    };
-
-    loadOrder();
+    } catch (err) {
+      console.error('💥 Error fetching order data:', err);
+      setError('Network error. Please check your connection.');
+    } finally {
+      setLoading(false);
+    }
   }, [id]);
 
-  const onRefresh = useCallback(() => {
+  useEffect(() => {
+    fetchOrderData();
+  }, [fetchOrderData]);
+
+  const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    setTimeout(() => {
-      setRefreshing(false);
-    }, 1000);
-  }, []);
+    await fetchOrderData();
+    setRefreshing(false);
+  }, [fetchOrderData]);
 
   if (loading) {
     return (
@@ -84,6 +96,24 @@ const OrderTrackingScreen: React.FC = () => {
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#00bf63" />
           <Text style={styles.loadingText}>Loading order details...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (error || !orderData) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.errorContainer}>
+          <Ionicons name="alert-circle-outline" size={64} color="#F44336" />
+          <Text style={styles.errorTitle}>Unable to Load Order</Text>
+          <Text style={styles.errorText}>{error || 'Order not found'}</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={onRefresh}>
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.homeButton} onPress={() => router.push('/')}>
+            <Text style={styles.homeButtonText}>Go Home</Text>
+          </TouchableOpacity>
         </View>
       </SafeAreaView>
     );
@@ -109,26 +139,74 @@ const OrderTrackingScreen: React.FC = () => {
         </View>
 
         <View style={styles.content}>
+          {/* Order Card */}
           <View style={styles.orderCard}>
             <Ionicons name="receipt-outline" size={32} color="#00bf63" />
-            <Text style={styles.orderNumber}>{orderData?.order_number}</Text>
-            <Text style={styles.orderStatus}>{orderData?.order_status.toUpperCase()}</Text>
+            <Text style={styles.orderNumber}>{orderData.order_number}</Text>
+            <Text style={styles.orderStatus}>{orderData.order_status.toUpperCase()}</Text>
+            <Text style={styles.orderDate}>
+              {new Date(orderData.created_at).toLocaleDateString('en-US', {
+                month: 'long',
+                day: 'numeric',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+              })}
+            </Text>
           </View>
 
+          {/* Pharmacy Info */}
           <View style={styles.infoCard}>
-            <Ionicons name="cash-outline" size={24} color="#666" />
+            <Ionicons name="storefront-outline" size={24} color="#666" />
             <View style={styles.infoContent}>
-              <Text style={styles.infoLabel}>Total Amount</Text>
-              <Text style={styles.infoValue}>₱{orderData?.total_amount.toFixed(2)}</Text>
+              <Text style={styles.infoLabel}>Pharmacy</Text>
+              <Text style={styles.infoValue}>{orderData.pharmacy_name}</Text>
             </View>
           </View>
 
+          {/* Delivery Address */}
+          <View style={styles.infoCard}>
+            <Ionicons name="location-outline" size={24} color="#666" />
+            <View style={styles.infoContent}>
+              <Text style={styles.infoLabel}>Delivery Address</Text>
+              <Text style={styles.infoValue}>{orderData.delivery_address}</Text>
+            </View>
+          </View>
+
+          {/* Order Summary */}
+          <View style={styles.summaryCard}>
+            <Text style={styles.sectionTitle}>Order Summary</Text>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Subtotal:</Text>
+              <Text style={styles.summaryValue}>₱{orderData.subtotal.toFixed(2)}</Text>
+            </View>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Delivery Fee:</Text>
+              <Text style={styles.summaryValue}>₱{orderData.delivery_fee.toFixed(2)}</Text>
+            </View>
+            {orderData.discount_amount > 0 && (
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Discount:</Text>
+                <Text style={[styles.summaryValue, styles.discountText]}>
+                  -₱{orderData.discount_amount.toFixed(2)}
+                </Text>
+              </View>
+            )}
+            <View style={[styles.summaryRow, styles.totalRow]}>
+              <Text style={styles.totalLabel}>Total:</Text>
+              <Text style={styles.totalValue}>₱{orderData.total_amount.toFixed(2)}</Text>
+            </View>
+          </View>
+
+          {/* Test Note */}
           <View style={styles.testNote}>
             <Ionicons name="checkmark-circle" size={24} color="#2E7D32" />
             <Text style={styles.testNoteText}>
-              Phase 1.8: Testing WITH AsyncStorage
+              Phase 2: Real Data with apiService
               {'\n'}
-              If you see your actual order number, AsyncStorage works!
+              ✅ If you see your actual order details, apiService works!
+              {'\n'}
+              Next: Add MapView and real-time tracking
             </Text>
           </View>
         </View>
@@ -154,6 +232,50 @@ const styles = StyleSheet.create({
     marginTop: 16,
     fontSize: 16,
     color: '#666666',
+    fontFamily: fontFamily.light,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: SCREEN_WIDTH * 0.1,
+    paddingVertical: 20,
+  },
+  errorTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#F44336',
+    marginTop: 16,
+    marginBottom: 8,
+    fontFamily: fontFamily.heavy,
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#666666',
+    textAlign: 'center',
+    marginBottom: 20,
+    fontFamily: fontFamily.light,
+  },
+  retryButton: {
+    backgroundColor: '#00bf63',
+    paddingVertical: 12,
+    paddingHorizontal: 32,
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  retryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: 'bold',
+    fontFamily: fontFamily.heavy,
+  },
+  homeButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 32,
+  },
+  homeButtonText: {
+    color: '#00bf63',
+    fontSize: 16,
     fontFamily: fontFamily.light,
   },
   headerContainer: {
@@ -191,7 +313,9 @@ const styles = StyleSheet.create({
     width: 80,
   },
   content: {
-    padding: SCREEN_WIDTH * 0.05,
+    paddingHorizontal: SCREEN_WIDTH * 0.05,
+    paddingTop: 10,
+    paddingBottom: 30,
   },
   orderCard: {
     backgroundColor: '#FFFFFF',
@@ -208,7 +332,7 @@ const styles = StyleSheet.create({
     color: '#333',
     fontFamily: fontFamily.heavy,
     marginTop: 12,
-    marginBottom: 8,
+    marginBottom: 4,
   },
   orderStatus: {
     fontSize: 14,
@@ -219,6 +343,19 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 16,
     borderRadius: 16,
+    marginBottom: 8,
+  },
+  orderDate: {
+    fontSize: 12,
+    color: '#999',
+    fontFamily: fontFamily.light,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    fontFamily: fontFamily.heavy,
+    marginBottom: 12,
   },
   infoCard: {
     backgroundColor: '#FFFFFF',
@@ -226,7 +363,7 @@ const styles = StyleSheet.create({
     padding: 20,
     marginBottom: 16,
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
   },
   infoContent: {
     marginLeft: 16,
@@ -239,9 +376,52 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   infoValue: {
-    fontSize: 20,
+    fontSize: 16,
+    color: '#333',
+    fontFamily: fontFamily.light,
+    lineHeight: 24,
+  },
+  summaryCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 20,
+    marginBottom: 16,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  summaryLabel: {
+    fontSize: 14,
+    color: '#666',
+    fontFamily: fontFamily.light,
+  },
+  summaryValue: {
+    fontSize: 14,
+    color: '#333',
+    fontFamily: fontFamily.light,
+  },
+  discountText: {
+    color: '#4CAF50',
+  },
+  totalRow: {
+    marginTop: 8,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#E0E0E0',
+  },
+  totalLabel: {
+    fontSize: 16,
     fontWeight: 'bold',
     color: '#333',
+    fontFamily: fontFamily.heavy,
+  },
+  totalValue: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#00bf63',
     fontFamily: fontFamily.heavy,
   },
   testNote: {
