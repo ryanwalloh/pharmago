@@ -11,9 +11,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { fontFamily } from '../utils/fonts';
 
-// PHASE 1.5: Test with fonts and icons but NO apiService, NO Dimensions
-// If this works, we know apiService or Dimensions is the problem
+// PHASE 1.6: Added fontFamily back
+// If this works, fontFamily is fine. If it crashes, fontFamily is the issue.
 
 interface OrderData {
   order_id: number;
@@ -29,7 +30,6 @@ const OrderTrackingScreen: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
-    // Simulate loading with test data
     const timer = setTimeout(() => {
       setOrderData({
         order_id: parseInt(id as string) || 0,
@@ -98,9 +98,9 @@ const OrderTrackingScreen: React.FC = () => {
           <View style={styles.testNote}>
             <Ionicons name="checkmark-circle" size={24} color="#2E7D32" />
             <Text style={styles.testNoteText}>
-              Phase 1.5: Testing with fonts and icons
+              Phase 1.6: Testing WITH fontFamily
               {'\n'}
-              NO apiService, NO Dimensions, NO AsyncStorage
+              If you see proper fonts, fontFamily works!
             </Text>
           </View>
         </View>
@@ -126,6 +126,7 @@ const styles = StyleSheet.create({
     marginTop: 16,
     fontSize: 16,
     color: '#666666',
+    fontFamily: fontFamily.light,
   },
   headerContainer: {
     paddingHorizontal: 20,
@@ -148,11 +149,13 @@ const styles = StyleSheet.create({
     color: '#00bf63',
     fontWeight: 'bold',
     marginLeft: 4,
+    fontFamily: fontFamily.heavy,
   },
   headerTitle: {
     fontSize: 20,
     fontWeight: 'bold',
     color: '#333333',
+    fontFamily: fontFamily.heavy,
     flex: 1,
     textAlign: 'center',
   },
@@ -175,6 +178,7 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
     color: '#333',
+    fontFamily: fontFamily.heavy,
     marginTop: 12,
     marginBottom: 8,
   },
@@ -182,6 +186,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#F57C00',
     fontWeight: 'bold',
+    fontFamily: fontFamily.heavy,
     backgroundColor: '#FFF3E0',
     paddingVertical: 6,
     paddingHorizontal: 16,
@@ -202,12 +207,14 @@ const styles = StyleSheet.create({
   infoLabel: {
     fontSize: 14,
     color: '#666',
+    fontFamily: fontFamily.light,
     marginBottom: 4,
   },
   infoValue: {
     fontSize: 20,
     fontWeight: 'bold',
     color: '#333',
+    fontFamily: fontFamily.heavy,
   },
   testNote: {
     backgroundColor: '#E8F5E9',
@@ -220,6 +227,7 @@ const styles = StyleSheet.create({
   testNoteText: {
     fontSize: 14,
     color: '#2E7D32',
+    fontFamily: fontFamily.light,
     lineHeight: 22,
     marginLeft: 12,
     flex: 1,
