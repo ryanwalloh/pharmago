@@ -21,7 +21,7 @@ import PrescriptionUploadModal from './PrescriptionUploadModal';
 import Svg, { Path } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
 
-// Removed Dimensions.get() at module level to prevent import-time crashes
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 // SVG Icon Components
 const SearchIcon = ({ size = 20, color = '#999999' }) => (
@@ -782,7 +782,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20, // Fixed padding (was 5%)
+    paddingHorizontal: SCREEN_WIDTH * 0.05, // 5% padding
     paddingVertical: 10,
     marginTop: 0,
     backgroundColor: 'transparent',
@@ -858,7 +858,7 @@ const styles = StyleSheet.create({
   // Search Field
   searchContainer: {
     flexDirection: 'row',
-    paddingHorizontal: 20, // Fixed padding (was 5%)
+    paddingHorizontal: SCREEN_WIDTH * 0.05, // 5% padding
     paddingVertical: 15,
     marginBottom: 10,
     alignItems: 'center',
@@ -1061,7 +1061,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20, // Fixed padding (was 5%)
+    paddingHorizontal: SCREEN_WIDTH * 0.05, // 5% padding
     marginBottom: 15,
   },
   sectionTitle: {
@@ -1077,7 +1077,7 @@ const styles = StyleSheet.create({
   
   // Categories
   categoriesList: {
-    paddingHorizontal: 20, // Fixed padding (was 5%)
+    paddingHorizontal: SCREEN_WIDTH * 0.05, // 5% padding
   },
   categoryItem: {
     backgroundColor: '#FFFFFF',
@@ -1098,7 +1098,7 @@ const styles = StyleSheet.create({
   medicinesGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    paddingHorizontal: 20, // Fixed padding (was 5%)
+    paddingHorizontal: SCREEN_WIDTH * 0.05, // 5% padding
     justifyContent: 'space-between',
   },
   medicineCard: {
