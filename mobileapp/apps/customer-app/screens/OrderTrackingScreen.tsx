@@ -13,9 +13,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { fontFamily } from '../utils/fonts';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// PHASE 1.7: Added Dimensions.get() back
-// Testing if Dimensions causes the crash
+// PHASE 1.8: Added AsyncStorage back
+// Testing if AsyncStorage causes the crash
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface OrderData {
@@ -32,17 +33,42 @@ const OrderTrackingScreen: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setOrderData({
-        order_id: parseInt(id as string) || 0,
-        order_number: `ORD-TEST-${id}`,
-        order_status: 'pending',
-        total_amount: 500,
-      });
-      setLoading(false);
-    }, 500);
+    const loadOrder = async () => {
+      try {
+        // Try to load from AsyncStorage
+        const stored = await AsyncStorage.getItem('currentOrder');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          setOrderData({
+            order_id: parsed.order_id || parseInt(id as string) || 0,
+            order_number: parsed.order_number || `ORD-TEST-${id}`,
+            order_status: parsed.order_status || 'pending',
+            total_amount: parsed.total_amount || 500,
+          });
+        } else {
+          // Fallback test data
+          setOrderData({
+            order_id: parseInt(id as string) || 0,
+            order_number: `ORD-TEST-${id}`,
+            order_status: 'pending',
+            total_amount: 500,
+          });
+        }
+      } catch (error) {
+        console.error('AsyncStorage error:', error);
+        // Fallback to test data on error
+        setOrderData({
+          order_id: parseInt(id as string) || 0,
+          order_number: `ORD-TEST-${id}`,
+          order_status: 'pending',
+          total_amount: 500,
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
 
-    return () => clearTimeout(timer);
+    loadOrder();
   }, [id]);
 
   const onRefresh = useCallback(() => {
@@ -100,9 +126,9 @@ const OrderTrackingScreen: React.FC = () => {
           <View style={styles.testNote}>
             <Ionicons name="checkmark-circle" size={24} color="#2E7D32" />
             <Text style={styles.testNoteText}>
-              Phase 1.7: Testing WITH Dimensions.get()
+              Phase 1.8: Testing WITH AsyncStorage
               {'\n'}
-              SCREEN_WIDTH = {SCREEN_WIDTH}
+              If you see your actual order number, AsyncStorage works!
             </Text>
           </View>
         </View>
@@ -131,7 +157,7 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.light,
   },
   headerContainer: {
-    paddingHorizontal: SCREEN_WIDTH * 0.05, // Using responsive padding
+    paddingHorizontal: SCREEN_WIDTH * 0.05,
     paddingTop: 10,
     paddingBottom: 10,
     backgroundColor: '#FFFFFF',
@@ -165,7 +191,7 @@ const styles = StyleSheet.create({
     width: 80,
   },
   content: {
-    padding: SCREEN_WIDTH * 0.05, // Using responsive padding
+    padding: SCREEN_WIDTH * 0.05,
   },
   orderCard: {
     backgroundColor: '#FFFFFF',
