@@ -7,14 +7,16 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   RefreshControl,
+  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { fontFamily } from '../utils/fonts';
 
-// PHASE 1.6: Added fontFamily back
-// If this works, fontFamily is fine. If it crashes, fontFamily is the issue.
+// PHASE 1.7: Added Dimensions.get() back
+// Testing if Dimensions causes the crash
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface OrderData {
   order_id: number;
@@ -98,9 +100,9 @@ const OrderTrackingScreen: React.FC = () => {
           <View style={styles.testNote}>
             <Ionicons name="checkmark-circle" size={24} color="#2E7D32" />
             <Text style={styles.testNoteText}>
-              Phase 1.6: Testing WITH fontFamily
+              Phase 1.7: Testing WITH Dimensions.get()
               {'\n'}
-              If you see proper fonts, fontFamily works!
+              SCREEN_WIDTH = {SCREEN_WIDTH}
             </Text>
           </View>
         </View>
@@ -129,7 +131,7 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.light,
   },
   headerContainer: {
-    paddingHorizontal: 20,
+    paddingHorizontal: SCREEN_WIDTH * 0.05, // Using responsive padding
     paddingTop: 10,
     paddingBottom: 10,
     backgroundColor: '#FFFFFF',
@@ -163,7 +165,7 @@ const styles = StyleSheet.create({
     width: 80,
   },
   content: {
-    padding: 20,
+    padding: SCREEN_WIDTH * 0.05, // Using responsive padding
   },
   orderCard: {
     backgroundColor: '#FFFFFF',
