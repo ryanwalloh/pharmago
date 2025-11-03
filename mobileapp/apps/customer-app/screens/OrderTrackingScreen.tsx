@@ -16,14 +16,40 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-import MapView, { Marker, Region, Polyline } from 'react-native-maps';
+// MapView lazy-loaded inside component to avoid import-time native module crash
 import { Ionicons } from '@expo/vector-icons';
 import { apiService, ApiResponse } from '../services/api';
 import { fontFamily } from '../utils/fonts';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { orderTrackingWS } from '../services/orderTrackingWebSocket';
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+// Type definitions for react-native-maps (used without importing to avoid crash)
+interface Region {
+  latitude: number;
+  longitude: number;
+  latitudeDelta: number;
+  longitudeDelta: number;
+}
+
+// Safe dimension getters - wrapped in try-catch to prevent crashes
+const getScreenWidth = (() => {
+  try {
+    return Dimensions.get('window').width;
+  } catch {
+    return 400; // Fallback width
+  }
+})();
+
+const getScreenHeight = (() => {
+  try {
+    return Dimensions.get('window').height;
+  } catch {
+    return 800; // Fallback height
+  }
+})();
+
+const SCREEN_WIDTH = getScreenWidth;
+const SCREEN_HEIGHT = getScreenHeight;
 
 interface RiderInfo {
   rider_id: number;
@@ -96,6 +122,10 @@ interface OrderData {
 }
 
 const OrderTrackingScreen: React.FC = () => {
+  // Lazy-load MapView components inside the component to avoid import-time crash
+  const MapView = require('react-native-maps').default;
+  const { Marker, Polyline } = require('react-native-maps');
+  
   const { id } = useLocalSearchParams<{ id: string }>();
   const [orderData, setOrderData] = useState<OrderData | null>(null);
   const [loading, setLoading] = useState(true);
