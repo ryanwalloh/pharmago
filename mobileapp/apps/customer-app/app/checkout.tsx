@@ -24,7 +24,7 @@ import { useStripe } from '@stripe/stripe-react-native';
 import { fontFamily } from '../utils/fonts';
 import { apiService } from '../services/api';
 
-// Removed Dimensions.get() at module level to prevent import-time crashes
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 // Back Arrow Icon
 const BackArrowIcon = ({ size = 24, color = '#000000' }) => (
@@ -1121,7 +1121,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 40, // Fixed padding (was 10%)
+    paddingHorizontal: SCREEN_WIDTH * 0.1, // 10% responsive padding
     paddingVertical: 20,
   },
   errorText: {
@@ -1144,7 +1144,7 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20, // Fixed padding (was 5%)
+    paddingHorizontal: SCREEN_WIDTH * 0.05, // 5% responsive padding
     paddingVertical: 15,
     backgroundColor: '#FFFFFF',
   },
@@ -1169,9 +1169,9 @@ const styles = StyleSheet.create({
   section: {
     backgroundColor: '#FFFFFF',
     marginTop: 15,
-    paddingHorizontal: 20, // Fixed padding (was 5%)
+    paddingHorizontal: SCREEN_WIDTH * 0.05, // 5% responsive padding
     paddingVertical: 20,
-    marginHorizontal: 20, // Fixed margin (was 5%)
+    marginHorizontal: SCREEN_WIDTH * 0.05, // 5% responsive margin
     borderRadius: 12,
   },
   sectionHeader: {
@@ -1215,7 +1215,7 @@ const styles = StyleSheet.create({
     color: '#666666',
   },
   addressDetails: {
-    padding: 16, // Fixed padding (was 4%)
+    padding: SCREEN_WIDTH * 0.04, // 4% responsive padding
     backgroundColor: '#F8F8F8',
     borderRadius: 12,
   },
@@ -1232,7 +1232,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 12, // Fixed padding (was 3%)
+    padding: SCREEN_WIDTH * 0.03, // 3% responsive padding
     backgroundColor: '#F8F8F8',
     borderRadius: 12,
     marginTop: 15,
@@ -1255,7 +1255,7 @@ const styles = StyleSheet.create({
   paymentOption: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12, // Fixed padding (was 3%)
+    padding: SCREEN_WIDTH * 0.03, // 3% responsive padding
     borderRadius: 12,
     marginBottom: 12,
   },
@@ -1269,7 +1269,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F5F5F5',
   },
   paymentIcon: {
-    width: 50, // Fixed width (was responsive)
+    width: Math.min(SCREEN_WIDTH * 0.12, 50), // Responsive, max 50
     height: 32,
     opacity: 0.7,
   },
@@ -1399,7 +1399,7 @@ const styles = StyleSheet.create({
   termsContainer: {
     padding: SCREEN_WIDTH * 0.05, // 5% responsive padding
     backgroundColor: '#FFF9E6',
-    marginHorizontal: 20, // Fixed margin (was 5%)
+    marginHorizontal: SCREEN_WIDTH * 0.05, // 5% responsive margin
     marginTop: 15,
     borderRadius: 12,
   },
@@ -1415,7 +1415,7 @@ const styles = StyleSheet.create({
   },
   // Bottom Container
   bottomContainer: {
-    paddingHorizontal: 20, // Fixed padding (was 5%)
+    paddingHorizontal: SCREEN_WIDTH * 0.05, // 5% responsive padding
     paddingVertical: 15,
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
@@ -1455,7 +1455,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20, // Fixed padding (was 5%)
+    paddingHorizontal: SCREEN_WIDTH * 0.05, // 5% responsive padding
     paddingVertical: 15,
     borderBottomWidth: 1,
     borderBottomColor: '#E0E0E0',
@@ -1481,7 +1481,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   modalMapContainer: {
-    height: 200, // Fixed height (was responsive)
+    height: Math.max(SCREEN_HEIGHT * 0.25, 200), // Responsive, min 200
     position: 'relative',
   },
   modalMap: {
@@ -1511,7 +1511,7 @@ const styles = StyleSheet.create({
   },
   modalForm: {
     flex: 1,
-    paddingHorizontal: 20, // Fixed padding (was 5%)
+    paddingHorizontal: SCREEN_WIDTH * 0.05, // 5% responsive padding
     paddingTop: 20,
   },
   formSection: {

@@ -16,26 +16,14 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-// Lazy import to avoid import-time native module crash in production
-// import MapView, { Marker, Region, Polyline } from 'react-native-maps';
+import MapView, { Marker, Region, Polyline } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import { apiService, ApiResponse } from '../services/api';
 import { fontFamily } from '../utils/fonts';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { orderTrackingWS } from '../services/orderTrackingWebSocket';
 
-// Lazy initialization to avoid import-time crashes in production builds
-const getDimensions = () => Dimensions.get('window');
-const getScreenWidth = () => getDimensions().width;
-const getScreenHeight = () => getDimensions().height;
-
-// Type for map region (from react-native-maps)
-interface Region {
-  latitude: number;
-  longitude: number;
-  latitudeDelta: number;
-  longitudeDelta: number;
-}
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 interface RiderInfo {
   rider_id: number;
@@ -108,10 +96,6 @@ interface OrderData {
 }
 
 const OrderTrackingScreen: React.FC = () => {
-  // Lazy load react-native-maps to avoid import-time native module crash
-  const MapView = require('react-native-maps').default;
-  const { Marker, Polyline } = require('react-native-maps');
-  
   const { id } = useLocalSearchParams<{ id: string }>();
   const [orderData, setOrderData] = useState<OrderData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -1550,13 +1534,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   headerContainer: {
-    paddingHorizontal: 20, // Fixed padding (was 5% responsive)
+    paddingHorizontal: SCREEN_WIDTH * 0.05, // 5% responsive padding
     paddingTop: 10,
     paddingBottom: 10,
     backgroundColor: '#FFFFFF',
   },
   content: {
-    paddingHorizontal: 20, // Fixed padding (was 5% responsive)
+    paddingHorizontal: SCREEN_WIDTH * 0.05, // 5% responsive padding
     paddingVertical: 20,
     borderTopLeftRadius: 32,
     borderTopRightRadius: 32,
@@ -1578,7 +1562,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 40, // Fixed padding (was 10% responsive)
+    paddingHorizontal: SCREEN_WIDTH * 0.1, // 10% responsive padding
     paddingVertical: 20,
   },
   errorTitle: {
@@ -1634,7 +1618,7 @@ const styles = StyleSheet.create({
   pharmacyCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 24,
-    padding: 8, // Fixed padding (was 2% responsive)
+    padding: SCREEN_WIDTH * 0.02, // 2% responsive padding
     marginBottom: 20,
     borderWidth: 1,
     borderColor: '#E0E0E0',
@@ -1648,9 +1632,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   pharmacyImageContainer: {
-    width: 60, // Fixed size (was responsive with max 60)
-    height: 60,
-    borderRadius: 30,
+    width: Math.min(SCREEN_WIDTH * 0.15, 60), // Responsive, max 60
+    height: Math.min(SCREEN_WIDTH * 0.15, 60),
+    borderRadius: Math.min(SCREEN_WIDTH * 0.075, 30),
     backgroundColor: '#F8F9FA',
     justifyContent: 'center',
     alignItems: 'center',
@@ -1660,9 +1644,9 @@ const styles = StyleSheet.create({
     borderColor: '#E0E0E0',
   },
   pharmacyImage: {
-    width: 60, // Fixed size (was responsive with max 60)
-    height: 60,
-    borderRadius: 30,
+    width: Math.min(SCREEN_WIDTH * 0.15, 60), // Responsive, max 60
+    height: Math.min(SCREEN_WIDTH * 0.15, 60),
+    borderRadius: Math.min(SCREEN_WIDTH * 0.075, 30),
   },
   pharmacyDetails: {
     flex: 1,
