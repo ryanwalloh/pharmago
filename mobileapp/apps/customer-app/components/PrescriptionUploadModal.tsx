@@ -19,7 +19,7 @@ import { fontFamily } from '../utils/fonts';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 
-// Removed Dimensions.get() at module level to prevent import-time crashes
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 interface PrescriptionUploadModalProps {
   visible: boolean;
@@ -399,7 +399,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20, // Fixed padding (was 5%)
+    paddingHorizontal: SCREEN_WIDTH * 0.05, // 5% responsive padding
     paddingVertical: 15,
     borderBottomWidth: 1,
     borderBottomColor: '#E0E0E0',
@@ -423,7 +423,7 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    paddingHorizontal: 20, // Fixed padding (was 5%)
+    paddingHorizontal: SCREEN_WIDTH * 0.05, // 5% responsive padding
   },
   section: {
     marginBottom: 20,
@@ -447,7 +447,7 @@ const styles = StyleSheet.create({
   },
   selectedImage: {
     width: '100%',
-    height: 200, // Fixed height
+    height: Math.min(SCREEN_HEIGHT * 0.25, 200), // Responsive height, max 200
     borderRadius: 10,
     marginBottom: 15,
   },
@@ -494,7 +494,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#FFFFFF',
     borderRadius: 24,
-    padding: 16, // Fixed padding (was 4%)
+    padding: SCREEN_WIDTH * 0.04, // 4% responsive padding
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: 80,
@@ -541,7 +541,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#FFFFFF',
     borderRadius: 24,
-    padding: 16, // Fixed padding (was 4%)
+    padding: SCREEN_WIDTH * 0.04, // 4% responsive padding
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: 80,
@@ -682,7 +682,7 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
   },
   footer: {
-    paddingHorizontal: 20, // Fixed padding (was 5%)
+    paddingHorizontal: SCREEN_WIDTH * 0.05, // 5% responsive padding
     paddingVertical: 15,
     borderTopWidth: 1,
     borderTopColor: '#E0E0E0',
@@ -712,7 +712,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#2A2A2A',
     borderTopLeftRadius: 34,
     borderTopRightRadius: 34,
-    paddingHorizontal: 20, // Fixed padding (was 5%)
+    paddingHorizontal: SCREEN_WIDTH * 0.05, // 5% responsive padding
     paddingTop: 24,
     paddingBottom: 34,
     alignItems: 'center',
