@@ -84,11 +84,17 @@ export default function OrderTrackingRoute() {
           <Text style={styles.errorDetail}>
             The tracking screen encountered an error. Your order is still being processed.
           </Text>
+          {/* Show error details on screen for debugging */}
+          <Text style={styles.debugText}>{debugInfo}</Text>
         </View>
       }
       onError={(error, errorInfo) => {
         console.error('OrderTrackingScreen crashed:', error, errorInfo);
-        setDebugInfo(`Render error: ${error.message}`);
+        console.error('Error stack:', error.stack);
+        console.error('Component stack:', errorInfo.componentStack);
+        const errorMsg = error.message || 'Unknown error';
+        const errorName = error.name || 'Error';
+        setDebugInfo(`${errorName}: ${errorMsg.substring(0, 100)}`);
       }}
     >
       <ScreenComponent />
@@ -132,5 +138,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     textAlign: 'center',
+    marginBottom: 12,
   },
 });
