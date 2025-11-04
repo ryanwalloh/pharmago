@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import ErrorBoundary from '../../components/ErrorBoundary';
 
 // CRITICAL: DO NOT import OrderTrackingScreen at module level
 // Production builds require significant delay for native bridge initialization
@@ -74,8 +75,25 @@ export default function OrderTrackingRoute() {
     );
   }
   
-  // Render the dynamically loaded component
-  return <ScreenComponent />;
+  // Render the dynamically loaded component wrapped in error boundary
+  return (
+    <ErrorBoundary
+      fallback={
+        <View style={styles.error}>
+          <Text style={styles.errorText}>Order tracking screen error</Text>
+          <Text style={styles.errorDetail}>
+            The tracking screen encountered an error. Your order is still being processed.
+          </Text>
+        </View>
+      }
+      onError={(error, errorInfo) => {
+        console.error('OrderTrackingScreen crashed:', error, errorInfo);
+        setDebugInfo(`Render error: ${error.message}`);
+      }}
+    >
+      <ScreenComponent />
+    </ErrorBoundary>
+  );
 }
 
 const styles = StyleSheet.create({
