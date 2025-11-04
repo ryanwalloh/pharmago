@@ -22,6 +22,7 @@ import { apiService, ApiResponse } from '../services/api';
 import { fontFamily } from '../utils/fonts';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { orderTrackingWS } from '../services/orderTrackingWebSocket';
+import { chatWebSocket } from '../services/chatWebSocket';
 
 // Type definitions for react-native-maps (used without importing to avoid crash)
 interface Region {
@@ -321,6 +322,75 @@ const OrderTrackingScreen: React.FC = () => {
     }
   }, [chatRoom?.id]);
 
+  // ✅ NEW: Setup WebSocket event listeners for real-time chat
+  const setupChatWebSocketListeners = useCallback((roomId: number) => {
+    console.log('📡 Setting up chat WebSocket listeners for room', roomId);
+    
+    // Handler for new messages
+    const handleNewMessage = (data: any) => {
+      console.log('📨 New message received via WebSocket:', data);
+      if (data.message) {
+        setChatMessages((prev) => {
+          // Check if message already exists (avoid duplicates)
+          const exists = prev.some((m: any) => m.id === data.message.id);
+          if (exists) return prev;
+          
+          return [...prev, data.message];
+        });
+        
+        // Scroll to bottom
+        setTimeout(() => {
+          if (chatScrollRef.current) {
+            chatScrollRef.current.scrollToEnd({ animated: true });
+          }
+        }, 100);
+        
+        // Mark as read if chat is open
+        if (showChatModal) {
+          apiService.markOrderChatRead(roomId);
+          setUnreadCount(0);
+        }
+      }
+    };
+    
+    // Handler for typing status
+    const handleTypingStatus = (data: any) => {
+      console.log('⌨️ Typing status received:', data);
+      if (data.sender_id && data.sender_name) {
+        setChatTyping((prev) => ({
+          ...prev,
+          [data.sender_id]: data.is_typing ? data.sender_name : null
+        }));
+      }
+    };
+    
+    // Handler for connection established
+    const handleConnected = () => {
+      console.log('✅ Chat WebSocket connected');
+    };
+    
+    // Handler for disconnection
+    const handleDisconnected = (data: any) => {
+      console.log('🔌 Chat WebSocket disconnected:', data.code);
+    };
+    
+    // Register event handlers
+    chatWebSocket.on('new_message', handleNewMessage);
+    chatWebSocket.on('chat_message', handleNewMessage); // Backend sends 'chat_message' type
+    chatWebSocket.on('typing_status', handleTypingStatus);
+    chatWebSocket.on('connection_established', handleConnected);
+    chatWebSocket.on('disconnected', handleDisconnected);
+    
+    // Cleanup function to remove listeners
+    return () => {
+      chatWebSocket.off('new_message', handleNewMessage);
+      chatWebSocket.off('chat_message', handleNewMessage);
+      chatWebSocket.off('typing_status', handleTypingStatus);
+      chatWebSocket.off('connection_established', handleConnected);
+      chatWebSocket.off('disconnected', handleDisconnected);
+    };
+  }, [showChatModal]);
+
   // Poll for unread messages in the background
   const checkUnreadMessages = useCallback(async () => {
     try {
@@ -354,6 +424,11 @@ const OrderTrackingScreen: React.FC = () => {
           setAutoOpenedChat(true);
           // Fetch messages with the room ID
           await fetchChatMessages(room.id);
+          
+          // ✅ Connect to WebSocket for real-time chat
+          console.log('🔌 Connecting to chat WebSocket (auto-open)...', room.id);
+          chatWebSocket.connect(room.id);
+          setupChatWebSocketListeners(room.id);
         } else {
           setUnreadCount(newUnreadCount);
         }
@@ -361,7 +436,37 @@ const OrderTrackingScreen: React.FC = () => {
     } catch (error) {
       console.log('Error checking unread messages:', error);
     }
-  }, [orderData?.order_id, orderData?.pharmacy_id, showChatModal, unreadCount, autoOpenedChat, fetchChatMessages]);
+  }, [orderData?.order_id, orderData?.pharmacy_id, showChatModal, unreadCount, autoOpenedChat, fetchChatMessages, setupChatWebSocketListeners]);
+
+  // ✅ NEW: Send chat message via WebSocket (with HTTP fallback)
+  const sendChatMessage = useCallback(async (roomId: number, content: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      // Get customer ID for WebSocket
+      const customerId = await AsyncStorage.getItem('customer_id');
+      if (!customerId) {
+        return { success: false, error: 'Customer ID not found' };
+      }
+      
+      // Try WebSocket first
+      if (chatWebSocket.isConnected()) {
+        console.log('📤 Sending message via WebSocket...');
+        const sent = chatWebSocket.sendMessage(content, parseInt(customerId));
+        
+        if (sent) {
+          console.log('✅ Message sent via WebSocket');
+          return { success: true };
+        }
+      }
+      
+      // Fallback to HTTP if WebSocket failed or not connected
+      console.log('📡 Sending message via HTTP (WebSocket not available)...');
+      const res = await apiService.sendOrderChatMessage(roomId, content);
+      return res;
+    } catch (error) {
+      console.error('❌ Error sending message:', error);
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to send' };
+    }
+  }, []);
 
   const getCustomerLocation = async () => {
     try {
@@ -574,18 +679,19 @@ const OrderTrackingScreen: React.FC = () => {
     }
   }, [orderData]);
 
+  // ❌ REMOVED: HTTP polling for unread messages (now using WebSocket for real-time updates)
   // Background polling for unread messages
   useEffect(() => {
     if (!orderData?.order_id || !orderData?.pharmacy_id) return;
     
-    // Initial check
+    // Initial check still useful
     checkUnreadMessages();
     
-    // Start polling every 20 seconds
-    if (unreadPollRef.current) clearInterval(unreadPollRef.current);
-    unreadPollRef.current = setInterval(() => {
-      checkUnreadMessages();
-    }, 20000); // Increased from 10s to 20s to reduce backend load
+    // ✅ WebSocket handles real-time updates, no polling needed
+    // if (unreadPollRef.current) clearInterval(unreadPollRef.current);
+    // unreadPollRef.current = setInterval(() => {
+    //   checkUnreadMessages();
+    // }, 20000);
     
     return () => {
       if (unreadPollRef.current) {
@@ -609,27 +715,29 @@ const OrderTrackingScreen: React.FC = () => {
     }
   }, [orderData]);
 
+  // ❌ REMOVED: HTTP polling for typing status (now using WebSocket for real-time updates)
   // Start/stop typing polling with modal
   useEffect(() => {
     isMountedRef.current = true;
-    const start = async () => {
-      try {
-        if (showChatModal && chatRoom?.id) {
-          const poll = async () => {
-            const res = await apiService.getOrderChatTypingStatus(chatRoom.id);
-            if (res.success && (res.data as any)?.typing) setChatTyping((res.data as any).typing);
-          };
-          await poll();
-          if (chatTypingPollRef.current) clearInterval(chatTypingPollRef.current);
-          chatTypingPollRef.current = setInterval(poll, 10000); // Increased from 4s to 10s to reduce backend load
-        } else if (chatTypingPollRef.current) {
-          clearInterval(chatTypingPollRef.current);
-          chatTypingPollRef.current = null;
-          setChatTyping({});
-        }
-      } catch {}
-    };
-    start();
+    // ✅ WebSocket handles real-time typing status, no polling needed
+    // const start = async () => {
+    //   try {
+    //     if (showChatModal && chatRoom?.id) {
+    //       const poll = async () => {
+    //         const res = await apiService.getOrderChatTypingStatus(chatRoom.id);
+    //         if (res.success && (res.data as any)?.typing) setChatTyping((res.data as any).typing);
+    //       };
+    //       await poll();
+    //       if (chatTypingPollRef.current) clearInterval(chatTypingPollRef.current);
+    //       chatTypingPollRef.current = setInterval(poll, 10000);
+    //     } else if (chatTypingPollRef.current) {
+    //       clearInterval(chatTypingPollRef.current);
+    //       chatTypingPollRef.current = null;
+    //       setChatTyping({});
+    //     }
+    //   } catch {}
+    // };
+    // start();
     return () => {
       isMountedRef.current = false;
       if (chatTypingPollRef.current) {
@@ -1023,11 +1131,14 @@ const OrderTrackingScreen: React.FC = () => {
                       setChatRoom(room);
                       // Pass room ID directly to fetchChatMessages to fix timing issue
                       await fetchChatMessages(room.id);
-                      // start polling
-                      if (chatPollRef.current) clearInterval(chatPollRef.current);
-                      chatPollRef.current = setInterval(() => {
-                        fetchChatMessages(room.id);
-                      }, 20000); // Increased from 12s to 20s to reduce backend load
+                      
+                      // ✅ NEW: Connect to WebSocket for real-time chat
+                      console.log('🔌 Connecting to chat WebSocket...', room.id);
+                      chatWebSocket.connect(room.id);
+                      
+                      // Set up WebSocket event listeners
+                      setupChatWebSocketListeners(room.id);
+                      
                       setShowChatModal(true);
                     } catch {
                       setChatError('Unexpected error opening chat');
@@ -1199,7 +1310,12 @@ const OrderTrackingScreen: React.FC = () => {
               <Text style={styles.chatHeaderTitle} numberOfLines={1}>
                 Chat with {orderData?.pharmacy_name || 'Pharmacy'}
               </Text>
-              <TouchableOpacity onPress={() => setShowChatModal(false)}>
+              <TouchableOpacity onPress={() => {
+                // ✅ Disconnect WebSocket when closing chat
+                console.log('🔌 Disconnecting chat WebSocket...');
+                chatWebSocket.disconnect();
+                setShowChatModal(false);
+              }}>
                 <Ionicons name="close" size={24} color="#333" />
               </TouchableOpacity>
             </View>
@@ -1350,15 +1466,33 @@ const OrderTrackingScreen: React.FC = () => {
                   style={{ flex: 1, borderWidth: 1, borderColor: '#E0E0E0', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: '#333333', fontFamily: fontFamily.light }}
                   placeholder="Type a message..."
                   value={chatInput}
-                  onChangeText={(text) => {
+                  onChangeText={async (text) => {
                     setChatInput(text);
+                    // ✅ Send typing indicator via WebSocket (with HTTP fallback)
                     try {
                       if (chatRoom?.id) {
                         if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
-                        apiService.setOrderChatTyping(chatRoom.id, true);
-                        typingTimerRef.current = setTimeout(() => {
-                          apiService.setOrderChatTyping(chatRoom.id, false);
-                        }, 2000);
+                        
+                        const customerId = await AsyncStorage.getItem('customer_id');
+                        const customerName = await AsyncStorage.getItem('customer_name') || 'Customer';
+                        
+                        if (customerId) {
+                          // Try WebSocket first
+                          if (chatWebSocket.isConnected()) {
+                            chatWebSocket.setTyping(true, parseInt(customerId), customerName);
+                          } else {
+                            // Fallback to HTTP
+                            apiService.setOrderChatTyping(chatRoom.id, true);
+                          }
+                          
+                          typingTimerRef.current = setTimeout(() => {
+                            if (chatWebSocket.isConnected()) {
+                              chatWebSocket.setTyping(false, parseInt(customerId), customerName);
+                            } else {
+                              apiService.setOrderChatTyping(chatRoom.id, false);
+                            }
+                          }, 2000);
+                        }
                       }
                     } catch {}
                   }}
@@ -1366,24 +1500,19 @@ const OrderTrackingScreen: React.FC = () => {
                   returnKeyType="send"
                   onSubmitEditing={async () => {
                     if (!chatRoom?.id || !chatInput.trim() || chatSending) return;
-                    const sendWithTimeout = async <T,>(p: Promise<ApiResponse<T>>, ms: number): Promise<ApiResponse<T>> => {
-                      return await new Promise<ApiResponse<T>>((resolve) => {
-                        let done = false;
-                        const t = setTimeout(() => {
-                          if (!done) resolve({ success: false, error: 'Timeout sending message' } as any);
-                        }, ms);
-                        p.then((r) => { done = true; clearTimeout(t); resolve(r); })
-                         .catch(() => { done = true; clearTimeout(t); resolve({ success: false, error: 'Network error' } as any); });
-                      });
-                    };
                     try {
                       setChatSending(true);
-                      const res = await sendWithTimeout(apiService.sendOrderChatMessage(chatRoom.id, chatInput.trim()), 10000);
+                      const messageText = chatInput.trim();
+                      setChatInput(''); // Clear input immediately for better UX
+                      
+                      // ✅ Send via WebSocket (with HTTP fallback)
+                      const res = await sendChatMessage(chatRoom.id, messageText);
+                      
                       if (!res.success) {
                         setChatError(res.error || 'Failed to send message');
+                        setChatInput(messageText); // Restore message on failure
                       } else {
-                        setChatInput('');
-                        await fetchChatMessages();
+                        // Scroll to bottom
                         requestAnimationFrame(() => {
                           if (chatScrollRef.current) chatScrollRef.current.scrollToEnd({ animated: true });
                         });
@@ -1410,24 +1539,19 @@ const OrderTrackingScreen: React.FC = () => {
                   disabled={chatSending || !chatInput.trim() || !chatRoom?.id}
                   onPress={async () => {
                     if (!chatRoom?.id || !chatInput.trim() || chatSending) return;
-                    const sendWithTimeout = async <T,>(p: Promise<ApiResponse<T>>, ms: number): Promise<ApiResponse<T>> => {
-                      return await new Promise<ApiResponse<T>>((resolve) => {
-                        let done = false;
-                        const t = setTimeout(() => {
-                          if (!done) resolve({ success: false, error: 'Timeout sending message' } as any);
-                        }, ms);
-                        p.then((r) => { done = true; clearTimeout(t); resolve(r); })
-                         .catch(() => { done = true; clearTimeout(t); resolve({ success: false, error: 'Network error' } as any); });
-                      });
-                    };
                     try {
                       setChatSending(true);
-                      const res = await sendWithTimeout(apiService.sendOrderChatMessage(chatRoom.id, chatInput.trim()), 10000);
+                      const messageText = chatInput.trim();
+                      setChatInput(''); // Clear input immediately for better UX
+                      
+                      // ✅ Send via WebSocket (with HTTP fallback)
+                      const res = await sendChatMessage(chatRoom.id, messageText);
+                      
                       if (!res.success) {
                         setChatError(res.error || 'Failed to send message');
+                        setChatInput(messageText); // Restore message on failure
                       } else {
-                        setChatInput('');
-                        await fetchChatMessages();
+                        // Scroll to bottom
                         requestAnimationFrame(() => {
                           if (chatScrollRef.current) chatScrollRef.current.scrollToEnd({ animated: true });
                         });
