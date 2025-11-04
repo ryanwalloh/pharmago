@@ -581,11 +581,11 @@ const OrderTrackingScreen: React.FC = () => {
     // Initial check
     checkUnreadMessages();
     
-    // Start polling every 10 seconds
+    // Start polling every 20 seconds
     if (unreadPollRef.current) clearInterval(unreadPollRef.current);
     unreadPollRef.current = setInterval(() => {
       checkUnreadMessages();
-    }, 10000); // Check every 10 seconds
+    }, 20000); // Increased from 10s to 20s to reduce backend load
     
     return () => {
       if (unreadPollRef.current) {
@@ -621,7 +621,7 @@ const OrderTrackingScreen: React.FC = () => {
           };
           await poll();
           if (chatTypingPollRef.current) clearInterval(chatTypingPollRef.current);
-          chatTypingPollRef.current = setInterval(poll, 4000);
+          chatTypingPollRef.current = setInterval(poll, 10000); // Increased from 4s to 10s to reduce backend load
         } else if (chatTypingPollRef.current) {
           clearInterval(chatTypingPollRef.current);
           chatTypingPollRef.current = null;
@@ -1027,7 +1027,7 @@ const OrderTrackingScreen: React.FC = () => {
                       if (chatPollRef.current) clearInterval(chatPollRef.current);
                       chatPollRef.current = setInterval(() => {
                         fetchChatMessages(room.id);
-                      }, 12000);
+                      }, 20000); // Increased from 12s to 20s to reduce backend load
                       setShowChatModal(true);
                     } catch {
                       setChatError('Unexpected error opening chat');

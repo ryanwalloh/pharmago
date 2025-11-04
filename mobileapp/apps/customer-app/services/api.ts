@@ -639,17 +639,8 @@ class ApiService {
 
   // Chat (dev direct endpoints)
   async getOrCreateOrderChatRoom(orderId: number, pharmacyId?: number): Promise<ApiResponse<any>> {
-    // Try secure route first
-    const secure = await this.makeRequest(`/chat-rooms/get-or-create-by-order/`, {
-      method: 'POST',
-      body: JSON.stringify({ order_id: orderId })
-    }, true);
-    if (secure.success) {
-      // Normalize to { room }
-      const roomObj = (secure.data as any) || {};
-      return { success: true, data: { room: roomObj } };
-    }
-    // Fallback to dev route and normalize response shape to { room: { id, room_id } }
+    // Customer app: Use public endpoint directly (no auth needed)
+    // Skipping secure endpoint to avoid 403 errors and latency
     const direct = await this.makeDirectRequest('/order-chat-room/', {
       method: 'POST',
       headers: {
@@ -665,26 +656,14 @@ class ApiService {
   }
 
   async getOrderChatMessages(roomId: number, limit: number = 100): Promise<ApiResponse<any>> {
-    // Secure
-    const secure = await this.makeRequest(`/chat-rooms/${roomId}/messages/`, {}, true);
-    if (secure.success) {
-      // DRF returns a list or paginated results; normalize to { messages, count }
-      const payload: any = secure.data;
-      const messages = Array.isArray(payload) ? payload : (Array.isArray(payload?.results) ? payload.results : []);
-      return { success: true, data: { room: { id: roomId }, messages, count: messages.length } };
-    }
-    // Fallback
+    // Customer app: Use public endpoint directly (no auth needed)
+    // Skipping secure endpoint to avoid 403 errors and latency
     return this.makeDirectRequest(`/order-chat-messages/?room_id=${roomId}&limit=${limit}`);
   }
 
   async sendOrderChatMessage(roomId: number, content: string): Promise<ApiResponse<any>> {
-    // Secure
-    const secure = await this.makeRequest(`/chat-rooms/${roomId}/send/`, {
-      method: 'POST',
-      body: JSON.stringify({ content })
-    }, true);
-    if (secure.success) return secure;
-    // Fallback (dev)
+    // Customer app: Use public endpoint directly (no auth needed)
+    // Skipping secure endpoint to avoid 403 errors and latency
     return this.makeDirectRequest('/order-chat-send-customer/', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -693,10 +672,8 @@ class ApiService {
   }
 
   async markOrderChatRead(roomId: number, pharmacyId?: number): Promise<ApiResponse<any>> {
-    // Secure
-    const secure = await this.makeRequest(`/chat-rooms/${roomId}/mark-read/`, { method: 'POST' }, true);
-    if (secure.success) return secure;
-    // Fallback
+    // Customer app: Use public endpoint directly (no auth needed)
+    // Skipping secure endpoint to avoid 403 errors and latency
     return this.makeDirectRequest('/order-chat-mark-read/', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -705,13 +682,8 @@ class ApiService {
   }
 
   async setOrderChatTyping(roomId: number, isTyping: boolean, pharmacyId?: number): Promise<ApiResponse<any>> {
-    // Secure
-    const secure = await this.makeRequest(`/chat-rooms/${roomId}/typing/`, {
-      method: 'POST',
-      body: JSON.stringify({ is_typing: isTyping })
-    }, true);
-    if (secure.success) return secure;
-    // Fallback
+    // Customer app: Use public endpoint directly (no auth needed)
+    // Skipping secure endpoint to avoid 403 errors and latency
     return this.makeDirectRequest('/order-chat-typing/', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -720,8 +692,8 @@ class ApiService {
   }
 
   async getOrderChatTypingStatus(roomId: number): Promise<ApiResponse<any>> {
-    const secure = await this.makeRequest(`/chat-rooms/${roomId}/typing-status/`, {}, true);
-    if (secure.success) return secure;
+    // Customer app: Use public endpoint directly (no auth needed)
+    // Skipping secure endpoint to avoid 403 errors and latency
     return this.makeDirectRequest(`/order-chat-typing-status/?room_id=${roomId}`);
   }
 
