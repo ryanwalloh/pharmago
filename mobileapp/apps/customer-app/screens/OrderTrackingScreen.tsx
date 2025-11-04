@@ -129,11 +129,34 @@ interface OrderData {
 }
 
 const OrderTrackingScreen: React.FC = () => {
-  // Lazy-load MapView components inside the component to avoid import-time crash
-  const MapView = require('react-native-maps').default;
-  const { Marker, Polyline } = require('react-native-maps');
-  
   const { id } = useLocalSearchParams<{ id: string }>();
+  
+  // Lazy-load MapView components - CRITICAL: wrap in try-catch and delay
+  const [MapComponents, setMapComponents] = React.useState<any>(null);
+  
+  React.useEffect(() => {
+    // Additional delay before loading maps to ensure native modules are ready
+    const timer = setTimeout(() => {
+      try {
+        const maps = require('react-native-maps');
+        setMapComponents({
+          MapView: maps.default,
+          Marker: maps.Marker,
+          Polyline: maps.Polyline,
+        });
+      } catch (error) {
+        console.error('Failed to load react-native-maps:', error);
+        // Continue without maps - order tracking will work without live map
+      }
+    }, 100); // Small delay after component mount
+    
+    return () => clearTimeout(timer);
+  }, []);
+  
+  // Destructure after loading (with fallbacks)
+  const MapView = MapComponents?.MapView;
+  const Marker = MapComponents?.Marker;
+  const Polyline = MapComponents?.Polyline;
   const [orderData, setOrderData] = useState<OrderData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -783,8 +806,8 @@ const OrderTrackingScreen: React.FC = () => {
 
         {/* Dynamic Status Display - Image or Map */}
         <View style={styles.statusDisplayContainer}>
-          {getStatusInfo().showMap && orderData.rider_location ? (
-            // Show map with rider tracking when picked_up
+          {getStatusInfo().showMap && orderData.rider_location && MapView ? (
+            // Show map with rider tracking when picked_up (only if maps loaded)
             <View style={styles.trackingMapContainer}>
               <MapView
                 style={styles.trackingMap}
