@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   RefreshControl,
   Dimensions,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -15,10 +16,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { fontFamily } from '../utils/fonts';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// PHASE 2: Added apiService with REAL data fetching (NO polling yet)
-// Lazy-load apiService to avoid import-time crashes
-const getApiService = () => require('../services/api').apiService;
-
+// PRODUCTION VERSION: AsyncStorage only, no MapView, no WebSocket, no polling
+// Simple, robust, functional order tracking
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface OrderData {
@@ -28,12 +27,15 @@ interface OrderData {
   prescription_status?: string;
   payment_status?: string;
   pharmacy_name: string;
+  pharmacy_storefront_image_url?: string;
   delivery_address: string;
   subtotal: number;
   delivery_fee: number;
   discount_amount: number;
   total_amount: number;
   created_at: string;
+  prescription_image_url?: string;
+  items?: any[];
 }
 
 const OrderTrackingScreen: React.FC = () => {
@@ -42,53 +44,92 @@ const OrderTrackingScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pharmacyImageError, setPharmacyImageError] = useState(false);
 
-  const fetchOrderData = useCallback(async () => {
-    if (!id || id === 'undefined' || id === 'null') {
-      setError('Invalid order ID');
+  // Load order from AsyncStorage (saved during checkout)
+  const loadOrderFromStorage = useCallback(async () => {
+    try {
+      const stored = await AsyncStorage.getItem('currentOrder');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        setOrderData(parsed);
+        setError(null);
+      } else {
+        setError('Order data not found. Please place an order first.');
+      }
+    } catch (err) {
+      console.error('Error loading order from storage:', err);
+      setError('Failed to load order data.');
+    } finally {
       setLoading(false);
+    }
+  }, []);
+
+  // Refresh order data from API
+  const refreshOrderData = useCallback(async () => {
+    if (!id || id === 'undefined' || id === 'null') {
       return;
     }
 
     try {
-      setLoading(true);
-      setError(null);
-
-      console.log('📦 Fetching order data for ID:', id);
-      const apiService = getApiService();
+      console.log('🔄 Refreshing order data for ID:', id);
+      
+      // Dynamic import inside async function
+      const { apiService } = await import('../services/api');
       const response = await apiService.getOrderStatus(id);
 
       if (response.success && response.data) {
-        console.log('✅ Order data loaded successfully');
+        console.log('✅ Order data refreshed');
         setOrderData(response.data);
+        setError(null);
         
-        // Save to AsyncStorage
-        try {
-          await AsyncStorage.setItem('currentOrder', JSON.stringify(response.data));
-        } catch (storageError) {
-          console.warn('⚠️ Failed to save order to storage:', storageError);
-        }
+        // Update AsyncStorage
+        await AsyncStorage.setItem('currentOrder', JSON.stringify(response.data));
       } else {
-        setError(response.error || 'Failed to load order data');
-        console.error('❌ Failed to load order:', response.error);
+        console.warn('⚠️ Failed to refresh:', response.error);
+        // Don't set error - keep showing cached data
       }
     } catch (err) {
-      console.error('💥 Error fetching order data:', err);
-      setError('Network error. Please check your connection.');
-    } finally {
-      setLoading(false);
+      console.error('💥 Refresh error:', err);
+      // Don't set error - keep showing cached data
     }
   }, [id]);
 
+  // Initial load from AsyncStorage only
   useEffect(() => {
-    fetchOrderData();
-  }, [fetchOrderData]);
+    loadOrderFromStorage();
+  }, [loadOrderFromStorage]);
 
+  // Pull-to-refresh triggers API call
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await fetchOrderData();
+    await refreshOrderData();
     setRefreshing(false);
-  }, [fetchOrderData]);
+  }, [refreshOrderData]);
+
+  const getStatusColor = (status: string) => {
+    const statusMap: { [key: string]: { bg: string; text: string } } = {
+      pending: { bg: '#FFF3E0', text: '#F57C00' },
+      accepted: { bg: '#E3F2FD', text: '#1976D2' },
+      ready_for_pickup: { bg: '#F3E5F5', text: '#7B1FA2' },
+      picked_up: { bg: '#E8F5E9', text: '#388E3C' },
+      delivered: { bg: '#C8E6C9', text: '#2E7D32' },
+      cancelled: { bg: '#FFEBEE', text: '#C62828' },
+    };
+    return statusMap[status] || { bg: '#F5F5F5', text: '#666' };
+  };
+
+  const getStatusIcon = (status: string) => {
+    const iconMap: { [key: string]: string } = {
+      pending: 'time-outline',
+      accepted: 'checkmark-circle-outline',
+      ready_for_pickup: 'cube-outline',
+      picked_up: 'bicycle-outline',
+      delivered: 'checkmark-done-circle-outline',
+      cancelled: 'close-circle-outline',
+    };
+    return iconMap[status] || 'help-circle-outline';
+  };
 
   if (loading) {
     return (
@@ -108,9 +149,6 @@ const OrderTrackingScreen: React.FC = () => {
           <Ionicons name="alert-circle-outline" size={64} color="#F44336" />
           <Text style={styles.errorTitle}>Unable to Load Order</Text>
           <Text style={styles.errorText}>{error || 'Order not found'}</Text>
-          <TouchableOpacity style={styles.retryButton} onPress={onRefresh}>
-            <Text style={styles.retryButtonText}>Retry</Text>
-          </TouchableOpacity>
           <TouchableOpacity style={styles.homeButton} onPress={() => router.push('/')}>
             <Text style={styles.homeButtonText}>Go Home</Text>
           </TouchableOpacity>
@@ -118,6 +156,8 @@ const OrderTrackingScreen: React.FC = () => {
       </SafeAreaView>
     );
   }
+
+  const statusColors = getStatusColor(orderData.order_status);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -127,6 +167,7 @@ const OrderTrackingScreen: React.FC = () => {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
       >
+        {/* Header */}
         <View style={styles.headerContainer}>
           <View style={styles.header}>
             <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
@@ -139,11 +180,10 @@ const OrderTrackingScreen: React.FC = () => {
         </View>
 
         <View style={styles.content}>
-          {/* Order Card */}
+          {/* Order Number Card */}
           <View style={styles.orderCard}>
-            <Ionicons name="receipt-outline" size={32} color="#00bf63" />
+            <Ionicons name="receipt-outline" size={40} color="#00bf63" />
             <Text style={styles.orderNumber}>{orderData.order_number}</Text>
-            <Text style={styles.orderStatus}>{orderData.order_status.toUpperCase()}</Text>
             <Text style={styles.orderDate}>
               {new Date(orderData.created_at).toLocaleDateString('en-US', {
                 month: 'long',
@@ -155,21 +195,40 @@ const OrderTrackingScreen: React.FC = () => {
             </Text>
           </View>
 
-          {/* Pharmacy Info */}
-          <View style={styles.infoCard}>
-            <Ionicons name="storefront-outline" size={24} color="#666" />
-            <View style={styles.infoContent}>
-              <Text style={styles.infoLabel}>Pharmacy</Text>
-              <Text style={styles.infoValue}>{orderData.pharmacy_name}</Text>
+          {/* Status Card */}
+          <View style={styles.statusCard}>
+            <View style={styles.statusHeader}>
+              <Ionicons name={getStatusIcon(orderData.order_status) as any} size={32} color={statusColors.text} />
+              <View style={styles.statusTextContainer}>
+                <Text style={styles.statusLabel}>Order Status</Text>
+                <View style={[styles.statusBadge, { backgroundColor: statusColors.bg }]}>
+                  <Text style={[styles.statusText, { color: statusColors.text }]}>
+                    {orderData.order_status.replace(/_/g, ' ').toUpperCase()}
+                  </Text>
+                </View>
+              </View>
             </View>
           </View>
 
-          {/* Delivery Address */}
-          <View style={styles.infoCard}>
-            <Ionicons name="location-outline" size={24} color="#666" />
-            <View style={styles.infoContent}>
-              <Text style={styles.infoLabel}>Delivery Address</Text>
-              <Text style={styles.infoValue}>{orderData.delivery_address}</Text>
+          {/* Pharmacy Card */}
+          <View style={styles.pharmacyCard}>
+            <View style={styles.pharmacyImageContainer}>
+              {orderData.pharmacy_storefront_image_url && !pharmacyImageError ? (
+                <Image
+                  source={{ uri: orderData.pharmacy_storefront_image_url }}
+                  style={styles.pharmacyImage}
+                  onError={() => setPharmacyImageError(true)}
+                />
+              ) : (
+                <Ionicons name="storefront" size={32} color="#00bf63" />
+              )}
+            </View>
+            <View style={styles.pharmacyInfo}>
+              <Text style={styles.pharmacyName}>{orderData.pharmacy_name}</Text>
+              <View style={styles.pharmacyIconRow}>
+                <Ionicons name="location" size={14} color="#666" />
+                <Text style={styles.pharmacyAddress}>{orderData.delivery_address}</Text>
+              </View>
             </View>
           </View>
 
@@ -177,36 +236,32 @@ const OrderTrackingScreen: React.FC = () => {
           <View style={styles.summaryCard}>
             <Text style={styles.sectionTitle}>Order Summary</Text>
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Subtotal:</Text>
+              <Text style={styles.summaryLabel}>Subtotal</Text>
               <Text style={styles.summaryValue}>₱{orderData.subtotal.toFixed(2)}</Text>
             </View>
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Delivery Fee:</Text>
+              <Text style={styles.summaryLabel}>Delivery Fee</Text>
               <Text style={styles.summaryValue}>₱{orderData.delivery_fee.toFixed(2)}</Text>
             </View>
             {orderData.discount_amount > 0 && (
               <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Discount:</Text>
+                <Text style={styles.summaryLabel}>Discount</Text>
                 <Text style={[styles.summaryValue, styles.discountText]}>
                   -₱{orderData.discount_amount.toFixed(2)}
                 </Text>
               </View>
             )}
             <View style={[styles.summaryRow, styles.totalRow]}>
-              <Text style={styles.totalLabel}>Total:</Text>
+              <Text style={styles.totalLabel}>Total</Text>
               <Text style={styles.totalValue}>₱{orderData.total_amount.toFixed(2)}</Text>
             </View>
           </View>
 
-          {/* Test Note */}
-          <View style={styles.testNote}>
-            <Ionicons name="checkmark-circle" size={24} color="#2E7D32" />
-            <Text style={styles.testNoteText}>
-              Phase 2: Real Data with apiService
-              {'\n'}
-              ✅ If you see your actual order details, apiService works!
-              {'\n'}
-              Next: Add MapView and real-time tracking
+          {/* Info Note */}
+          <View style={styles.infoNote}>
+            <Ionicons name="information-circle" size={20} color="#1976D2" />
+            <Text style={styles.infoNoteText}>
+              Pull down to refresh order status
             </Text>
           </View>
         </View>
@@ -256,27 +311,17 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     fontFamily: fontFamily.light,
   },
-  retryButton: {
+  homeButton: {
     backgroundColor: '#00bf63',
     paddingVertical: 12,
     paddingHorizontal: 32,
     borderRadius: 8,
-    marginBottom: 12,
   },
-  retryButtonText: {
+  homeButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: 'bold',
     fontFamily: fontFamily.heavy,
-  },
-  homeButton: {
-    paddingVertical: 12,
-    paddingHorizontal: 32,
-  },
-  homeButtonText: {
-    color: '#00bf63',
-    fontSize: 16,
-    fontFamily: fontFamily.light,
   },
   headerContainer: {
     paddingHorizontal: SCREEN_WIDTH * 0.05,
@@ -332,23 +377,87 @@ const styles = StyleSheet.create({
     color: '#333',
     fontFamily: fontFamily.heavy,
     marginTop: 12,
-    marginBottom: 4,
-  },
-  orderStatus: {
-    fontSize: 14,
-    color: '#F57C00',
-    fontWeight: 'bold',
-    fontFamily: fontFamily.heavy,
-    backgroundColor: '#FFF3E0',
-    paddingVertical: 6,
-    paddingHorizontal: 16,
-    borderRadius: 16,
     marginBottom: 8,
   },
   orderDate: {
-    fontSize: 12,
+    fontSize: 13,
     color: '#999',
     fontFamily: fontFamily.light,
+  },
+  statusCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+  },
+  statusHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  statusTextContainer: {
+    marginLeft: 16,
+    flex: 1,
+  },
+  statusLabel: {
+    fontSize: 13,
+    color: '#666',
+    fontFamily: fontFamily.light,
+    marginBottom: 8,
+  },
+  statusBadge: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    alignSelf: 'flex-start',
+  },
+  statusText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    fontFamily: fontFamily.heavy,
+  },
+  pharmacyCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  pharmacyImageContainer: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#F0F0F0',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+    overflow: 'hidden',
+  },
+  pharmacyImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+  },
+  pharmacyInfo: {
+    flex: 1,
+  },
+  pharmacyName: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+    fontFamily: fontFamily.heavy,
+    marginBottom: 6,
+  },
+  pharmacyIconRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  pharmacyAddress: {
+    fontSize: 13,
+    color: '#666',
+    fontFamily: fontFamily.light,
+    flex: 1,
   },
   sectionTitle: {
     fontSize: 16,
@@ -357,33 +466,9 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.heavy,
     marginBottom: 12,
   },
-  infoCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 20,
-    marginBottom: 16,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-  },
-  infoContent: {
-    marginLeft: 16,
-    flex: 1,
-  },
-  infoLabel: {
-    fontSize: 14,
-    color: '#666',
-    fontFamily: fontFamily.light,
-    marginBottom: 4,
-  },
-  infoValue: {
-    fontSize: 16,
-    color: '#333',
-    fontFamily: fontFamily.light,
-    lineHeight: 24,
-  },
   summaryCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    borderRadius: 16,
     padding: 20,
     marginBottom: 16,
   },
@@ -391,7 +476,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 10,
   },
   summaryLabel: {
     fontSize: 14,
@@ -405,39 +490,40 @@ const styles = StyleSheet.create({
   },
   discountText: {
     color: '#4CAF50',
+    fontWeight: 'bold',
   },
   totalRow: {
-    marginTop: 8,
-    paddingTop: 12,
-    borderTopWidth: 1,
+    marginTop: 12,
+    paddingTop: 16,
+    borderTopWidth: 2,
     borderTopColor: '#E0E0E0',
+    marginBottom: 0,
   },
   totalLabel: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: 'bold',
     color: '#333',
     fontFamily: fontFamily.heavy,
   },
   totalValue: {
-    fontSize: 18,
+    fontSize: 22,
     fontWeight: 'bold',
     color: '#00bf63',
     fontFamily: fontFamily.heavy,
   },
-  testNote: {
-    backgroundColor: '#E8F5E9',
+  infoNote: {
+    backgroundColor: '#E3F2FD',
     borderRadius: 12,
     padding: 16,
-    marginTop: 20,
+    marginTop: 10,
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
   },
-  testNoteText: {
-    fontSize: 14,
-    color: '#2E7D32',
+  infoNoteText: {
+    fontSize: 13,
+    color: '#1976D2',
     fontFamily: fontFamily.light,
-    lineHeight: 22,
-    marginLeft: 12,
+    marginLeft: 10,
     flex: 1,
   },
 });
