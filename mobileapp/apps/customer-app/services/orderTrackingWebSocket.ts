@@ -22,8 +22,8 @@ class OrderTrackingWebSocketService {
    * Get WebSocket URL based on environment
    */
   private getWebSocketUrl(orderId: string): string {
-    // Check if running on localhost
-    if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
+    // Check if running on localhost (web only - React Native doesn't have window.location)
+    if (typeof window !== 'undefined' && window.location?.hostname === 'localhost') {
       return `ws://localhost:8000/ws/order/tracking/${orderId}/`;
     }
 
