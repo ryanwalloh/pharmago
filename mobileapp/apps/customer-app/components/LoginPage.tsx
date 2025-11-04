@@ -286,6 +286,7 @@ const styles = StyleSheet.create({
     paddingTop: 30,
     paddingBottom: 40,
     width: '100%',
+    zIndex: 1000,
   },
   titleContainer: {
     flexDirection: 'row',
