@@ -2229,11 +2229,27 @@ const getStyles = () => {
   return cachedStyles;
 };
 
-// Lazy styles proxy - only creates styles when first property is accessed (not at import time)
-const styles = new Proxy({} as any, {
-  get(target, prop) {
-    return getStyles()[prop];
-  }
-});
+// Lazy styles - deferred with safety wrapper to prevent any import-time issues
+let styles: any;
+try {
+  styles = new Proxy({} as any, {
+    get(target, prop) {
+      try {
+        return getStyles()[prop];
+      } catch (error) {
+        console.error('Error getting style:', prop, error);
+        return {};
+      }
+    }
+  });
+} catch (proxyError) {
+  console.error('Failed to create styles Proxy, using direct getter:', proxyError);
+  // Fallback if Proxy creation fails
+  styles = new Proxy({}, {
+    get() {
+      return getStyles();
+    }
+  });
+}
 
 export default OrderTrackingScreen;
