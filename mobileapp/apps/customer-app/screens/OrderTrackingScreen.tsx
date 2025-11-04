@@ -130,7 +130,6 @@ interface OrderData {
 
 const OrderTrackingScreen: React.FC = () => {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const [renderError, setRenderError] = React.useState<string | null>(null);
   const [initStatus, setInitStatus] = React.useState<string>('Component mounted');
   
   // Lazy-load MapView components - CRITICAL: wrap in try-catch and delay
@@ -642,25 +641,23 @@ const OrderTrackingScreen: React.FC = () => {
 
 
   // Get status display info (title, subtitle, image)
+  // CRITICAL: All require() calls must be static for Metro bundler
+  const STATUS_IMAGES = {
+    pending: require('../assets/pending.png'),
+    accepted: require('../assets/accepted.png'),
+    ready_for_pickup: require('../assets/ready_for_pickup.png'),
+    delivered: require('../assets/delivered.png'),
+  };
+
   const getStatusInfo = () => {
     if (!orderData) return { title: 'Loading...', subtitle: '', showMap: false, image: null };
-
-    // Helper to safely load images
-    const safeRequire = (path: string) => {
-      try {
-        return require(path);
-      } catch (error) {
-        console.error(`Failed to load image: ${path}`, error);
-        return require('../assets/pending.png'); // Fallback image
-      }
-    };
 
     switch (orderData.order_status) {
       case 'pending':
         return {
           title: 'Order Placed',
           subtitle: 'Your order is waiting for pharmacy confirmation',
-          image: safeRequire('../assets/pending.png'),
+          image: STATUS_IMAGES.pending,
           showMap: false
         };
       case 'accepted':
@@ -668,14 +665,14 @@ const OrderTrackingScreen: React.FC = () => {
         return {
           title: 'Being Prepared',
           subtitle: 'The pharmacy is preparing your medicines',
-          image: safeRequire('../assets/accepted.png'),
+          image: STATUS_IMAGES.accepted,
           showMap: false
         };
       case 'ready_for_pickup':
         return {
           title: 'Ready for Pickup',
           subtitle: 'Your order is ready and waiting for the rider',
-          image: safeRequire('../assets/ready_for_pickup.png'),
+          image: STATUS_IMAGES.ready_for_pickup,
           showMap: false
         };
       case 'picked_up':
@@ -688,21 +685,21 @@ const OrderTrackingScreen: React.FC = () => {
         return {
           title: 'Delivered Successfully',
           subtitle: 'Your order has been delivered. Get well soon!',
-          image: safeRequire('../assets/delivered.png'),
+          image: STATUS_IMAGES.delivered,
           showMap: false
         };
       case 'cancelled':
         return {
           title: 'Order Cancelled',
           subtitle: 'This order has been cancelled',
-          image: safeRequire('../assets/pending.png'),
+          image: STATUS_IMAGES.pending,
           showMap: false
         };
       default:
         return {
           title: 'Processing',
           subtitle: 'Your order is being processed',
-          image: safeRequire('../assets/pending.png'),
+          image: STATUS_IMAGES.pending,
           showMap: false
         };
     }
