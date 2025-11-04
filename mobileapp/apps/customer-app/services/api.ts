@@ -12,18 +12,23 @@ const getApiBaseUrl = () => {
     return cachedApiBaseUrl;
   }
 
+  console.log('🔍 Determining API base URL...');
+
   try {
     // Web (localhost)
     if (typeof window !== 'undefined' && window?.location?.hostname === 'localhost') {
       cachedApiBaseUrl = 'http://localhost:8000/api/v1';
+      console.log('✅ Using localhost (web):', cachedApiBaseUrl);
       return cachedApiBaseUrl;
     }
 
     // Optional: EXPO_PUBLIC_API_BASE override (e.g., http://192.168.1.10:8000)
     const envBase: string | undefined = process.env.EXPO_PUBLIC_API_BASE;
+    console.log('🔍 EXPO_PUBLIC_API_BASE:', envBase);
     if (envBase) {
       const normalized = envBase.endsWith('/') ? envBase.slice(0, -1) : envBase;
       cachedApiBaseUrl = `${normalized}/api/v1`;
+      console.log('✅ Using env var:', cachedApiBaseUrl);
       return cachedApiBaseUrl;
     }
 
@@ -54,6 +59,7 @@ const getApiBaseUrl = () => {
         const host = withoutScheme.split(':')[0].split('/')[0];
         if (host && /^(\d{1,3}\.){3}\d{1,3}$/.test(host)) {
           cachedApiBaseUrl = `http://${host}:8000/api/v1`;
+          console.log('✅ Using derived IP:', cachedApiBaseUrl);
           return cachedApiBaseUrl;
         }
       }
@@ -66,7 +72,18 @@ const getApiBaseUrl = () => {
   // Fallback: Use Railway backend for production/testing
   // For local development, set EXPO_PUBLIC_API_BASE environment variable
   cachedApiBaseUrl = 'https://pharmago-backend-production.up.railway.app/api/v1';
+  console.log('✅ Using Railway fallback:', cachedApiBaseUrl);
   return cachedApiBaseUrl;
+};
+
+// Timeout helper for fetch requests
+const fetchWithTimeout = (url: string, options: RequestInit = {}, timeout = 15000): Promise<Response> => {
+  return Promise.race([
+    fetch(url, options),
+    new Promise<Response>((_, reject) =>
+      setTimeout(() => reject(new Error('Request timeout')), timeout)
+    )
+  ]);
 };
 
 export interface UserRegistrationData {
@@ -122,14 +139,14 @@ class ApiService {
         timestamp: new Date().toISOString()
       });
 
-      const response = await fetch(url, {
+      const response = await fetchWithTimeout(url, {
         headers: {
           'Content-Type': 'application/json',
           ...(this.authToken ? { 'Authorization': `Bearer ${this.authToken}` } : {}),
           ...options.headers,
         },
         ...options,
-      });
+      }, 15000); // 15 second timeout
 
       console.log('📡 API Response Status:', {
         status: response.status,
@@ -212,13 +229,13 @@ class ApiService {
         timestamp: new Date().toISOString()
       });
 
-      const response = await fetch(url, {
+      const response = await fetchWithTimeout(url, {
         headers: {
           'Content-Type': 'application/json',
           ...options.headers,
         },
         ...options,
-      });
+      }, 15000); // 15 second timeout
 
       console.log('📡 API Direct Response Status:', {
         status: response.status,
@@ -281,12 +298,12 @@ class ApiService {
     
     try {
       // Try to make a simple GET request to a known endpoint
-      const response = await fetch(`${this.getBaseURL()}/users/register/`, {
+      const response = await fetchWithTimeout(`${this.getBaseURL()}/users/register/`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
         },
-      });
+      }, 10000); // 10 second timeout for connection test
 
       console.log('🔗 Connection test response:', {
         status: response.status,
@@ -471,13 +488,13 @@ class ApiService {
         payload.order_id = orderId;
       }
 
-      const response = await fetch(url, {
+      const response = await fetchWithTimeout(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(payload),
-      });
+      }, 15000); // 15 second timeout
 
       const json = await response.json();
       if (!response.ok || !json.success) {
@@ -531,13 +548,13 @@ class ApiService {
         payload.user_id = userId;
       }
 
-      const response = await fetch(url, {
+      const response = await fetchWithTimeout(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(payload),
-      });
+      }, 15000); // 15 second timeout
 
       const json = await response.json();
       if (!response.ok || !json.success) {
