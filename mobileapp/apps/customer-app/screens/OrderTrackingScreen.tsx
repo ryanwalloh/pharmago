@@ -31,25 +31,32 @@ interface Region {
   longitudeDelta: number;
 }
 
-// Safe dimension getters - wrapped in try-catch to prevent crashes
-const getScreenWidth = (() => {
-  try {
-    return Dimensions.get('window').width;
-  } catch {
-    return 400; // Fallback width
-  }
-})();
+// Lazy dimension getters - ONLY called when styles are accessed (not at import time)
+// CRITICAL: Do NOT call these at module scope - defer until component render
+let cachedScreenWidth: number | null = null;
+let cachedScreenHeight: number | null = null;
 
-const getScreenHeight = (() => {
-  try {
-    return Dimensions.get('window').height;
-  } catch {
-    return 800; // Fallback height
+const getScreenWidth = (): number => {
+  if (cachedScreenWidth === null) {
+    try {
+      cachedScreenWidth = Dimensions.get('window').width;
+    } catch {
+      cachedScreenWidth = 400; // Fallback width
+    }
   }
-})();
+  return cachedScreenWidth;
+};
 
-const SCREEN_WIDTH = getScreenWidth;
-const SCREEN_HEIGHT = getScreenHeight;
+const getScreenHeight = (): number => {
+  if (cachedScreenHeight === null) {
+    try {
+      cachedScreenHeight = Dimensions.get('window').height;
+    } catch {
+      cachedScreenHeight = 800; // Fallback height
+    }
+  }
+  return cachedScreenHeight;
+};
 
 interface RiderInfo {
   rider_id: number;
@@ -1554,8 +1561,12 @@ const OrderTrackingScreen: React.FC = () => {
   );
 };
 
+// Lazy styles getter - only create styles when component first renders
+let cachedStyles: any = null;
 
-const styles = StyleSheet.create({
+const getStyles = () => {
+  if (!cachedStyles) {
+    cachedStyles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF',
@@ -1564,13 +1575,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   headerContainer: {
-    paddingHorizontal: SCREEN_WIDTH * 0.05, // 5% responsive padding
+    paddingHorizontal: getScreenWidth() * 0.05, // 5% responsive padding
     paddingTop: 10,
     paddingBottom: 10,
     backgroundColor: '#FFFFFF',
   },
   content: {
-    paddingHorizontal: SCREEN_WIDTH * 0.05, // 5% responsive padding
+    paddingHorizontal: getScreenWidth() * 0.05, // 5% responsive padding
     paddingVertical: 20,
     borderTopLeftRadius: 32,
     borderTopRightRadius: 32,
@@ -1592,7 +1603,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: SCREEN_WIDTH * 0.1, // 10% responsive padding
+    paddingHorizontal: getScreenWidth() * 0.1, // 10% responsive padding
     paddingVertical: 20,
   },
   errorTitle: {
@@ -1648,7 +1659,7 @@ const styles = StyleSheet.create({
   pharmacyCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 24,
-    padding: SCREEN_WIDTH * 0.02, // 2% responsive padding
+    padding: getScreenWidth() * 0.02, // 2% responsive padding
     marginBottom: 20,
     borderWidth: 1,
     borderColor: '#E0E0E0',
@@ -1662,9 +1673,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   pharmacyImageContainer: {
-    width: Math.min(SCREEN_WIDTH * 0.15, 60), // Responsive, max 60
-    height: Math.min(SCREEN_WIDTH * 0.15, 60),
-    borderRadius: Math.min(SCREEN_WIDTH * 0.075, 30),
+    width: Math.min(getScreenWidth() * 0.15, 60), // Responsive, max 60
+    height: Math.min(getScreenWidth() * 0.15, 60),
+    borderRadius: Math.min(getScreenWidth() * 0.075, 30),
     backgroundColor: '#F8F9FA',
     justifyContent: 'center',
     alignItems: 'center',
@@ -1674,9 +1685,9 @@ const styles = StyleSheet.create({
     borderColor: '#E0E0E0',
   },
   pharmacyImage: {
-    width: Math.min(SCREEN_WIDTH * 0.15, 60), // Responsive, max 60
-    height: Math.min(SCREEN_WIDTH * 0.15, 60),
-    borderRadius: Math.min(SCREEN_WIDTH * 0.075, 30),
+    width: Math.min(getScreenWidth() * 0.15, 60), // Responsive, max 60
+    height: Math.min(getScreenWidth() * 0.15, 60),
+    borderRadius: Math.min(getScreenWidth() * 0.075, 30),
   },
   pharmacyDetails: {
     flex: 1,
@@ -1731,7 +1742,7 @@ const styles = StyleSheet.create({
   statusPanel: {
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
-    padding: SCREEN_WIDTH * 0.04, // 4% responsive padding
+    padding: getScreenWidth() * 0.04, // 4% responsive padding
     marginBottom: 20,
     borderWidth: 1,
     borderColor: '#E0E0E0',
@@ -1795,7 +1806,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#00bf63',
     borderRadius: 12,
     paddingVertical: 16,
-    paddingHorizontal: SCREEN_WIDTH * 0.04, // 4% responsive padding
+    paddingHorizontal: getScreenWidth() * 0.04, // 4% responsive padding
     alignItems: 'center',
   },
   refreshButtonText: {
@@ -1808,7 +1819,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8F9FA',
     borderRadius: 12,
     paddingVertical: 16,
-    paddingHorizontal: SCREEN_WIDTH * 0.04, // 4% responsive padding
+    paddingHorizontal: getScreenWidth() * 0.04, // 4% responsive padding
     alignItems: 'center',
     borderWidth: 1,
     borderColor: '#E0E0E0',
@@ -1836,7 +1847,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   chatHeader: {
-    paddingHorizontal: SCREEN_WIDTH * 0.04, // 4% responsive padding
+    paddingHorizontal: getScreenWidth() * 0.04, // 4% responsive padding
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#E0E0E0',
@@ -1924,7 +1935,7 @@ const styles = StyleSheet.create({
   customModalContainer: {
     backgroundColor: 'white',
     borderRadius: 16,
-    padding: SCREEN_WIDTH * 0.06, // 6% responsive padding
+    padding: getScreenWidth() * 0.06, // 6% responsive padding
     width: '90%',
     maxWidth: 400,
     shadowColor: '#000',
@@ -1999,12 +2010,12 @@ const styles = StyleSheet.create({
   statusImageContainer: {
     alignItems: 'center',
     paddingVertical: 20,
-    paddingHorizontal: SCREEN_WIDTH * 0.05, // 5% responsive padding
+    paddingHorizontal: getScreenWidth() * 0.05, // 5% responsive padding
     paddingBottom: 50,
   },
   statusImage: {
-    width: Math.min(SCREEN_WIDTH * 0.5, 200), // Responsive, max 200
-    height: Math.min(SCREEN_WIDTH * 0.5, 200),
+    width: Math.min(getScreenWidth() * 0.5, 200), // Responsive, max 200
+    height: Math.min(getScreenWidth() * 0.5, 200),
     marginBottom: 20,
     opacity: 0.8,
   },
@@ -2025,7 +2036,7 @@ const styles = StyleSheet.create({
   },
   trackingMapContainer: {
     width: '100%',
-    height: Math.min(SCREEN_HEIGHT * 0.4, 350), // Responsive, max 350
+    height: Math.min(getScreenHeight() * 0.4, 350), // Responsive, max 350
     position: 'relative',
   },
   trackingMap: {
@@ -2035,10 +2046,10 @@ const styles = StyleSheet.create({
   mapOverlay: {
     position: 'absolute',
     top: 20,
-    left: SCREEN_WIDTH * 0.05, // 5% responsive margin
-    right: SCREEN_WIDTH * 0.05,
+    left: getScreenWidth() * 0.05, // 5% responsive margin
+    right: getScreenWidth() * 0.05,
     backgroundColor: 'rgba(255, 255, 255, 0.95)',
-    padding: SCREEN_WIDTH * 0.04, // 4% responsive padding
+    padding: getScreenWidth() * 0.04, // 4% responsive padding
     borderRadius: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -2074,10 +2085,10 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   riderAvatarContainer: {
-    width: Math.min(SCREEN_WIDTH * 0.15, 60), // Responsive, max 60
-    height: Math.min(SCREEN_WIDTH * 0.15, 60),
+    width: Math.min(getScreenWidth() * 0.15, 60), // Responsive, max 60
+    height: Math.min(getScreenWidth() * 0.15, 60),
     backgroundColor: '#E8F5E9',
-    borderRadius: Math.min(SCREEN_WIDTH * 0.075, 30),
+    borderRadius: Math.min(getScreenWidth() * 0.075, 30),
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -2092,7 +2103,7 @@ const styles = StyleSheet.create({
   orderSummary: {
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
-    padding: SCREEN_WIDTH * 0.04, // 4% responsive padding
+    padding: getScreenWidth() * 0.04, // 4% responsive padding
     marginTop: 16,
     borderWidth: 1,
     borderColor: '#E0E0E0',
@@ -2152,7 +2163,7 @@ const styles = StyleSheet.create({
   },
   prescriptionSection: {
     marginTop: 8,
-    padding: SCREEN_WIDTH * 0.03, // 3% responsive padding
+    padding: getScreenWidth() * 0.03, // 3% responsive padding
     backgroundColor: '#F0F9FF',
     borderRadius: 8,
     borderLeftWidth: 3,
@@ -2166,13 +2177,13 @@ const styles = StyleSheet.create({
   },
   discountSection: {
     marginTop: 8,
-    padding: SCREEN_WIDTH * 0.03, // 3% responsive padding
+    padding: getScreenWidth() * 0.03, // 3% responsive padding
     backgroundColor: '#FFF7ED',
     borderRadius: 8,
   },
   addressSection: {
     marginTop: 8,
-    padding: SCREEN_WIDTH * 0.03, // 3% responsive padding
+    padding: getScreenWidth() * 0.03, // 3% responsive padding
     backgroundColor: '#F8F9FA',
     borderRadius: 8,
   },
@@ -2213,6 +2224,16 @@ const styles = StyleSheet.create({
   discountValue: {
     color: '#00bf63',
   },
+});
+  }
+  return cachedStyles;
+};
+
+// Lazy styles proxy - only creates styles when first property is accessed (not at import time)
+const styles = new Proxy({} as any, {
+  get(target, prop) {
+    return getStyles()[prop];
+  }
 });
 
 export default OrderTrackingScreen;
