@@ -130,11 +130,14 @@ interface OrderData {
 
 const OrderTrackingScreen: React.FC = () => {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const [renderError, setRenderError] = React.useState<string | null>(null);
+  const [initStatus, setInitStatus] = React.useState<string>('Component mounted');
   
   // Lazy-load MapView components - CRITICAL: wrap in try-catch and delay
   const [MapComponents, setMapComponents] = React.useState<any>(null);
   
   React.useEffect(() => {
+    setInitStatus('Initializing maps...');
     // Additional delay before loading maps to ensure native modules are ready
     const timer = setTimeout(() => {
       try {
@@ -144,11 +147,14 @@ const OrderTrackingScreen: React.FC = () => {
           Marker: maps.Marker,
           Polyline: maps.Polyline,
         });
+        console.log('✅ Maps loaded successfully');
+        setInitStatus('Maps loaded');
       } catch (error) {
         console.error('Failed to load react-native-maps:', error);
+        setInitStatus('Maps failed (continuing without)');
         // Continue without maps - order tracking will work without live map
       }
-    }, 100); // Small delay after component mount
+    }, 200); // Increased delay for production
     
     return () => clearTimeout(timer);
   }, []);
@@ -469,13 +475,27 @@ const OrderTrackingScreen: React.FC = () => {
   }, [id]);
 
   useEffect(() => {
-    if (id && id !== 'undefined' && id !== 'null') {
-      fetchOrderData();
-    } else {
-      // Try to get order from AsyncStorage if no valid ID provided
-      loadOrderFromStorage();
+    try {
+      setInitStatus('Fetching order data...');
+      if (id && id !== 'undefined' && id !== 'null') {
+        fetchOrderData().catch(err => {
+          console.error('Error in fetchOrderData:', err);
+          setError('Failed to load order. Please try again.');
+          setLoading(false);
+          setInitStatus('Order fetch failed');
+        });
+      } else {
+        setInitStatus('Loading from storage...');
+        // Try to get order from AsyncStorage if no valid ID provided
+        loadOrderFromStorage();
+      }
+    } catch (error) {
+      console.error('Error in order fetch useEffect:', error);
+      setError('Failed to initialize order tracking');
+      setLoading(false);
+      setInitStatus('Init failed');
     }
-  }, [id, fetchOrderData]);
+  }, [id]); // Removed fetchOrderData from dependencies to prevent loops
 
   // Handle customer location and map updates when order data changes
   useEffect(() => {
@@ -760,6 +780,10 @@ const OrderTrackingScreen: React.FC = () => {
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#00bf63" />
           <Text style={styles.loadingText}>Loading order details...</Text>
+          {/* Show status on screen for debugging */}
+          <Text style={{ marginTop: 12, fontSize: 12, color: '#999', textAlign: 'center' }}>
+            {initStatus}
+          </Text>
         </View>
       </SafeAreaView>
     );
