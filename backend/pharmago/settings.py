@@ -148,6 +148,17 @@ DATABASES = {
         'PASSWORD': os.getenv('DB_PASSWORD', 'postgres'),
         'HOST': os.getenv('DB_HOST', 'localhost'),
         'PORT': os.getenv('DB_PORT', '5434'),
+        
+        # Connection pooling to prevent "too many clients" errors
+        # Reuse connections for 10 minutes instead of opening new ones every request
+        'CONN_MAX_AGE': 600,  # Keep connections alive for 10 minutes
+        'CONN_HEALTH_CHECKS': True,  # Enable connection health checks (Django 4.1+)
+        
+        # Connection options for stability
+        'OPTIONS': {
+            'connect_timeout': 10,  # 10 second connection timeout
+            'options': '-c statement_timeout=30000'  # 30 second query timeout
+        }
     }
 }
 
