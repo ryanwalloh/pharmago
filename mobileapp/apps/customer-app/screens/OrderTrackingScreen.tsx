@@ -643,14 +643,24 @@ const OrderTrackingScreen: React.FC = () => {
 
   // Get status display info (title, subtitle, image)
   const getStatusInfo = () => {
-    if (!orderData) return { title: 'Loading...', subtitle: '', showMap: false };
+    if (!orderData) return { title: 'Loading...', subtitle: '', showMap: false, image: null };
+
+    // Helper to safely load images
+    const safeRequire = (path: string) => {
+      try {
+        return require(path);
+      } catch (error) {
+        console.error(`Failed to load image: ${path}`, error);
+        return require('../assets/pending.png'); // Fallback image
+      }
+    };
 
     switch (orderData.order_status) {
       case 'pending':
         return {
           title: 'Order Placed',
           subtitle: 'Your order is waiting for pharmacy confirmation',
-          image: require('../assets/pending.png'),
+          image: safeRequire('../assets/pending.png'),
           showMap: false
         };
       case 'accepted':
@@ -658,14 +668,14 @@ const OrderTrackingScreen: React.FC = () => {
         return {
           title: 'Being Prepared',
           subtitle: 'The pharmacy is preparing your medicines',
-          image: require('../assets/accepted.png'),
+          image: safeRequire('../assets/accepted.png'),
           showMap: false
         };
       case 'ready_for_pickup':
         return {
           title: 'Ready for Pickup',
           subtitle: 'Your order is ready and waiting for the rider',
-          image: require('../assets/ready_for_pickup.png'),
+          image: safeRequire('../assets/ready_for_pickup.png'),
           showMap: false
         };
       case 'picked_up':
@@ -678,21 +688,21 @@ const OrderTrackingScreen: React.FC = () => {
         return {
           title: 'Delivered Successfully',
           subtitle: 'Your order has been delivered. Get well soon!',
-          image: require('../assets/delivered.png'),
+          image: safeRequire('../assets/delivered.png'),
           showMap: false
         };
       case 'cancelled':
         return {
           title: 'Order Cancelled',
           subtitle: 'This order has been cancelled',
-          image: require('../assets/pending.png'),
+          image: safeRequire('../assets/pending.png'),
           showMap: false
         };
       default:
         return {
           title: 'Processing',
           subtitle: 'Your order is being processed',
-          image: require('../assets/pending.png'),
+          image: safeRequire('../assets/pending.png'),
           showMap: false
         };
     }
