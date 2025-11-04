@@ -109,7 +109,7 @@ module.exports = {
       googleMapsApiKey: GOOGLE_MAPS_API_KEY,
       stripePublishableKey: STRIPE_PUBLISHABLE_KEY,
       eas: {
-        projectId: '90897d38-708f-4286-ba03-6ded9ead3f72',
+        projectId: '7c1dc10b-045b-40b5-a441-e4730b5dd93d',
       },
     },
   },
