@@ -28,10 +28,22 @@ const getApiBaseUrl = () => {
     }
 
     // Try to derive host from Expo packager/SourceCode script URL
+    // IMPORTANT: This is wrapped in try-catch because NativeModules access
+    // can crash if called before React Native bridge is fully initialized
     try {
-      const expHostUri: string | undefined = (Constants as any)?.expoConfig?.hostUri
-        || (Constants as any)?.manifest?.debuggerHost
-        || (NativeModules as any)?.SourceCode?.scriptURL;
+      // Use optional chaining and check if NativeModules is available first
+      let expHostUri: string | undefined = (Constants as any)?.expoConfig?.hostUri
+        || (Constants as any)?.manifest?.debuggerHost;
+      
+      // Only access NativeModules if it's safe (not null/undefined)
+      if (!expHostUri && NativeModules && typeof NativeModules === 'object') {
+        try {
+          expHostUri = (NativeModules as any)?.SourceCode?.scriptURL;
+        } catch (nativeErr) {
+          // Silently fail if native module access fails
+          console.warn('⚠️ Could not access NativeModules.SourceCode - bridge may not be ready:', nativeErr);
+        }
+      }
 
       if (expHostUri) {
         // expHostUri examples:
@@ -45,7 +57,10 @@ const getApiBaseUrl = () => {
           return cachedApiBaseUrl;
         }
       }
-    } catch {}
+    } catch (err) {
+      // Catch any unexpected errors during URL derivation
+      console.warn('⚠️ Error deriving API URL from native modules:', err);
+    }
   } catch {}
 
   // Fallback: Use Railway backend for production/testing
@@ -73,12 +88,14 @@ export interface ApiResponse<T> {
 }
 
 class ApiService {
-  private baseURL: string;
+  private baseURL: string | null = null;
   private authToken: string | null = null;
 
-  constructor() {
-    // Lazy initialization - get URL when needed, not at import time
-    this.baseURL = getApiBaseUrl();
+  private getBaseURL(): string {
+    if (!this.baseURL) {
+      this.baseURL = getApiBaseUrl();
+    }
+    return this.baseURL;
   }
 
   public async makeRequest<T>(
@@ -87,7 +104,7 @@ class ApiService {
     suppressAuthLog: boolean = false
   ): Promise<ApiResponse<T>> {
     try {
-      const url = `${this.baseURL}${endpoint}`;
+      const url = `${this.getBaseURL()}${endpoint}`;
       // Attach auth token if present (lazy-load from storage once)
       try {
         if (!this.authToken) {
@@ -175,7 +192,7 @@ class ApiService {
 
   // Build base URL for direct endpoints under /api (not /api/v1)
   private getDirectBaseUrl(): string {
-    const normalized = this.baseURL.replace(/\/$/, '');
+    const normalized = this.getBaseURL().replace(/\/$/, '');
     return normalized.replace('/api/v1', '/api');
   }
 
@@ -260,11 +277,11 @@ class ApiService {
 
   async testConnection(): Promise<ApiResponse<any>> {
     console.log('🔍 Testing connection to backend...');
-    console.log('📍 Backend URL:', this.baseURL);
+    console.log('📍 Backend URL:', this.getBaseURL());
     
     try {
       // Try to make a simple GET request to a known endpoint
-      const response = await fetch(`${this.baseURL}/users/register/`, {
+      const response = await fetch(`${this.getBaseURL()}/users/register/`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
