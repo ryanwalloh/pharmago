@@ -352,17 +352,51 @@ const PharmacyDashboard = () => {
     setSelectedOrder(null);
   };
 
-  const handleReadyOrder = (orderId) => {
-    // Move order from preparing to ready
-    const orderToMove = orders.preparing.find(order => order.id === orderId);
-    if (orderToMove) {
-      setOrders(prev => ({
-        ...prev,
-        preparing: prev.preparing.filter(order => order.id !== orderId),
-        ready: [...prev.ready, orderToMove]
-      }));
+  const handleReadyOrder = async (orderId) => {
+    try {
+      // ✅ Call backend API to update order status to 'ready_for_pickup'
+      const base = (process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
+      const response = await fetch(`${base}/api/mark-order-ready/${orderId}/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          pharmacy_user_id: userInfo?.id
+        })
+      });
+
+      const data = await response.json();
+      
+      if (!data.success) {
+        alert(`Failed to mark order as ready: ${data.error}`);
+        return;
+      }
+
+      console.log('✅ Order marked as ready:', data);
+
+      // Update local state to move order from preparing to ready
+      const orderToMove = orders.preparing.find(order => order.id === orderId);
+      if (orderToMove) {
+        // Update the order's status in the object
+        orderToMove.order_status = 'ready_for_pickup';
+        
+        setOrders(prev => ({
+          ...prev,
+          preparing: prev.preparing.filter(order => order.id !== orderId),
+          ready: [...prev.ready, orderToMove]
+        }));
+      }
+
+      setSelectedOrder(null);
+
+      // Show success message
+      alert(`Order #${orderToMove?.orderNumber || orderId} marked as ready for pickup!`);
+      
+    } catch (error) {
+      console.error('Error marking order as ready:', error);
+      alert('Failed to mark order as ready. Please try again.');
     }
-    setSelectedOrder(null);
   };
 
   const handleArrivedOrder = (orderId) => {
