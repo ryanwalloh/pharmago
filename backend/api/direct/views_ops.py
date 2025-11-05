@@ -457,9 +457,11 @@ def direct_pharmacy_orders(request, pharmacy_id):
                 'seniorCitizenIdImage': senior_id_url,
                 'seniorDiscountStatus': getattr(order, 'senior_discount_status', 'not_requested'),
             }
-        pend = [serialize(o) for o in qs.filter(order_status='pending')[:200]]
-        prep = [serialize(o) for o in qs.filter(order_status__in=['preparing', 'accepted'])[:200]]
-        ready = [serialize(o) for o in qs.filter(order_status='ready_for_pickup')[:200]]
+        # ✅ NEW: Exclude archived orders (those marked with [PHARMACY_ARCHIVED])
+        from django.db.models import Q
+        pend = [serialize(o) for o in qs.filter(order_status='pending').exclude(Q(notes__contains='[PHARMACY_ARCHIVED]'))[:200]]
+        prep = [serialize(o) for o in qs.filter(order_status__in=['preparing', 'accepted']).exclude(Q(notes__contains='[PHARMACY_ARCHIVED]'))[:200]]
+        ready = [serialize(o) for o in qs.filter(order_status='ready_for_pickup').exclude(Q(notes__contains='[PHARMACY_ARCHIVED]'))[:200]]
         return JsonResponse({
             'success': True,
             'orders': {
@@ -770,6 +772,69 @@ def mark_order_ready(request, order_id):
         return JsonResponse({
             'success': False,
             'error': f'Failed to mark order as ready: {str(e)}'
+        }, status=500)
+
+
+@csrf_exempt
+def mark_order_archived(request, order_id):
+    """
+    Pharmacy marks a delivered order as archived/viewed (removes from live dashboard).
+    
+    POST /api/mark-order-archived/<order_id>/
+    {
+        "pharmacy_user_id": 5 (optional)
+    }
+    """
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
+    
+    try:
+        import json
+        from api.orders.models import Order
+        from django.utils import timezone
+        
+        # Get order
+        try:
+            order = Order.objects.get(id=order_id)
+        except Order.DoesNotExist:
+            return JsonResponse({
+                'success': False,
+                'error': f'Order {order_id} not found'
+            }, status=404)
+        
+        # Verify order is delivered
+        if order.order_status != Order.OrderStatus.DELIVERED:
+            return JsonResponse({
+                'success': False,
+                'error': f'Order must be delivered to archive (current status: {order.order_status})'
+            }, status=400)
+        
+        # Add archived flag to notes or use a custom field if available
+        # For now, we'll use notes field to mark as "viewed by pharmacy"
+        if not order.notes:
+            order.notes = ''
+        if '[PHARMACY_ARCHIVED]' not in order.notes:
+            order.notes += '\n[PHARMACY_ARCHIVED]'
+        order.updated_at = timezone.now()
+        order.save()
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'Order {order.order_number} marked as archived',
+            'data': {
+                'order_id': order.id,
+                'order_number': order.order_number,
+                'status': order.order_status,
+                'archived_at': timezone.now().isoformat()
+            }
+        })
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({
+            'success': False,
+            'error': f'Failed to archive order: {str(e)}'
         }, status=500)
 
 

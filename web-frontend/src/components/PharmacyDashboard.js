@@ -139,6 +139,10 @@ const PharmacyDashboard = () => {
     ready: []
   });
   const [ordersLoading, setOrdersLoading] = useState(true);
+  
+  // WebSocket connections for real-time order status updates
+  const orderWebSockets = useRef({}); // {orderId: WebSocket}
+  const [orderStatuses, setOrderStatuses] = useState({}); // {orderId: status}
 
   // Pharmacy statistics
   const [stats, setStats] = useState({
@@ -162,10 +166,14 @@ const PharmacyDashboard = () => {
         console.log('Orders API Response:', data);
         
         if (data.success) {
+          const pendingOrders = Array.isArray(data.orders?.pending) ? data.orders.pending : [];
+          const preparingOrders = Array.isArray(data.orders?.preparing) ? data.orders.preparing : [];
+          const readyOrders = Array.isArray(data.orders?.ready) ? data.orders.ready : [];
+          
           setOrders({
-            pending: Array.isArray(data.orders?.pending) ? data.orders.pending : [],
-            preparing: Array.isArray(data.orders?.preparing) ? data.orders.preparing : [],
-            ready: Array.isArray(data.orders?.ready) ? data.orders.ready : []
+            pending: pendingOrders,
+            preparing: preparingOrders,
+            ready: readyOrders
           });
           setStats(prev => ({
             ...prev,
@@ -175,6 +183,24 @@ const PharmacyDashboard = () => {
             readyOrders: data.readyOrders || 0
           }));
           console.log(`✅ Loaded ${data.totalOrders} orders from database`);
+
+          // ✅ NEW: Connect WebSockets for all orders
+          const allOrders = [...pendingOrders, ...preparingOrders, ...readyOrders];
+          const currentOrderIds = allOrders.map(o => o.id);
+          
+          // Disconnect WebSockets for orders that are no longer in the list
+          Object.keys(orderWebSockets.current).forEach(orderId => {
+            if (!currentOrderIds.includes(parseInt(orderId))) {
+              disconnectOrderWebSocket(orderId);
+            }
+          });
+          
+          // Connect WebSockets for new orders
+          allOrders.forEach(order => {
+            connectOrderWebSocket(order.id);
+          });
+          
+          console.log(`🔌 WebSocket connections: ${Object.keys(orderWebSockets.current).length} active`);
         } else {
           console.error('API returned error:', data.error);
         }
@@ -246,6 +272,14 @@ const PharmacyDashboard = () => {
     }
 
     setLoading(false);
+  }, []);
+
+  // ✅ NEW: Cleanup WebSockets on component unmount
+  useEffect(() => {
+    return () => {
+      console.log('🔌 Pharmacy Dashboard unmounting - cleaning up WebSockets');
+      disconnectAllWebSockets();
+    };
   }, []);
 
   const handleLogout = () => {
@@ -390,8 +424,8 @@ const PharmacyDashboard = () => {
 
       setSelectedOrder(null);
 
-      // Show success message
-      alert(`Order #${orderToMove?.orderNumber || orderId} marked as ready for pickup!`);
+      // Success - no alert, just console log
+      console.log(`✅ Order #${orderToMove?.orderNumber || orderId} marked as ready for pickup`);
       
     } catch (error) {
       console.error('Error marking order as ready:', error);
@@ -399,12 +433,125 @@ const PharmacyDashboard = () => {
     }
   };
 
-  const handleArrivedOrder = (orderId) => {
-    // Remove order from ready (delivered)
-    setOrders(prev => ({
-      ...prev,
-      ready: prev.ready.filter(order => order.id !== orderId)
-    }));
+  const handleArrivedOrder = async (orderId) => {
+    try {
+      // ✅ Call backend API to mark order as archived
+      const base = (process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
+      const response = await fetch(`${base}/api/mark-order-archived/${orderId}/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          pharmacy_user_id: userInfo?.id
+        })
+      });
+
+      const data = await response.json();
+      
+      if (!data.success) {
+        console.error('Failed to archive order:', data.error);
+        alert(`Failed to mark order as done: ${data.error}`);
+        return;
+      }
+
+      console.log('✅ Order archived:', data);
+
+      // Remove from local state (will stay hidden after refresh due to backend filter)
+      setOrders(prev => ({
+        ...prev,
+        ready: prev.ready.filter(order => order.id !== orderId)
+      }));
+
+      // Disconnect WebSocket for this order
+      disconnectOrderWebSocket(orderId);
+
+      console.log(`✅ Order #${orderId} marked as done and removed from live view`);
+      
+    } catch (error) {
+      console.error('Error archiving order:', error);
+      alert('Failed to mark order as done. Please try again.');
+    }
+  };
+
+  // ✅ NEW: WebSocket Manager for Real-time Order Status Updates
+  const connectOrderWebSocket = (orderId) => {
+    // Don't create duplicate connections
+    if (orderWebSockets.current[orderId]) {
+      console.log(`🔌 WebSocket already connected for order ${orderId}`);
+      return;
+    }
+
+    const wsUrl = process.env.REACT_APP_BACKEND_URL?.includes('railway')
+      ? `wss://pharmago-backend-production.up.railway.app/ws/order/tracking/${orderId}/`
+      : `ws://localhost:8000/ws/order/tracking/${orderId}/`;
+
+    console.log(`🔌 Connecting to order ${orderId} WebSocket:`, wsUrl);
+
+    try {
+      const ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => {
+        console.log(`✅ WebSocket connected for order ${orderId}`);
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          console.log(`📨 Order ${orderId} status update:`, data);
+
+          // Handle status update
+          if (data.type === 'order_status_update' || data.order_status) {
+            const newStatus = data.order_status || data.status;
+            console.log(`🔄 Order ${orderId} status changed to: ${newStatus}`);
+            
+            // Update local status tracking
+            setOrderStatuses(prev => ({
+              ...prev,
+              [orderId]: newStatus
+            }));
+
+            // Auto-refresh orders to move between sections
+            if (pharmacyInfo?.id) {
+              fetchOrders(pharmacyInfo.id);
+            }
+          }
+        } catch (error) {
+          console.error(`❌ Error parsing WebSocket message for order ${orderId}:`, error);
+        }
+      };
+
+      ws.onerror = (error) => {
+        console.error(`❌ WebSocket error for order ${orderId}:`, error);
+      };
+
+      ws.onclose = (event) => {
+        console.log(`🔌 WebSocket closed for order ${orderId} (code: ${event.code})`);
+        delete orderWebSockets.current[orderId];
+      };
+
+      // Store the WebSocket connection
+      orderWebSockets.current[orderId] = ws;
+
+    } catch (error) {
+      console.error(`❌ Failed to connect WebSocket for order ${orderId}:`, error);
+    }
+  };
+
+  const disconnectOrderWebSocket = (orderId) => {
+    const ws = orderWebSockets.current[orderId];
+    if (ws) {
+      console.log(`🔌 Disconnecting WebSocket for order ${orderId}`);
+      ws.close(1000, 'Pharmacy dashboard cleanup');
+      delete orderWebSockets.current[orderId];
+    }
+  };
+
+  const disconnectAllWebSockets = () => {
+    console.log('🔌 Disconnecting all order WebSockets');
+    Object.keys(orderWebSockets.current).forEach(orderId => {
+      disconnectOrderWebSocket(orderId);
+    });
   };
 
   // Cart Order Handlers
@@ -3900,12 +4047,45 @@ const PharmacyDashboard = () => {
                     </p>
                   </div>
                   <div className="text-center">
-                    <button 
-                      onClick={() => handleArrivedOrder(order.id)}
-                      className="bg-purple-600 text-white px-6 lg:px-10 py-2 lg:py-3 rounded-2xl text-sm lg:text-lg cursor-pointer"
-                    >
-                      Arrived
-                    </button>
+                    {/* ✅ NEW: Smart status display based on order status */}
+                    {(() => {
+                      const currentStatus = orderStatuses[order.id] || order.order_status;
+                      
+                      if (currentStatus === 'ready_for_pickup') {
+                        return (
+                          <div>
+                            <div className="text-sm lg:text-base font-medium text-orange-600">⏳ Waiting for Rider</div>
+                            <p className="text-xs text-gray-500 mt-1">Order is ready</p>
+                          </div>
+                        );
+                      } else if (currentStatus === 'picked_up') {
+                        return (
+                          <div>
+                            <div className="text-sm lg:text-base font-medium text-blue-600">🚴 Out for Delivery</div>
+                            <p className="text-xs text-gray-500 mt-1">Rider is on the way</p>
+                          </div>
+                        );
+                      } else if (currentStatus === 'delivered') {
+                        return (
+                          <div>
+                            <button 
+                              onClick={() => handleArrivedOrder(order.id)}
+                              className="bg-purple-600 text-white px-6 lg:px-10 py-2 lg:py-3 rounded-2xl text-sm lg:text-lg cursor-pointer hover:bg-purple-700 transition-colors"
+                            >
+                              Mark as Done
+                            </button>
+                            <p className="text-xs text-green-600 mt-1 font-medium">✅ Delivered by rider</p>
+                          </div>
+                        );
+                      } else {
+                        // Fallback for unknown status
+                        return (
+                          <div>
+                            <div className="text-sm text-gray-600">{currentStatus}</div>
+                          </div>
+                        );
+                      }
+                    })()}
                   </div>
                 </div>
               ))}
