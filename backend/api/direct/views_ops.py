@@ -713,6 +713,67 @@ def accept_cart_order(request, order_id):
 
 
 @csrf_exempt
+def mark_order_ready(request, order_id):
+    """
+    Pharmacy marks an order as ready for pickup.
+    
+    POST /api/mark-order-ready/<order_id>/
+    {
+        "pharmacy_user_id": 5 (optional)
+    }
+    """
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
+    
+    try:
+        import json
+        from api.orders.models import Order
+        from django.utils import timezone
+        
+        # Get order
+        try:
+            order = Order.objects.get(id=order_id)
+        except Order.DoesNotExist:
+            return JsonResponse({
+                'success': False,
+                'error': f'Order {order_id} not found'
+            }, status=404)
+        
+        # Verify order is in accepted status
+        if order.order_status != Order.OrderStatus.ACCEPTED:
+            return JsonResponse({
+                'success': False,
+                'error': f'Order is {order.order_status}, must be accepted to mark as ready'
+            }, status=400)
+        
+        # Update order status
+        old_status = order.order_status
+        order.order_status = Order.OrderStatus.READY_FOR_PICKUP
+        order.updated_at = timezone.now()
+        order.save()
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'Order {order.order_number} marked as ready for pickup',
+            'data': {
+                'order_id': order.id,
+                'order_number': order.order_number,
+                'old_status': old_status,
+                'new_status': order.order_status,
+                'updated_at': order.updated_at.isoformat()
+            }
+        })
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({
+            'success': False,
+            'error': f'Failed to mark order as ready: {str(e)}'
+        }, status=500)
+
+
+@csrf_exempt
 def customer_approve_pricing(request):
     """Customer approves or rejects pricing. Updates order status and echoes totals."""
     if request.method != 'POST':
