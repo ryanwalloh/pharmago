@@ -281,12 +281,22 @@ class ChatConsumer(AsyncWebsocketConsumer):
             if sender_id:
                 try:
                     sender_user = User.objects.get(id=sender_id)
-                    sender_participant = ChatParticipant.objects.get(
+                    
+                    # Try to get existing participant, or create if doesn't exist
+                    sender_participant, created = ChatParticipant.objects.get_or_create(
                         room=room,
-                        user=sender_user
+                        user=sender_user,
+                        defaults={
+                            'role': 'customer',  # Assume customer if not exists
+                            'last_read_at': timezone.now()
+                        }
                     )
-                except (User.DoesNotExist, ChatParticipant.DoesNotExist):
-                    logger.error(f"Sender {sender_id} not found or not a participant")
+                    
+                    if created:
+                        logger.info(f"✅ Auto-created participant for user {sender_id} in room {room_id}")
+                    
+                except User.DoesNotExist:
+                    logger.error(f"User {sender_id} not found")
                     return None
             else:
                 # Fallback: use first customer participant if sender_id not provided
