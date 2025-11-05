@@ -41,18 +41,18 @@ const getScreenWidth = (): number => {
   if (cachedScreenWidth === null) {
     try {
       cachedScreenWidth = Dimensions.get('window').width;
-    } catch {
+  } catch {
       cachedScreenWidth = 400; // Fallback width
-    }
+  }
   }
   return cachedScreenWidth;
 };
 
 const getScreenHeight = (): number => {
   if (cachedScreenHeight === null) {
-    try {
+  try {
       cachedScreenHeight = Dimensions.get('window').height;
-    } catch {
+  } catch {
       cachedScreenHeight = 800; // Fallback height
     }
   }
@@ -449,7 +449,7 @@ const OrderTrackingScreen: React.FC = () => {
         });
         
         const newUnreadCount = unreadPharmacyMessages.length;
-        setUnreadCount(newUnreadCount);
+          setUnreadCount(newUnreadCount);
       }
     } catch (error) {
       console.log('Error checking unread messages:', error);
@@ -606,18 +606,18 @@ const OrderTrackingScreen: React.FC = () => {
   useEffect(() => {
     try {
       setInitStatus('Fetching order data...');
-      if (id && id !== 'undefined' && id !== 'null') {
+    if (id && id !== 'undefined' && id !== 'null') {
         fetchOrderData().catch(err => {
           console.error('Error in fetchOrderData:', err);
           setError('Failed to load order. Please try again.');
           setLoading(false);
           setInitStatus('Order fetch failed');
         });
-      } else {
+    } else {
         setInitStatus('Loading from storage...');
-        // Try to get order from AsyncStorage if no valid ID provided
-        loadOrderFromStorage();
-      }
+      // Try to get order from AsyncStorage if no valid ID provided
+      loadOrderFromStorage();
+    }
     } catch (error) {
       console.error('Error in order fetch useEffect:', error);
       setError('Failed to initialize order tracking');
