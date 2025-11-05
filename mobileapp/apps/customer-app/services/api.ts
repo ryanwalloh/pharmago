@@ -297,13 +297,16 @@ class ApiService {
     console.log('📍 Backend URL:', this.getBaseURL());
     
     try {
-      // Try to make a simple GET request to a known endpoint
-      const response = await fetchWithTimeout(`${this.getBaseURL()}/users/register/`, {
+      // Use lightweight test endpoint instead of /users/register/
+      const testUrl = `${this.getBaseURL().replace('/api/v1', '')}/api/test/`;
+      console.log('🔗 Testing endpoint:', testUrl);
+      
+      const response = await fetchWithTimeout(testUrl, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
         },
-      }, 10000); // 10 second timeout for connection test
+      }, 5000); // 5 second timeout for lightweight endpoint
 
       console.log('🔗 Connection test response:', {
         status: response.status,
@@ -313,13 +316,14 @@ class ApiService {
         timestamp: new Date().toISOString()
       });
 
-      // Even if we get a 405 (Method Not Allowed), it means the server is reachable
-      if (response.status === 405 || response.status === 200) {
-        console.log('✅ Backend connection successful!');
+      // Check if we got a successful response
+      if (response.ok || response.status === 200) {
+        const data = await response.json();
+        console.log('✅ Backend connection successful!', data);
         return {
           success: true,
           message: 'Backend connection successful',
-          data: { status: response.status, statusText: response.statusText }
+          data: data
         };
       } else {
         console.log('⚠️ Backend responded with unexpected status:', response.status);
@@ -329,11 +333,7 @@ class ApiService {
         };
       }
     } catch (error) {
-      console.error('❌ Backend connection failed:', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        stack: error instanceof Error ? error.stack : null,
-        timestamp: new Date().toISOString()
-      });
+      console.error('❌ Backend connection failed:', error);
       
       return {
         success: false,
