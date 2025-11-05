@@ -288,7 +288,6 @@ class ChatConsumer(AsyncWebsocketConsumer):
                         user=sender_user,
                         defaults={
                             'role': 'customer',  # Assume customer if not exists
-                            'last_read_at': timezone.now()
                         }
                     )
                     
