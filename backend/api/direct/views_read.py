@@ -16,11 +16,19 @@ def get_cache_value(request):
     """
     try:
         from django.core.cache import cache
+        import signal
+        
         key = request.GET.get('key')
         if not key:
             return JsonResponse({'error': 'key is required'}, status=400)
-        val = cache.get(key)
-        return JsonResponse({'value': val})
+        
+        # ⚠️ TEMPORARY FIX: Return None immediately to unblock dashboard
+        # Cache is causing connection exhaustion - disable until WebSocket is stable
+        return JsonResponse({'value': None})
+        
+        # Original code (disabled):
+        # val = cache.get(key)
+        # return JsonResponse({'value': val})
     except Exception as e:
         return JsonResponse({'error': 'Failed to read cache', 'message': str(e)}, status=500)
 
