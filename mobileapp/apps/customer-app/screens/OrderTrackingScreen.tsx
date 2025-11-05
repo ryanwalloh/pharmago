@@ -322,20 +322,29 @@ const OrderTrackingScreen: React.FC = () => {
     }
   }, [chatRoom?.id]);
 
-  // ✅ NEW: Setup WebSocket event listeners for real-time chat
+  // ✅ NEW: Setup WebSocket event listeners for real-time chat (PERSISTENT - works even when chat is closed)
   const setupChatWebSocketListeners = useCallback((roomId: number) => {
-    console.log('📡 Setting up chat WebSocket listeners for room', roomId);
+    console.log('📡 Setting up PERSISTENT chat WebSocket listeners for room', roomId);
     
-    // Handler for new messages
-    const handleNewMessage = (data: any) => {
+    // Handler for new messages - WORKS EVEN WHEN CHAT IS CLOSED
+    const handleNewMessage = async (data: any) => {
       console.log('📨 New message received via WebSocket:', data);
-      if (data.message) {
+      if (!data.message) return;
+      
+      const message = data.message;
+      
+      // Check if message is from pharmacy
+      const roleRaw = String(message.sender_role_code ?? message.sender_role ?? '').toLowerCase();
+      const isFromPharmacy = roleRaw.includes('pharmacy');
+      
+      console.log('📬 Message from:', isFromPharmacy ? 'Pharmacy' : 'Customer', '| Chat open:', showChatModal);
+      
+      if (showChatModal) {
+        // Chat is open - add message to list
         setChatMessages((prev) => {
-          // Check if message already exists (avoid duplicates)
-          const exists = prev.some((m: any) => m.id === data.message.id);
+          const exists = prev.some((m: any) => m.id === message.id);
           if (exists) return prev;
-          
-          return [...prev, data.message];
+          return [...prev, message];
         });
         
         // Scroll to bottom
@@ -345,10 +354,24 @@ const OrderTrackingScreen: React.FC = () => {
           }
         }, 100);
         
-        // Mark as read if chat is open
-        if (showChatModal) {
-          apiService.markOrderChatRead(roomId);
-          setUnreadCount(0);
+        // Mark as read
+        apiService.markOrderChatRead(roomId);
+        setUnreadCount(0);
+      } else if (isFromPharmacy) {
+        // Chat is closed AND message is from pharmacy - auto-open!
+        console.log('🔔 NEW PHARMACY MESSAGE! Auto-opening chat...');
+        setUnreadCount((prev) => prev + 1);
+        
+        // Fetch latest messages
+        const msgs = await apiService.getOrderChatMessages(roomId, 100);
+        if (msgs.success && (msgs.data as any)?.messages) {
+          setChatMessages((msgs.data as any).messages);
+        }
+        
+        // Auto-open chat
+        if (!autoOpenedChat) {
+          setShowChatModal(true);
+          setAutoOpenedChat(true);
         }
       }
     };
@@ -389,20 +412,32 @@ const OrderTrackingScreen: React.FC = () => {
       chatWebSocket.off('connection_established', handleConnected);
       chatWebSocket.off('disconnected', handleDisconnected);
     };
-  }, [showChatModal]);
+  }, [showChatModal, autoOpenedChat]);
 
-  // Poll for unread messages in the background
+  // Poll for unread messages in the background AND establish WebSocket connection
   const checkUnreadMessages = useCallback(async () => {
     try {
-      if (!orderData?.order_id || !orderData?.pharmacy_id || showChatModal) return;
+      if (!orderData?.order_id || !orderData?.pharmacy_id) return;
       
       // Get or check chat room
       const roomRes = await apiService.getOrCreateOrderChatRoom(orderData.order_id, orderData.pharmacy_id);
       if (!roomRes.success || !roomRes.data?.room) return;
       
       const room = roomRes.data.room;
+      setChatRoom(room); // Always set chat room reference
       
-      // Get unread count
+      // ✅ CRITICAL: Connect to WebSocket in background (even if chat is closed)
+      // This allows real-time message detection and auto-open
+      if (!chatWebSocket.isConnected() || chatWebSocket.getCurrentRoomId() !== room.id) {
+        console.log('🔌 Establishing background WebSocket connection for room', room.id);
+        chatWebSocket.connect(room.id);
+        setupChatWebSocketListeners(room.id);
+      }
+      
+      // Skip HTTP check if chat is already open (WebSocket handles it)
+      if (showChatModal) return;
+      
+      // Get unread count (initial check, WebSocket will handle updates)
       const msgs = await apiService.getOrderChatMessages(room.id, 100);
       if (msgs.success && (msgs.data as any)?.messages) {
         const messages = (msgs.data as any).messages;
@@ -414,43 +449,33 @@ const OrderTrackingScreen: React.FC = () => {
         });
         
         const newUnreadCount = unreadPharmacyMessages.length;
-        
-        // Auto-open chat if new message arrives and not already auto-opened
-        if (newUnreadCount > 0 && newUnreadCount > unreadCount && !autoOpenedChat && !showChatModal) {
-          console.log('🔔 New pharmacy message detected! Auto-opening chat...');
-          setUnreadCount(newUnreadCount);
-          setChatRoom(room);
-          setShowChatModal(true);
-          setAutoOpenedChat(true);
-          // Fetch messages with the room ID
-          await fetchChatMessages(room.id);
-          
-          // ✅ Connect to WebSocket for real-time chat
-          console.log('🔌 Connecting to chat WebSocket (auto-open)...', room.id);
-          chatWebSocket.connect(room.id);
-          setupChatWebSocketListeners(room.id);
-        } else {
-          setUnreadCount(newUnreadCount);
-        }
+        setUnreadCount(newUnreadCount);
       }
     } catch (error) {
       console.log('Error checking unread messages:', error);
     }
-  }, [orderData?.order_id, orderData?.pharmacy_id, showChatModal, unreadCount, autoOpenedChat, fetchChatMessages, setupChatWebSocketListeners]);
+  }, [orderData?.order_id, orderData?.pharmacy_id, showChatModal, setupChatWebSocketListeners]);
 
   // ✅ NEW: Send chat message via WebSocket (with HTTP fallback)
   const sendChatMessage = useCallback(async (roomId: number, content: string): Promise<{ success: boolean; error?: string }> => {
     try {
-      // Get customer ID for WebSocket
-      const customerId = await AsyncStorage.getItem('customer_id');
+      // Get customer ID from user object in AsyncStorage
+      const userData = await AsyncStorage.getItem('user');
+      if (!userData) {
+        return { success: false, error: 'User not logged in' };
+      }
+      
+      const user = JSON.parse(userData);
+      const customerId = user.customer_id || user.id;
+      
       if (!customerId) {
         return { success: false, error: 'Customer ID not found' };
       }
       
       // Try WebSocket first
       if (chatWebSocket.isConnected()) {
-        console.log('📤 Sending message via WebSocket...');
-        const sent = chatWebSocket.sendMessage(content, parseInt(customerId));
+        console.log('📤 Sending message via WebSocket...', customerId);
+        const sent = chatWebSocket.sendMessage(content, parseInt(customerId.toString()));
         
         if (sent) {
           console.log('✅ Message sent via WebSocket');
@@ -684,7 +709,7 @@ const OrderTrackingScreen: React.FC = () => {
   useEffect(() => {
     if (!orderData?.order_id || !orderData?.pharmacy_id) return;
     
-    // Initial check still useful
+    // Initial check - establishes WebSocket connection
     checkUnreadMessages();
     
     // ✅ WebSocket handles real-time updates, no polling needed
@@ -694,10 +719,14 @@ const OrderTrackingScreen: React.FC = () => {
     // }, 20000);
     
     return () => {
+      // Cleanup on unmount
       if (unreadPollRef.current) {
         clearInterval(unreadPollRef.current);
         unreadPollRef.current = null;
       }
+      // Disconnect WebSocket when leaving order tracking screen
+      console.log('🔌 Disconnecting chat WebSocket (component unmounting)');
+      chatWebSocket.disconnect();
     };
   }, [orderData?.order_id, orderData?.pharmacy_id, checkUnreadMessages]);
 
@@ -1120,6 +1149,8 @@ const OrderTrackingScreen: React.FC = () => {
                     try {
                       setChatError(null);
                       setChatLoading(true);
+                      
+                      // Get or create chat room
                       const roomRes = await apiService.getOrCreateOrderChatRoom(orderData.order_id, orderData.pharmacy_id);
                       if (!roomRes.success || !roomRes.data?.room) {
                         setChatError(roomRes.error || 'Failed to open chat');
@@ -1127,17 +1158,22 @@ const OrderTrackingScreen: React.FC = () => {
                         setChatLoading(false);
                         return;
                       }
+                      
                       const room = roomRes.data.room;
                       setChatRoom(room);
-                      // Pass room ID directly to fetchChatMessages to fix timing issue
+                      
+                      // Fetch latest messages
                       await fetchChatMessages(room.id);
                       
-                      // ✅ NEW: Connect to WebSocket for real-time chat
-                      console.log('🔌 Connecting to chat WebSocket...', room.id);
-                      chatWebSocket.connect(room.id);
-                      
-                      // Set up WebSocket event listeners
-                      setupChatWebSocketListeners(room.id);
+                      // ✅ Connect to WebSocket if not already connected
+                      // (Usually already connected from background check)
+                      if (!chatWebSocket.isConnected() || chatWebSocket.getCurrentRoomId() !== room.id) {
+                        console.log('🔌 Connecting to chat WebSocket...', room.id);
+                        chatWebSocket.connect(room.id);
+                        setupChatWebSocketListeners(room.id);
+                      } else {
+                        console.log('✅ WebSocket already connected to room', room.id);
+                      }
                       
                       setShowChatModal(true);
                     } catch {
@@ -1311,9 +1347,8 @@ const OrderTrackingScreen: React.FC = () => {
                 Chat with {orderData?.pharmacy_name || 'Pharmacy'}
               </Text>
               <TouchableOpacity onPress={() => {
-                // ✅ Disconnect WebSocket when closing chat
-                console.log('🔌 Disconnecting chat WebSocket...');
-                chatWebSocket.disconnect();
+                // ✅ Keep WebSocket connected in background for auto-open functionality
+                console.log('📱 Closing chat (WebSocket stays connected for background monitoring)');
                 setShowChatModal(false);
               }}>
                 <Ionicons name="close" size={24} color="#333" />
@@ -1473,25 +1508,30 @@ const OrderTrackingScreen: React.FC = () => {
                       if (chatRoom?.id) {
                         if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
                         
-                        const customerId = await AsyncStorage.getItem('customer_id');
-                        const customerName = await AsyncStorage.getItem('customer_name') || 'Customer';
-                        
-                        if (customerId) {
-                          // Try WebSocket first
-                          if (chatWebSocket.isConnected()) {
-                            chatWebSocket.setTyping(true, parseInt(customerId), customerName);
-                          } else {
-                            // Fallback to HTTP
-                            apiService.setOrderChatTyping(chatRoom.id, true);
-                          }
+                        // Get customer data from user object
+                        const userData = await AsyncStorage.getItem('user');
+                        if (userData) {
+                          const user = JSON.parse(userData);
+                          const customerId = user.customer_id || user.id;
+                          const customerName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.username || 'Customer';
                           
-                          typingTimerRef.current = setTimeout(() => {
+                          if (customerId) {
+                            // Try WebSocket first
                             if (chatWebSocket.isConnected()) {
-                              chatWebSocket.setTyping(false, parseInt(customerId), customerName);
+                              chatWebSocket.setTyping(true, parseInt(customerId.toString()), customerName);
                             } else {
-                              apiService.setOrderChatTyping(chatRoom.id, false);
+                              // Fallback to HTTP
+                              apiService.setOrderChatTyping(chatRoom.id, true);
                             }
-                          }, 2000);
+                            
+                            typingTimerRef.current = setTimeout(() => {
+                              if (chatWebSocket.isConnected()) {
+                                chatWebSocket.setTyping(false, parseInt(customerId.toString()), customerName);
+                              } else {
+                                apiService.setOrderChatTyping(chatRoom.id, false);
+                              }
+                            }, 2000);
+                          }
                         }
                       }
                     } catch {}
