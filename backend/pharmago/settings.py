@@ -149,10 +149,10 @@ DATABASES = {
         'HOST': os.getenv('DB_HOST', 'localhost'),
         'PORT': os.getenv('DB_PORT', '5434'),
         
-        # Connection pooling to prevent "too many clients" errors
-        # Reuse connections for 10 minutes instead of opening new ones every request
-        'CONN_MAX_AGE': 600,  # Keep connections alive for 10 minutes
-        'CONN_HEALTH_CHECKS': True,  # Enable connection health checks (Django 4.1+)
+        # DISABLED: Connection pooling was causing backend to hang
+        # Will investigate proper pooling solution later
+        # 'CONN_MAX_AGE': 60,
+        # 'CONN_HEALTH_CHECKS': True,
     }
 }
 
