@@ -376,16 +376,16 @@ const OrderTrackingScreen: React.FC = () => {
       }
     };
     
-    // Handler for typing status
-    const handleTypingStatus = (data: any) => {
-      console.log('⌨️ Typing status received:', data);
-      if (data.sender_id && data.sender_name) {
-        setChatTyping((prev) => ({
-          ...prev,
-          [data.sender_id]: data.is_typing ? data.sender_name : null
-        }));
-      }
-    };
+    // ❌ DISABLED: Typing indicators
+    // const handleTypingStatus = (data: any) => {
+    //   console.log('⌨️ Typing status received:', data);
+    //   if (data.sender_id && data.sender_name) {
+    //     setChatTyping((prev) => ({
+    //       ...prev,
+    //       [data.sender_id]: data.is_typing ? data.sender_name : null
+    //     }));
+    //   }
+    // };
     
     // Handler for connection established
     const handleConnected = () => {
@@ -400,7 +400,7 @@ const OrderTrackingScreen: React.FC = () => {
     // Register event handlers
     chatWebSocket.on('new_message', handleNewMessage);
     chatWebSocket.on('chat_message', handleNewMessage); // Backend sends 'chat_message' type
-    chatWebSocket.on('typing_status', handleTypingStatus);
+    // chatWebSocket.on('typing_status', handleTypingStatus); // ❌ DISABLED
     chatWebSocket.on('connection_established', handleConnected);
     chatWebSocket.on('disconnected', handleDisconnected);
     
@@ -408,7 +408,7 @@ const OrderTrackingScreen: React.FC = () => {
     return () => {
       chatWebSocket.off('new_message', handleNewMessage);
       chatWebSocket.off('chat_message', handleNewMessage);
-      chatWebSocket.off('typing_status', handleTypingStatus);
+      // chatWebSocket.off('typing_status', handleTypingStatus); // ❌ DISABLED
       chatWebSocket.off('connection_established', handleConnected);
       chatWebSocket.off('disconnected', handleDisconnected);
     };
@@ -1330,11 +1330,12 @@ const OrderTrackingScreen: React.FC = () => {
           </View>
         </View>
       </ScrollView>
-      {chatTyping?.pharmacy ? (
+      {/* ❌ DISABLED: Typing indicator UI */}
+      {/* {chatTyping?.pharmacy ? (
         <Text style={{ paddingHorizontal: 16, paddingBottom: 6, color: '#00bf63', fontSize: 12, fontFamily: fontFamily.light }}>
           Pharmacy is typing…
         </Text>
-      ) : null}
+      ) : null} */}
       {/* Cleanup polling when modal closes */}
       {showChatModal ? null : (chatPollRef.current ? (clearInterval(chatPollRef.current), chatPollRef.current = null, null) : null)}
       {/* Chat Modal - full width, bottom-aligned (touching left/right/bottom) */}
@@ -1501,40 +1502,10 @@ const OrderTrackingScreen: React.FC = () => {
                   style={{ flex: 1, borderWidth: 1, borderColor: '#E0E0E0', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: '#333333', fontFamily: fontFamily.light }}
                   placeholder="Type a message..."
                   value={chatInput}
-                  onChangeText={async (text) => {
+                  onChangeText={(text) => {
                     setChatInput(text);
-                    // ✅ Send typing indicator via WebSocket (with HTTP fallback)
-                    try {
-                      if (chatRoom?.id) {
-                        if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
-                        
-                        // Get customer data from user object
-                        const userData = await AsyncStorage.getItem('user');
-                        if (userData) {
-                          const user = JSON.parse(userData);
-                          const customerId = user.customer_id || user.id;
-                          const customerName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.username || 'Customer';
-                          
-                          if (customerId) {
-                            // Try WebSocket first
-                            if (chatWebSocket.isConnected()) {
-                              chatWebSocket.setTyping(true, parseInt(customerId.toString()), customerName);
-                            } else {
-                              // Fallback to HTTP
-                              apiService.setOrderChatTyping(chatRoom.id, true);
-                            }
-                            
-                            typingTimerRef.current = setTimeout(() => {
-                              if (chatWebSocket.isConnected()) {
-                                chatWebSocket.setTyping(false, parseInt(customerId.toString()), customerName);
-                              } else {
-                                apiService.setOrderChatTyping(chatRoom.id, false);
-                              }
-                            }, 2000);
-                          }
-                        }
-                      }
-                    } catch {}
+                    // ❌ DISABLED: Typing indicators were causing connection exhaustion
+                    // Will re-enable after WebSocket stability is confirmed
                   }}
                   editable={!chatSending}
                   returnKeyType="send"
