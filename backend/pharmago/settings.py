@@ -149,10 +149,14 @@ DATABASES = {
         'HOST': os.getenv('DB_HOST', 'localhost'),
         'PORT': os.getenv('DB_PORT', '5434'),
         
-        # DISABLED: Connection pooling was causing backend to hang
-        # Will investigate proper pooling solution later
-        # 'CONN_MAX_AGE': 60,
-        # 'CONN_HEALTH_CHECKS': True,
+        # Aggressive connection timeout to prevent exhaustion
+        # Shorter timeout = connections close faster = fewer simultaneous connections
+        'CONN_MAX_AGE': 10,  # 10 seconds - very short to handle WebSocket load
+        
+        # Additional settings for stability
+        'OPTIONS': {
+            'connect_timeout': 5,  # Fast timeout on connection attempt
+        }
     }
 }
 
