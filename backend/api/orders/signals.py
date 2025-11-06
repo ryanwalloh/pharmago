@@ -33,20 +33,34 @@ def _get_pharmacy_ids_from_order(order: Order):
 @receiver(post_save, sender=Order)
 def on_order_saved(sender, instance: Order, created, **kwargs):
     pharmacy_ids = _get_pharmacy_ids_from_order(instance)
+    
+    # 🔍 ENHANCED LOGGING: Track what's happening
+    if created:
+        logger.info(f"🆕 New Order #{instance.id} created | Pharmacy IDs from order lines: {pharmacy_ids}")
+    else:
+        logger.info(f"📝 Order #{instance.id} updated | Pharmacy IDs: {pharmacy_ids}")
+    
     _bump_pharmacy_orders_version(pharmacy_ids)
     
-    # ✅ NEW: Broadcast to pharmacy WebSocket for real-time updates
-    try:
-        from api.delivery.websocket_service import broadcast_pharmacy_order_notification
-        for pharmacy_id in pharmacy_ids:
-            if pharmacy_id:
-                broadcast_pharmacy_order_notification(
-                    pharmacy_id=pharmacy_id,
-                    order=instance,
-                    event_type='new_order' if created else 'order_updated'
-                )
-    except Exception as e:
-        logger.warning(f"Failed to broadcast pharmacy order notification: {str(e)}")
+    # ✅ Broadcast to pharmacy WebSocket for real-time updates
+    # NOTE: For NEW orders, this may be empty if order lines aren't created yet.
+    # OrderLine signal will handle the broadcast when lines are added.
+    if pharmacy_ids:
+        try:
+            from api.delivery.websocket_service import broadcast_pharmacy_order_notification
+            for pharmacy_id in pharmacy_ids:
+                if pharmacy_id:
+                    logger.info(f"📡 Broadcasting from Order signal: Order #{instance.id} for Pharmacy {pharmacy_id}")
+                    broadcast_pharmacy_order_notification(
+                        pharmacy_id=pharmacy_id,
+                        order=instance,
+                        event_type='new_order' if created else 'order_updated'
+                    )
+        except Exception as e:
+            logger.error(f"❌ Failed to broadcast pharmacy order notification: {str(e)}", exc_info=True)
+    else:
+        if created:
+            logger.info(f"⏭️  No pharmacy IDs yet for Order #{instance.id} - will broadcast when OrderLines are added")
 
 
 @receiver(post_delete, sender=Order)
@@ -56,12 +70,27 @@ def on_order_deleted(sender, instance: Order, **kwargs):
 
 
 @receiver(post_save, sender=OrderLine)
-def on_orderline_saved(sender, instance: OrderLine, **kwargs):
+def on_orderline_saved(sender, instance: OrderLine, created, **kwargs):
     try:
         pid = getattr(getattr(instance.inventory_item, 'pharmacy', None), 'id', None)
         _bump_pharmacy_orders_version([pid])
-    except Exception:
-        pass
+        
+        # ✅ CRITICAL FIX: Broadcast when order line is added (this is when new orders get pharmacy association!)
+        if pid:
+            try:
+                from api.delivery.websocket_service import broadcast_pharmacy_order_notification
+                # Get the order from the order line
+                order = instance.order
+                logger.info(f"📡 Broadcasting from OrderLine signal: Order #{order.id} for Pharmacy {pid} (created={created})")
+                broadcast_pharmacy_order_notification(
+                    pharmacy_id=pid,
+                    order=order,
+                    event_type='new_order' if created else 'order_updated'
+                )
+            except Exception as e:
+                logger.error(f"❌ Failed to broadcast from OrderLine: {str(e)}", exc_info=True)
+    except Exception as e:
+        logger.error(f"❌ Error in on_orderline_saved: {str(e)}", exc_info=True)
 
 
 @receiver(post_delete, sender=OrderLine)
