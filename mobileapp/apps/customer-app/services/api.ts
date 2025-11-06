@@ -306,7 +306,7 @@ class ApiService {
         headers: {
           'Content-Type': 'application/json',
         },
-      }, 5000); // 5 second timeout for lightweight endpoint
+      }, 10000); // 10 second timeout (Railway can be slow on cold starts)
 
       console.log('🔗 Connection test response:', {
         status: response.status,
@@ -333,7 +333,8 @@ class ApiService {
         };
       }
     } catch (error) {
-      console.error('❌ Backend connection failed:', error);
+      // ⚠️ Connection test failed - this is non-critical, just log it
+      console.warn('⚠️ Backend connection test failed (non-critical):', error instanceof Error ? error.message : 'Unknown error');
       
       return {
         success: false,
