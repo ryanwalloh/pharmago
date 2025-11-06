@@ -140,9 +140,7 @@ const PharmacyDashboard = () => {
   });
   const [ordersLoading, setOrdersLoading] = useState(true);
 
-  // WebSocket connections for real-time updates
-  const orderWebSockets = useRef({}); // {orderId: WebSocket}
-  const [orderStatuses, setOrderStatuses] = useState({}); // {orderId: status}
+  // WebSocket connection for real-time updates
   const pharmacyOrdersWebSocket = useRef(null); // Main pharmacy orders WebSocket
 
   // Pharmacy statistics
@@ -184,24 +182,10 @@ const PharmacyDashboard = () => {
             readyOrders: data.readyOrders || 0
           }));
           console.log(`✅ Loaded ${data.totalOrders} orders from database`);
-
-          // ✅ NEW: Connect WebSockets for all orders
-          const allOrders = [...pendingOrders, ...preparingOrders, ...readyOrders];
-          const currentOrderIds = allOrders.map(o => o.id);
           
-          // Disconnect WebSockets for orders that are no longer in the list
-          Object.keys(orderWebSockets.current).forEach(orderId => {
-            if (!currentOrderIds.includes(parseInt(orderId))) {
-              disconnectOrderWebSocket(orderId);
-            }
-          });
-          
-          // Connect WebSockets for new orders
-          allOrders.forEach(order => {
-            connectOrderWebSocket(order.id);
-          });
-          
-          console.log(`🔌 WebSocket connections: ${Object.keys(orderWebSockets.current).length} active`);
+          // ⚡ PERFORMANCE: Removed individual order WebSocket connections
+          // The pharmacy dashboard only needs the main pharmacy orders WebSocket
+          // Individual order WebSockets are for customer order tracking only
         } else {
           console.error('API returned error:', data.error);
         }
@@ -309,11 +293,10 @@ const PharmacyDashboard = () => {
     setLoading(false);
   }, []);
 
-  // ✅ NEW: Cleanup WebSockets on component unmount
+  // ✅ Cleanup WebSocket on component unmount
   useEffect(() => {
     return () => {
-      console.log('🔌 Pharmacy Dashboard unmounting - cleaning up WebSockets');
-      disconnectAllWebSockets();
+      console.log('🔌 Pharmacy Dashboard unmounting - cleaning up WebSocket');
       
       // Disconnect pharmacy orders WebSocket
       if (pharmacyOrdersWebSocket.current) {
@@ -504,95 +487,12 @@ const PharmacyDashboard = () => {
       ready: prev.ready.filter(order => order.id !== orderId)
     }));
 
-      // Disconnect WebSocket for this order
-      disconnectOrderWebSocket(orderId);
-
       console.log(`✅ Order #${orderId} marked as done and removed from live view`);
       
     } catch (error) {
       console.error('Error archiving order:', error);
       alert('Failed to mark order as done. Please try again.');
     }
-  };
-
-  // ✅ NEW: WebSocket Manager for Real-time Order Status Updates
-  const connectOrderWebSocket = (orderId) => {
-    // Don't create duplicate connections
-    if (orderWebSockets.current[orderId]) {
-      console.log(`🔌 WebSocket already connected for order ${orderId}`);
-      return;
-    }
-
-    const wsUrl = process.env.REACT_APP_BACKEND_URL?.includes('railway')
-      ? `wss://pharmago-backend-production.up.railway.app/ws/order/tracking/${orderId}/`
-      : `ws://localhost:8000/ws/order/tracking/${orderId}/`;
-
-    console.log(`🔌 Connecting to order ${orderId} WebSocket:`, wsUrl);
-
-    try {
-      const ws = new WebSocket(wsUrl);
-
-      ws.onopen = () => {
-        console.log(`✅ WebSocket connected for order ${orderId}`);
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          console.log(`📨 Order ${orderId} status update:`, data);
-
-          // Handle status update
-          if (data.type === 'order_status_update' || data.order_status) {
-            const newStatus = data.order_status || data.status;
-            console.log(`🔄 Order ${orderId} status changed to: ${newStatus}`);
-            
-            // Update local status tracking
-            setOrderStatuses(prev => ({
-              ...prev,
-              [orderId]: newStatus
-            }));
-
-            // Auto-refresh orders to move between sections
-            if (pharmacyInfo?.id) {
-              fetchOrders(pharmacyInfo.id);
-            }
-          }
-        } catch (error) {
-          console.error(`❌ Error parsing WebSocket message for order ${orderId}:`, error);
-        }
-      };
-
-      ws.onerror = (error) => {
-        console.error(`❌ WebSocket error for order ${orderId}:`, error);
-      };
-
-      ws.onclose = (event) => {
-        console.log(`🔌 WebSocket closed for order ${orderId} (code: ${event.code})`);
-        delete orderWebSockets.current[orderId];
-      };
-
-      // Store the WebSocket connection
-      orderWebSockets.current[orderId] = ws;
-
-    } catch (error) {
-      console.error(`❌ Failed to connect WebSocket for order ${orderId}:`, error);
-    }
-  };
-
-  const disconnectOrderWebSocket = (orderId) => {
-    const ws = orderWebSockets.current[orderId];
-    if (ws) {
-      console.log(`🔌 Disconnecting WebSocket for order ${orderId}`);
-      ws.close(1000, 'Pharmacy dashboard cleanup');
-      delete orderWebSockets.current[orderId];
-    }
-  };
-
-  const disconnectAllWebSockets = () => {
-    console.log('🔌 Disconnecting all order WebSockets');
-    Object.keys(orderWebSockets.current).forEach(orderId => {
-      disconnectOrderWebSocket(orderId);
-    });
   };
 
   // Cart Order Handlers
@@ -4088,9 +3988,9 @@ const PharmacyDashboard = () => {
                     </p>
                   </div>
                   <div className="text-center">
-                    {/* ✅ NEW: Smart status display based on order status */}
+                    {/* ✅ Smart status display based on order status */}
                     {(() => {
-                      const currentStatus = orderStatuses[order.id] || order.order_status;
+                      const currentStatus = order.order_status;
                       
                       if (currentStatus === 'ready_for_pickup') {
                         return (
