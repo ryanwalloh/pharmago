@@ -31,9 +31,22 @@ def _get_pharmacy_ids_from_order(order: Order):
 
 
 @receiver(post_save, sender=Order)
-def on_order_saved(sender, instance: Order, **kwargs):
+def on_order_saved(sender, instance: Order, created, **kwargs):
     pharmacy_ids = _get_pharmacy_ids_from_order(instance)
     _bump_pharmacy_orders_version(pharmacy_ids)
+    
+    # ✅ NEW: Broadcast to pharmacy WebSocket for real-time updates
+    try:
+        from api.delivery.websocket_service import broadcast_pharmacy_order_notification
+        for pharmacy_id in pharmacy_ids:
+            if pharmacy_id:
+                broadcast_pharmacy_order_notification(
+                    pharmacy_id=pharmacy_id,
+                    order=instance,
+                    event_type='new_order' if created else 'order_updated'
+                )
+    except Exception as e:
+        logger.warning(f"Failed to broadcast pharmacy order notification: {str(e)}")
 
 
 @receiver(post_delete, sender=Order)
