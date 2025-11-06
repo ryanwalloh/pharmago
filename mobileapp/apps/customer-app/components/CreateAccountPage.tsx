@@ -10,6 +10,9 @@ import {
   Alert,
   ActivityIndicator,
   ScrollView,
+  Keyboard,
+  Animated,
+  Platform,
 } from 'react-native';
 import { apiService } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
@@ -38,6 +41,54 @@ export default function CreateAccountPage({ onBack, onRegistrationSuccess }: Cre
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<{[key: string]: string}>({});
+  
+  // ✅ NEW: Keyboard animation state
+  const modalTranslateY = useState(new Animated.Value(0))[0];
+  const [shouldLiftModal, setShouldLiftModal] = useState(false);
+
+  // ✅ NEW: Track if lower fields are focused (email, password, confirmPassword)
+  useEffect(() => {
+    setShouldLiftModal(emailFocused || passwordFocused || confirmPasswordFocused);
+  }, [emailFocused, passwordFocused, confirmPasswordFocused]);
+
+  // ✅ NEW: Keyboard event listeners - Only lift when lower fields are active
+  useEffect(() => {
+    const keyboardWillShowListener = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      (event) => {
+        // Only lift modal if email, password, or confirmPassword is focused
+        if (shouldLiftModal) {
+          const keyboardHeight = event.endCoordinates.height;
+          
+          // Lift modal up by 50% of keyboard height
+          Animated.spring(modalTranslateY, {
+            toValue: -keyboardHeight * 0.5,
+            useNativeDriver: true,
+            speed: 20,
+            bounciness: 0,
+          }).start();
+        }
+      }
+    );
+
+    const keyboardWillHideListener = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => {
+        // Always return to original position when keyboard hides
+        Animated.spring(modalTranslateY, {
+          toValue: 0,
+          useNativeDriver: true,
+          speed: 20,
+          bounciness: 0,
+        }).start();
+      }
+    );
+
+    return () => {
+      keyboardWillShowListener.remove();
+      keyboardWillHideListener.remove();
+    };
+  }, [modalTranslateY, shouldLiftModal]);
 
   // Log API configuration when component mounts
   useEffect(() => {
@@ -308,8 +359,11 @@ export default function CreateAccountPage({ onBack, onRegistrationSuccess }: Cre
         </ImageBackground>
       </View>
       
-      {/* Bottom Modal Container */}
-      <View style={styles.bottomModalContainer}>
+      {/* Bottom Modal Container - Animated for keyboard (only for lower fields) */}
+      <Animated.View style={[
+        styles.bottomModalContainer,
+        { transform: [{ translateY: modalTranslateY }] }
+      ]}>
         <ScrollView 
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
@@ -570,7 +624,7 @@ export default function CreateAccountPage({ onBack, onRegistrationSuccess }: Cre
         </TouchableOpacity>
       </View>
         </ScrollView>
-      </View>
+      </Animated.View>
     </View>
   );
 }

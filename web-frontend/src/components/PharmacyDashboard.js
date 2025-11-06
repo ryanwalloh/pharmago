@@ -139,7 +139,7 @@ const PharmacyDashboard = () => {
     ready: []
   });
   const [ordersLoading, setOrdersLoading] = useState(true);
-  
+
   // WebSocket connections for real-time order status updates
   const orderWebSockets = useRef({}); // {orderId: WebSocket}
   const [orderStatuses, setOrderStatuses] = useState({}); // {orderId: status}
@@ -410,19 +410,19 @@ const PharmacyDashboard = () => {
       console.log('✅ Order marked as ready:', data);
 
       // Update local state to move order from preparing to ready
-      const orderToMove = orders.preparing.find(order => order.id === orderId);
-      if (orderToMove) {
+    const orderToMove = orders.preparing.find(order => order.id === orderId);
+    if (orderToMove) {
         // Update the order's status in the object
         orderToMove.order_status = 'ready_for_pickup';
         
-        setOrders(prev => ({
-          ...prev,
-          preparing: prev.preparing.filter(order => order.id !== orderId),
-          ready: [...prev.ready, orderToMove]
-        }));
-      }
+      setOrders(prev => ({
+        ...prev,
+        preparing: prev.preparing.filter(order => order.id !== orderId),
+        ready: [...prev.ready, orderToMove]
+      }));
+    }
 
-      setSelectedOrder(null);
+    setSelectedOrder(null);
 
       // Success - no alert, just console log
       console.log(`✅ Order #${orderToMove?.orderNumber || orderId} marked as ready for pickup`);
@@ -458,10 +458,10 @@ const PharmacyDashboard = () => {
       console.log('✅ Order archived:', data);
 
       // Remove from local state (will stay hidden after refresh due to backend filter)
-      setOrders(prev => ({
-        ...prev,
-        ready: prev.ready.filter(order => order.id !== orderId)
-      }));
+    setOrders(prev => ({
+      ...prev,
+      ready: prev.ready.filter(order => order.id !== orderId)
+    }));
 
       // Disconnect WebSocket for this order
       disconnectOrderWebSocket(orderId);
@@ -4068,12 +4068,12 @@ const PharmacyDashboard = () => {
                       } else if (currentStatus === 'delivered') {
                         return (
                           <div>
-                            <button 
-                              onClick={() => handleArrivedOrder(order.id)}
+                    <button 
+                      onClick={() => handleArrivedOrder(order.id)}
                               className="bg-purple-600 text-white px-6 lg:px-10 py-2 lg:py-3 rounded-2xl text-sm lg:text-lg cursor-pointer hover:bg-purple-700 transition-colors"
-                            >
+                    >
                               Mark as Done
-                            </button>
+                    </button>
                             <p className="text-xs text-green-600 mt-1 font-medium">✅ Delivered by rider</p>
                           </div>
                         );

@@ -19,7 +19,15 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { DispatchOffer } from '../../customer-app/services/dispatchService';
 
-const { width, height } = Dimensions.get('window');
+// ✅ FIX: Lazy dimensions to prevent import-time crashes
+let cachedHeight: number | null = null;
+
+const getScreenHeight = (): number => {
+  if (cachedHeight === null) {
+    cachedHeight = Dimensions.get('window').height;
+  }
+  return cachedHeight;
+};
 
 interface DispatchOfferModalProps {
   visible: boolean;
@@ -41,7 +49,7 @@ export default function DispatchOfferModal({
   const [timeRemaining, setTimeRemaining] = useState(30);
   const [showDetails, setShowDetails] = useState(false);
   const pulseAnim = useRef(new Animated.Value(1)).current;
-  const slideAnim = useRef(new Animated.Value(height)).current;
+  const slideAnim = useRef(new Animated.Value(getScreenHeight())).current;
 
   // Countdown timer
   useEffect(() => {
@@ -103,7 +111,7 @@ export default function DispatchOfferModal({
       }).start();
     } else {
       Animated.timing(slideAnim, {
-        toValue: height,
+        toValue: getScreenHeight(),
         duration: 300,
         useNativeDriver: true,
       }).start();
