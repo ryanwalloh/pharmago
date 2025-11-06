@@ -140,3 +140,31 @@ def broadcast_rider_location(order_id, latitude, longitude, heading=None, speed=
     }
     OrderTrackingWebSocket.notify_rider_location(order_id, location)
 
+
+# ✅ NEW: Pharmacy Order Notifications
+def broadcast_pharmacy_order_notification(pharmacy_id, order, event_type='new_order'):
+    """
+    Broadcast order notification to pharmacy dashboard via WebSocket.
+    
+    Args:
+        pharmacy_id: The pharmacy ID
+        order: Order instance
+        event_type: Type of event ('new_order', 'order_updated', 'order_cancelled')
+    """
+    try:
+        channel_layer = get_channel_layer()
+        group_name = f'pharmacy_orders_{pharmacy_id}'
+        
+        # Use refresh signal for lightweight notification
+        async_to_sync(channel_layer.group_send)(
+            group_name,
+            {
+                'type': 'refresh_orders',
+                'reason': event_type,
+            }
+        )
+        
+        logger.info(f"📡 Sent pharmacy order notification via WebSocket: Pharmacy {pharmacy_id} → {event_type} (Order #{order.id})")
+        
+    except Exception as e:
+        logger.error(f"❌ Failed to send WebSocket pharmacy order notification: {str(e)}")

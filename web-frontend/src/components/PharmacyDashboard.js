@@ -140,9 +140,10 @@ const PharmacyDashboard = () => {
   });
   const [ordersLoading, setOrdersLoading] = useState(true);
 
-  // WebSocket connections for real-time order status updates
+  // WebSocket connections for real-time updates
   const orderWebSockets = useRef({}); // {orderId: WebSocket}
   const [orderStatuses, setOrderStatuses] = useState({}); // {orderId: status}
+  const pharmacyOrdersWebSocket = useRef(null); // Main pharmacy orders WebSocket
 
   // Pharmacy statistics
   const [stats, setStats] = useState({
@@ -216,43 +217,77 @@ const PharmacyDashboard = () => {
     }
   };
 
-  // Lightweight auto-refresh using backend cache version key emitted by signals
+  // ✅ NEW: Real-time order updates via WebSocket (replaces polling)
   useEffect(() => {
-    let cancelled = false;
-    let intervalId = null;
     const storedPharmacyInfo = localStorage.getItem('pharmacy_info');
     const pharmacy = storedPharmacyInfo ? JSON.parse(storedPharmacyInfo) : null;
     const pid = pharmacy?.id;
-    let lastVersion = null;
 
-    const poll = async () => {
-      if (!pid) return;
-      try {
-        const base = (process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
-        const resp = await fetch(`${base}/api/cache-version/?key=${encodeURIComponent(`orders:version:pharmacy:${pid}`)}`);
-        if (!resp.ok) {
-          if (intervalId) {
-            clearInterval(intervalId);
+    if (!pid) {
+      console.log('⚠️ No pharmacy ID found, skipping WebSocket connection');
+      return;
+    }
+
+    // Connect to pharmacy orders WebSocket
+    const wsUrl = process.env.REACT_APP_BACKEND_URL?.includes('railway')
+      ? `wss://pharmago-backend-production.up.railway.app/ws/pharmacy/orders/${pid}/`
+      : `ws://localhost:8000/ws/pharmacy/orders/${pid}/`;
+
+    console.log(`🔌 Connecting to pharmacy orders WebSocket: ${wsUrl}`);
+
+    try {
+      const ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => {
+        console.log(`✅ Connected to pharmacy orders WebSocket`);
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          console.log(`📨 Pharmacy orders WebSocket message:`, data);
+
+          // Handle different message types
+          if (data.type === 'refresh_orders') {
+            console.log(`🔄 Refreshing orders (reason: ${data.reason})`);
+            fetchOrders(pid);
+          } else if (data.type === 'new_order') {
+            console.log(`🆕 New order received: Order #${data.order?.id}`);
+            fetchOrders(pid);
+          } else if (data.type === 'order_updated') {
+            console.log(`📝 Order updated: Order #${data.order_id}`);
+            fetchOrders(pid);
+          } else if (data.type === 'order_cancelled') {
+            console.log(`❌ Order cancelled: Order #${data.order_id}`);
+            fetchOrders(pid);
           }
-          return;
+        } catch (error) {
+          console.error(`❌ Error parsing WebSocket message:`, error);
         }
-        const json = await resp.json();
-        const ver = json?.value || null;
-        if (ver && ver !== lastVersion) {
-          lastVersion = ver;
-          await fetchOrders(pid);
+      };
+
+      ws.onerror = (error) => {
+        console.error(`❌ Pharmacy orders WebSocket error:`, error);
+      };
+
+      ws.onclose = (event) => {
+        console.log(`🔌 Pharmacy orders WebSocket closed (code: ${event.code})`);
+      };
+
+      // Store the WebSocket connection
+      pharmacyOrdersWebSocket.current = ws;
+
+      // Cleanup on unmount
+      return () => {
+        console.log('🔌 Disconnecting pharmacy orders WebSocket');
+        if (pharmacyOrdersWebSocket.current) {
+          pharmacyOrdersWebSocket.current.close(1000, 'Component unmounting');
+          pharmacyOrdersWebSocket.current = null;
         }
-      } catch (_) {}
-    };
-
-    // initial read and then light polling
-    poll();
-    intervalId = setInterval(poll, 7000);
-
-    return () => {
-      cancelled = true;
-      if (intervalId) clearInterval(intervalId);
-    };
+      };
+    } catch (error) {
+      console.error(`❌ Failed to connect to pharmacy orders WebSocket:`, error);
+    }
   }, []);
 
   useEffect(() => {
@@ -279,6 +314,12 @@ const PharmacyDashboard = () => {
     return () => {
       console.log('🔌 Pharmacy Dashboard unmounting - cleaning up WebSockets');
       disconnectAllWebSockets();
+      
+      // Disconnect pharmacy orders WebSocket
+      if (pharmacyOrdersWebSocket.current) {
+        pharmacyOrdersWebSocket.current.close(1000, 'Component unmounting');
+        pharmacyOrdersWebSocket.current = null;
+      }
     };
   }, []);
 
