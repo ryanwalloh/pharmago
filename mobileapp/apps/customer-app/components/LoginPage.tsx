@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,10 @@ import {
   Switch,
   Alert,
   ActivityIndicator,
+  ScrollView,
+  Keyboard,
+  Animated,
+  Platform,
 } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
 import { apiService } from '../services/api';
@@ -25,6 +29,45 @@ function LoginPageContent() {
   const [showCreateAccount, setShowCreateAccount] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+  
+  // ✅ NEW: Keyboard animation state
+  const modalTranslateY = useState(new Animated.Value(0))[0];
+
+  // ✅ NEW: Keyboard event listeners - Lift modal when keyboard appears
+  useEffect(() => {
+    const keyboardWillShowListener = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      (event) => {
+        const keyboardHeight = event.endCoordinates.height;
+        
+        // Lift modal up by 50% of keyboard height for better input visibility
+        Animated.spring(modalTranslateY, {
+          toValue: -keyboardHeight * 0.5,
+          useNativeDriver: true,
+          speed: 20,
+          bounciness: 0,
+        }).start();
+      }
+    );
+
+    const keyboardWillHideListener = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => {
+        // Return modal to original position smoothly
+        Animated.spring(modalTranslateY, {
+          toValue: 0,
+          useNativeDriver: true,
+          speed: 20,
+          bounciness: 0,
+        }).start();
+      }
+    );
+
+    return () => {
+      keyboardWillShowListener.remove();
+      keyboardWillHideListener.remove();
+    };
+  }, [modalTranslateY]);
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
@@ -133,17 +176,25 @@ function LoginPageContent() {
         </ImageBackground>
       </View>
       
-      {/* Bottom Modal Container */}
-      <View style={styles.bottomModalContainer}>
-        {/* Title with colored text */}
-        <View style={styles.titleContainer}>
+      {/* Bottom Modal Container - Animated for keyboard */}
+      <Animated.View style={[
+        styles.bottomModalContainer,
+        { transform: [{ translateY: modalTranslateY }] }
+      ]}>
+        <ScrollView 
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* Title with colored text */}
+          <View style={styles.titleContainer}>
           <Text style={styles.titleHello}>Hello</Text>
           <Text style={styles.titleAgain}> Again!</Text>
         </View>
         
         {/* Subtitle */}
         <Text style={styles.subtitle}>
-          Your health, just a click away.Log in to order medicines now!
+          Your health, just a click away. Log in to order medicines now!
         </Text>
         
         {/* Email Input with Floating Label */}
@@ -232,14 +283,15 @@ function LoginPageContent() {
           )}
         </TouchableOpacity>
         
-        {/* Create Account Link */}
-        <View style={styles.createAccountContainer}>
-          <Text style={styles.createAccountText}>New User? </Text>
-          <TouchableOpacity onPress={() => setShowCreateAccount(true)}>
-            <Text style={styles.createAccountLink}>Create Account</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+          {/* Create Account Link */}
+          <View style={styles.createAccountContainer}>
+            <Text style={styles.createAccountText}>New User? </Text>
+            <TouchableOpacity onPress={() => setShowCreateAccount(true)}>
+              <Text style={styles.createAccountLink}>Create Account</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </Animated.View>
     </View>
   );
 }
@@ -252,8 +304,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF',
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   loadingText: {
     marginTop: 10,
@@ -261,7 +311,7 @@ const styles = StyleSheet.create({
     color: '#666',
   },
   topSection: {
-    flex: 1,
+    flex: 0.6,
     justifyContent: 'center',
     alignItems: 'center',
     width: '100%',
@@ -279,14 +329,16 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   bottomModalContainer: {
+    flex: 0.65,
     backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 30,
     borderTopRightRadius: 30,
+    top: -40,
+  },
+  scrollContent: {
     paddingHorizontal: 24,
     paddingTop: 30,
-    paddingBottom: 40,
-    width: '100%',
-    zIndex: 1000,
+    paddingBottom: 80,
   },
   titleContainer: {
     flexDirection: 'row',

@@ -27,7 +27,23 @@ import * as ImagePicker from 'expo-image-picker';
 import { apiService } from '../../../customer-app/services/api';
 import { uploadProofOfDelivery } from '../../../customer-app/services/cloudinaryService';
 
-const { width, height } = Dimensions.get('window');
+// ✅ FIX: Lazy dimensions to prevent import-time crashes
+let cachedWidth: number | null = null;
+let cachedHeight: number | null = null;
+
+const getScreenWidth = (): number => {
+  if (cachedWidth === null) {
+    cachedWidth = Dimensions.get('window').width;
+  }
+  return cachedWidth;
+};
+
+const getScreenHeight = (): number => {
+  if (cachedHeight === null) {
+    cachedHeight = Dimensions.get('window').height;
+  }
+  return cachedHeight;
+};
 
 // Custom Map Style - Clean minimal design
 const customMapStyle = [
@@ -926,7 +942,8 @@ export default function ActiveDeliveryScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+// ✅ FIX: Lazy stylesheet with Proxy for transparent access
+const getStyles = () => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF',
@@ -937,8 +954,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   map: {
-    width: width,
-    height: height * 0.5,
+    width: getScreenWidth(),
+    height: getScreenHeight() * 0.5,
   },
   backButton: {
     position: 'absolute',
@@ -1215,7 +1232,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 24,
     padding: 32,
-    width: width * 0.85,
+    width: getScreenWidth() * 0.85,
     alignItems: 'center',
   },
   successIconContainer: {
@@ -1294,5 +1311,13 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
   },
+});
+
+// ✅ FIX: Proxy wrapper for lazy style initialization
+const styles = new Proxy({} as ReturnType<typeof getStyles>, {
+  get: (target, prop) => {
+    const styleSheet = getStyles();
+    return styleSheet[prop as keyof typeof styleSheet];
+  }
 });
 
