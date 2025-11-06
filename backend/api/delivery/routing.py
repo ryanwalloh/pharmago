@@ -3,6 +3,7 @@ WebSocket URL routing for delivery/dispatch system and chat.
 """
 from django.urls import re_path
 from . import consumers
+from . import pharmacy_consumers
 from api.chat import consumers as chat_consumers
 
 websocket_urlpatterns = [
@@ -14,7 +15,12 @@ websocket_urlpatterns = [
     # ws://localhost:8000/ws/order/tracking/<order_id>/
     re_path(r'ws/order/tracking/(?P<order_id>\d+)/$', consumers.OrderTrackingConsumer.as_asgi()),
     
-    # Chat room channel (NEW!)
+    # Pharmacy orders channel (NEW!)
+    # ws://localhost:8000/ws/pharmacy/orders/<pharmacy_id>/
+    # wss://pharmago-backend-production.up.railway.app/ws/pharmacy/orders/<pharmacy_id>/
+    re_path(r'ws/pharmacy/orders/(?P<pharmacy_id>\d+)/$', pharmacy_consumers.PharmacyOrdersConsumer.as_asgi()),
+    
+    # Chat room channel
     # ws://localhost:8000/ws/chat/<room_id>/
     # wss://pharmago-backend-production.up.railway.app/ws/chat/<room_id>/
     re_path(r'ws/chat/(?P<room_id>\d+)/$', chat_consumers.ChatConsumer.as_asgi()),
