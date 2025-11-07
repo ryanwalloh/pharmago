@@ -18,7 +18,7 @@ module.exports = {
     icon: './assets/images/icon.png',
     scheme: 'mobileapp',
     userInterfaceStyle: 'automatic',
-    newArchEnabled: true,
+    newArchEnabled: false,  // ✅ CRITICAL FIX: Match customer-app config (was: true)
     ios: {
       supportsTablet: true,
       bundleIdentifier: 'com.pharmago.rider',
@@ -79,7 +79,7 @@ module.exports = {
     ],
     experiments: {
       typedRoutes: true,
-      reactCompiler: true,
+      reactCompiler: false,  // ✅ SAFETY FIX: Disable experimental feature (was: true)
     },
     fonts: [
       './assets/fonts/Nexa-ExtraLight.ttf',

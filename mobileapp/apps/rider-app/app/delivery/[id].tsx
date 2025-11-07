@@ -174,7 +174,7 @@ export default function ActiveDeliveryScreen() {
         console.error('❌ Failed to load react-native-maps in rider app:', error);
         // Continue without maps - delivery tracking will work without live map
       }
-    }, 300); // 300ms delay for production
+    }, 500); // ✅ INCREASED: 500ms delay for maximum safety (was: 300ms)
     
     return () => clearTimeout(timer);
   }, []);
