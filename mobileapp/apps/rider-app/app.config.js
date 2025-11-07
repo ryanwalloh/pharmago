@@ -18,7 +18,7 @@ module.exports = {
     icon: './assets/images/icon.png',
     scheme: 'mobileapp',
     userInterfaceStyle: 'automatic',
-    newArchEnabled: false,  // ✅ CRITICAL FIX: Match customer-app config (was: true)
+    newArchEnabled: true,  // ✅ REQUIRED: Reanimated 4.x requires New Architecture
     ios: {
       supportsTablet: true,
       bundleIdentifier: 'com.pharmago.rider',
