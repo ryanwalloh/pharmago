@@ -46,19 +46,33 @@ export default function OrderHistoryScreen() {
   const [showPrescriptionModal, setShowPrescriptionModal] = useState(false);
 
   const fetchOrders = async () => {
-    if (!user?.customer_id) {
-      setError('Customer ID not found');
+    // ✅ Enhanced: Try customer_id or fallback to id
+    const customerId = user?.customer_id || user?.id;
+    
+    console.log('🔍 DEBUG - User object:', {
+      hasUser: !!user,
+      customer_id: user?.customer_id,
+      id: user?.id,
+      user_id: user?.user_id,
+      fullUser: user
+    });
+    
+    if (!customerId) {
+      const errorMsg = 'Customer ID not found. Please log in again.';
+      console.error('❌', errorMsg);
+      setError(errorMsg);
       setLoading(false);
       return;
     }
 
     try {
-      console.log('📋 Fetching orders for customer ID:', user.customer_id);
-      const response = await apiService.getCustomerOrders(user.customer_id);
+      console.log('📋 Fetching orders for customer ID:', customerId);
+      const response = await apiService.getCustomerOrders(customerId);
       
       console.log('📦 API Response:', {
         success: response.success,
         hasData: !!response.data,
+        dataType: typeof response.data,
         data: response.data
       });
       
@@ -66,7 +80,13 @@ export default function OrderHistoryScreen() {
         // Handle nested data structure from backend
         const ordersData = response.data.data || response.data;
         
-        console.log('📊 Orders data:', ordersData);
+        console.log('📊 Orders data structure:', {
+          hasActiveOrders: !!ordersData.active_orders,
+          hasRecentOrders: !!ordersData.recent_orders,
+          activeCount: ordersData.active_orders?.length,
+          recentCount: ordersData.recent_orders?.length,
+          ordersData: ordersData
+        });
         
         setActiveOrders(ordersData.active_orders || []);
         setRecentOrders(ordersData.recent_orders || []);
@@ -76,11 +96,14 @@ export default function OrderHistoryScreen() {
           recent: ordersData.recent_orders?.length || 0
         });
       } else {
-        setError(response.error || 'Failed to load orders');
-        console.error('❌ Failed to load orders:', response.error);
+        const errorMsg = response.error || 'Failed to load orders';
+        console.error('❌ Failed to load orders:', errorMsg);
+        console.error('❌ Full response:', response);
+        setError(errorMsg);
       }
     } catch (err) {
       console.error('❌ Error fetching orders:', err);
+      console.error('❌ Error stack:', (err as Error).stack);
       setError('Network error. Please try again.');
     } finally {
       setLoading(false);
