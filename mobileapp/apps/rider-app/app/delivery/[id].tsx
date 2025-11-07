@@ -21,7 +21,8 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
+// ❌ REMOVED: import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
+// ✅ MapView will be lazy-loaded inside component to avoid import-time native module crash
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import { apiService } from '../../../customer-app/services/api';
@@ -152,7 +153,37 @@ interface DeliveryData {
 export default function ActiveDeliveryScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams();
-  const mapRef = useRef<MapView>(null);
+  const mapRef = useRef<any>(null); // Changed from MapView to any due to lazy loading
+
+  // ✅ Lazy-load MapView components - CRITICAL: wrap in try-catch and delay
+  const [MapComponents, setMapComponents] = React.useState<any>(null);
+  
+  React.useEffect(() => {
+    // Delay before loading maps to ensure native modules are ready
+    const timer = setTimeout(() => {
+      try {
+        const maps = require('react-native-maps');
+        setMapComponents({
+          MapView: maps.default,
+          Marker: maps.Marker,
+          Polyline: maps.Polyline,
+          PROVIDER_GOOGLE: maps.PROVIDER_GOOGLE,
+        });
+        console.log('✅ Maps loaded successfully in rider app');
+      } catch (error) {
+        console.error('❌ Failed to load react-native-maps in rider app:', error);
+        // Continue without maps - delivery tracking will work without live map
+      }
+    }, 300); // 300ms delay for production
+    
+    return () => clearTimeout(timer);
+  }, []);
+  
+  // Destructure after loading (with fallbacks)
+  const MapView = MapComponents?.MapView;
+  const Marker = MapComponents?.Marker;
+  const Polyline = MapComponents?.Polyline;
+  const PROVIDER_GOOGLE = MapComponents?.PROVIDER_GOOGLE;
 
   const [deliveryData, setDeliveryData] = useState<DeliveryData | null>(null);
   const [riderLocation, setRiderLocation] = useState<{latitude: number; longitude: number} | null>(null);
@@ -640,7 +671,8 @@ export default function ActiveDeliveryScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Map */}
+      {/* Map - Only render when MapView is loaded */}
+      {MapView && (
       <MapView
         ref={mapRef}
         style={styles.map}
@@ -737,6 +769,15 @@ export default function ActiveDeliveryScreen() {
           </Marker>
         )}
       </MapView>
+      )}
+      
+      {/* Placeholder if maps not loaded */}
+      {!MapView && (
+        <View style={[styles.map, { backgroundColor: '#E0E0E0', justifyContent: 'center', alignItems: 'center' }]}>
+          <ActivityIndicator size="large" color="#00BF63" />
+          <Text style={{ marginTop: 12, color: '#666666' }}>Loading map...</Text>
+        </View>
+      )}
 
       {/* Back Button */}
       <TouchableOpacity
