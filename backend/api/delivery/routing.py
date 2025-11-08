@@ -11,6 +11,11 @@ websocket_urlpatterns = [
     # ws://localhost:8000/ws/rider/dispatch/<rider_id>/
     re_path(r'ws/rider/dispatch/(?P<rider_id>\d+)/$', consumers.DispatchConsumer.as_asgi()),
     
+    # Rider order count channel (broadcast to all riders)
+    # ws://localhost:8000/ws/rider/order-count/
+    # wss://pharmago-backend-production.up.railway.app/ws/rider/order-count/
+    re_path(r'ws/rider/order-count/$', consumers.OrderCountConsumer.as_asgi()),
+    
     # Customer order tracking channel
     # ws://localhost:8000/ws/order/tracking/<order_id>/
     re_path(r'ws/order/tracking/(?P<order_id>\d+)/$', consumers.OrderTrackingConsumer.as_asgi()),
