@@ -598,6 +598,19 @@ class ApiService {
     });
   }
 
+  // Manual order acceptance (rider accepts from available orders list)
+  async acceptManualOrders(riderId: number, orderIds: number[]): Promise<ApiResponse<any>> {
+    console.log('📦 Manually accepting orders:', { riderId, orderIds });
+    return this.makeDirectRequest('/rider/manual-accept-orders/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        rider_id: riderId,
+        order_ids: orderIds
+      })
+    });
+  }
+
   // Prescription order methods
   async createPrescriptionOrder(orderData: any): Promise<ApiResponse<any>> {
     console.log('📦 Creating prescription order...');

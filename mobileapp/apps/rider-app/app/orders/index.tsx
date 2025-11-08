@@ -7,10 +7,12 @@ import {
   StatusBar, 
   ScrollView,
   RefreshControl,
-  ActivityIndicator
+  ActivityIndicator,
+  Alert
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiService } from '../../../customer-app/services/api';
 
 interface Order {
@@ -54,10 +56,30 @@ export default function OrdersScreen() {
   const [expandedBatches, setExpandedBatches] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [acceptingBatch, setAcceptingBatch] = useState<string | null>(null);
+  const [riderProfile, setRiderProfile] = useState<any>(null);
 
   useEffect(() => {
     fetchOrders();
+    loadRiderProfile();
   }, []);
+
+  const loadRiderProfile = async () => {
+    try {
+      const sessionData = await AsyncStorage.getItem('rider_session');
+      if (sessionData) {
+        const session = JSON.parse(sessionData);
+        setRiderProfile(session.rider);
+      } else {
+        const cachedProfile = await AsyncStorage.getItem('rider_profile');
+        if (cachedProfile) {
+          setRiderProfile(JSON.parse(cachedProfile));
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load rider profile:', error);
+    }
+  };
 
   const fetchOrders = async () => {
     try {
@@ -92,6 +114,46 @@ export default function OrdersScreen() {
       }
       return newSet;
     });
+  };
+
+  const handleAcceptBatch = async (batch: BatchOrder) => {
+    if (!riderProfile?.id) {
+      Alert.alert('Error', 'Rider profile not loaded. Please go back and try again.');
+      return;
+    }
+
+    setAcceptingBatch(batch.batch_id);
+
+    try {
+      const orderIds = batch.orders.map(o => o.id);
+      console.log(`📦 Accepting ${batch.is_batch ? 'batch' : 'order'}:`, { riderId: riderProfile.id, orderIds });
+      
+      const response = await apiService.acceptManualOrders(riderProfile.id, orderIds);
+
+      if (response.success && response.data) {
+        const { assignment_id, total_earnings, orders_count } = response.data;
+        
+        console.log(`✅ ${batch.is_batch ? 'Batch' : 'Order'} accepted! Assignment ID: ${assignment_id}`);
+        
+        Alert.alert(
+          'Success! 🎉',
+          `${batch.is_batch ? 'Batch' : 'Order'} accepted!\n\nYou'll earn ₱${total_earnings.toFixed(2)} for ${orders_count} ${orders_count === 1 ? 'order' : 'orders'}`,
+          [
+            { 
+              text: 'Start Delivery', 
+              onPress: () => router.push(`/delivery/${assignment_id}` as any)
+            }
+          ]
+        );
+      } else {
+        Alert.alert('Failed', response.error || 'Could not accept order. Please try again.');
+      }
+    } catch (error) {
+      console.error('❌ Error accepting batch:', error);
+      Alert.alert('Error', 'Failed to accept order. Please try again.');
+    } finally {
+      setAcceptingBatch(null);
+    }
   };
 
 
@@ -215,11 +277,27 @@ export default function OrdersScreen() {
                       ))}
 
                       {/* Accept Batch Button */}
-                      <TouchableOpacity style={styles.acceptBatchButton}>
-                        <Text style={styles.acceptBatchButtonText}>
-                          {batch.is_batch ? 'Accept Batch' : 'Accept Order'}
-                        </Text>
-                        <Ionicons name="checkmark-circle" size={20} color="#FFFFFF" />
+                      <TouchableOpacity 
+                        style={[
+                          styles.acceptBatchButton,
+                          acceptingBatch === batch.batch_id && styles.acceptBatchButtonDisabled
+                        ]}
+                        onPress={() => handleAcceptBatch(batch)}
+                        disabled={acceptingBatch === batch.batch_id}
+                      >
+                        {acceptingBatch === batch.batch_id ? (
+                          <>
+                            <ActivityIndicator size="small" color="#FFFFFF" />
+                            <Text style={styles.acceptBatchButtonText}>Accepting...</Text>
+                          </>
+                        ) : (
+                          <>
+                            <Text style={styles.acceptBatchButtonText}>
+                              {batch.is_batch ? 'Accept Batch' : 'Accept Order'}
+                            </Text>
+                            <Ionicons name="checkmark-circle" size={20} color="#FFFFFF" />
+                          </>
+                        )}
                       </TouchableOpacity>
                     </View>
                   )}
@@ -441,6 +519,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: '#FFFFFF',
+  },
+  acceptBatchButtonDisabled: {
+    backgroundColor: '#CCCCCC',
+    opacity: 0.6,
   },
 });
 
