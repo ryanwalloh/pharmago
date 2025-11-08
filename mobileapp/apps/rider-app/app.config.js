@@ -19,7 +19,7 @@ module.exports = {
     icon: './assets/images/icon.png',
     scheme: 'mobileapp',
     userInterfaceStyle: 'automatic',
-    newArchEnabled: false,  // ⚠️ TEMP DISABLED: React 19 + New Arch incompatibility
+    newArchEnabled: true,  // ✅ REQUIRED: Reanimated 4.x requires New Architecture
     ios: {
       supportsTablet: true,
       bundleIdentifier: 'com.pharmago.rider',
