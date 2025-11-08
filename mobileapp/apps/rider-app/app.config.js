@@ -6,7 +6,8 @@ try {
   require('dotenv').config({ path: './.env' });
 } catch (_) {}
 
-const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY || '';
+// ✅ FIX: Hardcoded fallback API key (same as customer app)
+const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY || 'AIzaSyCCuDLJMhB-23kQiXYpXwi-yYGvKz7OgSQ';
 
 /** @type {import('@expo/config').ExpoConfig} */
 module.exports = {
@@ -41,7 +42,9 @@ module.exports = {
         'android.permission.ACCESS_COARSE_LOCATION',
       ],
       config: {
-        googleMaps: GOOGLE_MAPS_API_KEY ? { apiKey: GOOGLE_MAPS_API_KEY } : undefined,
+        googleMaps: {
+          apiKey: GOOGLE_MAPS_API_KEY,
+        },
       },
       package: 'com.pharmago.rider',
     },
