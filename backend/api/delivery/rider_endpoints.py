@@ -648,9 +648,11 @@ def manual_accept_orders(request):
         
         # Create assignment
         with transaction.atomic():
+            from decimal import Decimal
+            
             is_batch = len(orders) > 1
-            total_delivery_fee = sum(order.delivery_fee or 0 for order in orders)
-            rider_earnings = total_delivery_fee * 0.8  # 80% to rider
+            total_delivery_fee = sum(order.delivery_fee or Decimal('0') for order in orders)
+            rider_earnings = total_delivery_fee * Decimal('0.8')  # 80% to rider
             
             # Generate assignment ID
             assignment_id = f"MAN_{timezone.now().strftime('%Y%m%d_%H%M%S')}_{rider_id}"
