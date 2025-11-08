@@ -669,7 +669,7 @@ def manual_accept_orders(request):
                 status='assigned'
             )
             
-            # Create OrderRiderAssignment for each order
+            # Create OrderRiderAssignment for each order and update order status
             for index, order in enumerate(orders, start=1):
                 OrderRiderAssignment.objects.create(
                     order=order,
@@ -677,6 +677,12 @@ def manual_accept_orders(request):
                     pickup_sequence=index,
                     delivery_sequence=index
                 )
+                
+                # ✅ Update order status to PICKED_UP (rider has accepted and will deliver)
+                order.order_status = Order.OrderStatus.PICKED_UP
+                order.save(update_fields=['order_status'])
+                
+                logger.info(f"📦 Order {order.order_number} status updated: READY_FOR_PICKUP → PICKED_UP")
             
             logger.info(f"✅ Rider {rider_id} manually accepted {len(orders)} order(s) - Assignment: {assignment_id}")
             
