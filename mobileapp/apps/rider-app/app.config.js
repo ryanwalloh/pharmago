@@ -11,6 +11,7 @@ const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY || '';
 /** @type {import('@expo/config').ExpoConfig} */
 module.exports = {
   expo: {
+    owner: 'ryamazingw',
     name: 'PharmGo Rider',
     slug: 'pharmago-rider',
     version: '1.0.0',
@@ -88,7 +89,7 @@ module.exports = {
     extra: {
       googleMapsApiKey: GOOGLE_MAPS_API_KEY,
       eas: {
-        projectId: 'e50a07f9-68de-4fad-b8c5-bf50fed7c7ee',
+        projectId: '7cdc768d-ac59-494a-a333-f2c202436d7c',
       },
     },
   },
