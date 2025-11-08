@@ -168,3 +168,84 @@ def broadcast_pharmacy_order_notification(pharmacy_id, order, event_type='new_or
         
     except Exception as e:
         logger.error(f"❌ Failed to send WebSocket pharmacy order notification: {str(e)}")
+
+
+# ✅ NEW: Rider Order Count Notifications
+class RiderOrderCountWebSocket:
+    """Service for broadcasting available order count updates to all riders."""
+    
+    @staticmethod
+    def broadcast_order_count(count):
+        """
+        Broadcast updated order count to all connected riders.
+        This replaces polling with real-time WebSocket updates.
+        
+        Args:
+            count: Current count of available orders
+        """
+        try:
+            channel_layer = get_channel_layer()
+            group_name = 'rider_order_count'
+            
+            async_to_sync(channel_layer.group_send)(
+                group_name,
+                {
+                    'type': 'order_count_update',
+                    'count': count,
+                }
+            )
+            
+            logger.info(f"📡 Broadcasted order count update to all riders: {count}")
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to broadcast order count: {str(e)}")
+    
+    @staticmethod
+    def get_current_count():
+        """
+        Calculate current available order count.
+        Same logic as the polling endpoint.
+        """
+        try:
+            from api.orders.models import Order
+            
+            # Get orders that are accepted, preparing, or ready for pickup - but not assigned to a rider
+            available_orders = Order.objects.filter(
+                order_status__in=[
+                    Order.OrderStatus.ACCEPTED,
+                    Order.OrderStatus.PREPARING,
+                    Order.OrderStatus.READY_FOR_PICKUP
+                ]
+            )
+            
+            # Filter out orders that already have rider assignments
+            unassigned_orders = [order for order in available_orders if not order.is_assigned_to_rider()]
+            
+            count = len(unassigned_orders)
+            
+            logger.debug(f"📦 Calculated available orders count: {count}")
+            
+            return count
+            
+        except Exception as e:
+            logger.error(f"❌ Error calculating order count: {str(e)}", exc_info=True)
+            return 0
+    
+    @staticmethod
+    def broadcast_current_count():
+        """
+        Calculate and broadcast current order count.
+        Convenience method that combines get_current_count() and broadcast_order_count().
+        """
+        count = RiderOrderCountWebSocket.get_current_count()
+        RiderOrderCountWebSocket.broadcast_order_count(count)
+        return count
+
+
+# Convenience function for quick access
+def broadcast_rider_order_count_update():
+    """
+    Calculate and broadcast updated order count to all riders.
+    Call this whenever orders change status that affects availability.
+    """
+    return RiderOrderCountWebSocket.broadcast_current_count()
