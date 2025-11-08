@@ -67,6 +67,14 @@ def on_order_saved(sender, instance: Order, created, **kwargs):
 def on_order_deleted(sender, instance: Order, **kwargs):
     pharmacy_ids = _get_pharmacy_ids_from_order(instance)
     _bump_pharmacy_orders_version(pharmacy_ids)
+    
+    # ✅ NEW: Broadcast order count update when order is deleted
+    try:
+        from api.delivery.websocket_service import broadcast_rider_order_count_update
+        broadcast_rider_order_count_update()
+        logger.info(f"📡 Broadcasted order count update to riders (Order #{instance.id} deleted)")
+    except Exception as e:
+        logger.warning(f"Failed to broadcast order count update after deletion: {str(e)}")
 
 
 @receiver(post_save, sender=OrderLine)
@@ -129,6 +137,22 @@ def auto_dispatch_on_order_acceptance(sender, instance: Order, created, **kwargs
         )
     except Exception as e:
         logger.warning(f"Failed to broadcast order update via WebSocket: {str(e)}")
+    
+    # ✅ NEW: Broadcast order count update to all riders when status changes
+    # This affects available order count for statuses: ACCEPTED, PREPARING, READY_FOR_PICKUP
+    if instance.order_status in [
+        Order.OrderStatus.ACCEPTED,
+        Order.OrderStatus.PREPARING,
+        Order.OrderStatus.READY_FOR_PICKUP,
+        Order.OrderStatus.PICKED_UP,  # Count decreases when picked up
+        Order.OrderStatus.CANCELLED,   # Count decreases when cancelled
+    ]:
+        try:
+            from api.delivery.websocket_service import broadcast_rider_order_count_update
+            broadcast_rider_order_count_update()
+            logger.info(f"📡 Broadcasted order count update to riders (Order #{instance.id} → {instance.order_status})")
+        except Exception as e:
+            logger.warning(f"Failed to broadcast order count update: {str(e)}")
     
     # Only trigger for existing orders (not newly created)
     if created:
