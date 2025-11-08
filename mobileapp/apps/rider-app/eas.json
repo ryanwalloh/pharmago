@@ -9,11 +9,38 @@
       "distribution": "internal",
       "android": {
         "gradleCommand": ":app:assembleDebug"
+      },
+      "ios": {
+        "buildConfiguration": "Debug"
       }
     },
     "preview": {
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_BASE": "https://pharmago-backend-production.up.railway.app"
+      },
+      "android": {
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleRelease"
+      },
+      "ios": {
+        "simulator": true,
+        "buildConfiguration": "Release"
+      }
     },
+    "production": {
+      "env": {
+        "EXPO_PUBLIC_API_BASE": "https://pharmago-backend-production.up.railway.app"
+      },
+      "android": {
+        "buildType": "apk"
+      },
+      "ios": {
+        "buildConfiguration": "Release"
+      }
+    }
+  },
+  "submit": {
     "production": {}
   }
 }
