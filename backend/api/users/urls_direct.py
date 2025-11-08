@@ -27,6 +27,9 @@ urlpatterns = [
     path('rider/update-location/', delivery_rider_endpoints.update_rider_location),
     path('rider/current-offer/', delivery_rider_endpoints.get_current_dispatch_offer),
     
+    # Manual Order Acceptance (from available orders list)
+    path('rider/manual-accept-orders/', delivery_rider_endpoints.manual_accept_orders),
+    
     # Assignment Details Endpoint
     path('assignment/<int:assignment_id>/', assignment_endpoints.get_assignment_details),
     

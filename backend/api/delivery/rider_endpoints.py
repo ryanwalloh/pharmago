@@ -556,3 +556,149 @@ def get_current_dispatch_offer(request):
             'error': 'Internal server error'
         }, status=500)
 
+
+# ========== MANUAL ORDER ACCEPTANCE ==========
+
+@csrf_exempt
+def manual_accept_orders(request):
+    """
+    Rider manually accepts orders from available orders list.
+    This is SEPARATE from dispatch offers - rider browses list and chooses orders.
+    
+    POST /api/rider/manual-accept-orders/
+    Body: {
+        "rider_id": 123,
+        "order_ids": [45, 46, 47]  # Array of order IDs to accept
+    }
+    
+    Returns: {
+        "success": True,
+        "assignment_id": "ASG_20241108_001",
+        "orders_count": 3,
+        "total_earnings": 250.00
+    }
+    """
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
+    
+    try:
+        import json
+        from api.delivery.models import RiderAssignment, OrderRiderAssignment
+        from django.db import transaction
+        
+        data = json.loads(request.body)
+        rider_id = data.get('rider_id')
+        order_ids = data.get('order_ids', [])
+        
+        # Validation
+        if not rider_id:
+            return JsonResponse({
+                'success': False,
+                'error': 'Missing rider_id'
+            }, status=400)
+        
+        if not order_ids or not isinstance(order_ids, list):
+            return JsonResponse({
+                'success': False,
+                'error': 'Missing or invalid order_ids (must be array)'
+            }, status=400)
+        
+        # Get rider
+        try:
+            rider = Rider.objects.get(id=rider_id)
+        except Rider.DoesNotExist:
+            return JsonResponse({
+                'success': False,
+                'error': 'Rider not found'
+            }, status=404)
+        
+        # Verify rider is active
+        if rider.status != Rider.RiderStatus.APPROVED:
+            return JsonResponse({
+                'success': False,
+                'error': 'Rider is not approved'
+            }, status=403)
+        
+        # Get orders
+        orders = Order.objects.filter(id__in=order_ids).select_related('delivery_address')
+        
+        if orders.count() != len(order_ids):
+            return JsonResponse({
+                'success': False,
+                'error': 'Some orders not found'
+            }, status=404)
+        
+        # Verify all orders are available (not assigned)
+        for order in orders:
+            if order.is_assigned_to_rider():
+                return JsonResponse({
+                    'success': False,
+                    'error': f'Order {order.order_number} is already assigned to another rider'
+                }, status=400)
+            
+            if order.order_status not in [
+                Order.OrderStatus.ACCEPTED,
+                Order.OrderStatus.PREPARING,
+                Order.OrderStatus.READY_FOR_PICKUP
+            ]:
+                return JsonResponse({
+                    'success': False,
+                    'error': f'Order {order.order_number} is not available for pickup (status: {order.order_status})'
+                }, status=400)
+        
+        # Create assignment
+        with transaction.atomic():
+            is_batch = len(orders) > 1
+            total_delivery_fee = sum(order.delivery_fee or 0 for order in orders)
+            rider_earnings = total_delivery_fee * 0.8  # 80% to rider
+            
+            # Generate assignment ID
+            assignment_id = f"MAN_{timezone.now().strftime('%Y%m%d_%H%M%S')}_{rider_id}"
+            
+            # Create RiderAssignment
+            assignment = RiderAssignment.objects.create(
+                assignment_id=assignment_id,
+                rider=rider,
+                assignment_type=RiderAssignment.AssignmentType.BATCH if is_batch else RiderAssignment.AssignmentType.SINGLE,
+                batch_size=len(orders),
+                total_delivery_fee=total_delivery_fee,
+                rider_earnings=rider_earnings,
+                estimated_completion=timezone.now() + timezone.timedelta(hours=2),
+                status='assigned'
+            )
+            
+            # Create OrderRiderAssignment for each order
+            for index, order in enumerate(orders, start=1):
+                OrderRiderAssignment.objects.create(
+                    order=order,
+                    assignment=assignment,
+                    pickup_sequence=index,
+                    delivery_sequence=index
+                )
+            
+            logger.info(f"✅ Rider {rider_id} manually accepted {len(orders)} order(s) - Assignment: {assignment_id}")
+            
+            # Broadcast order count update via WebSocket
+            try:
+                from api.delivery.websocket_service import broadcast_rider_order_count_update
+                broadcast_rider_order_count_update()
+                logger.info(f"📡 Broadcasted order count update (manual acceptance)")
+            except Exception as e:
+                logger.warning(f"Failed to broadcast order count update: {str(e)}")
+            
+            return JsonResponse({
+                'success': True,
+                'assignment_id': assignment.id,
+                'assignment_number': assignment_id,
+                'orders_count': len(orders),
+                'total_earnings': float(rider_earnings),
+                'is_batch': is_batch
+            }, status=200)
+        
+    except Exception as e:
+        logger.error(f"❌ Error in manual order acceptance: {str(e)}", exc_info=True)
+        return JsonResponse({
+            'success': False,
+            'error': 'Internal server error'
+        }, status=500)
+
