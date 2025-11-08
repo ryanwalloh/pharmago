@@ -14,10 +14,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { apiService } from '../../../customer-app/services/api';
 import { dispatchService, DispatchOffer } from '../../../customer-app/services/dispatchService';
+import { orderCountService } from '../../../customer-app/services/orderCountService';
 import DispatchOfferModal from '../../components/DispatchOfferModal';
 
 // ⚙️ DEVELOPMENT FLAG: Set to true to enable dispatch WebSocket
 const ENABLE_DISPATCH_WEBSOCKET = true;
+
+// ⚙️ NEW FLAG: Set to true to enable order count WebSocket (replaces polling)
+const ENABLE_ORDER_COUNT_WEBSOCKET = true;
 
 interface RiderUser {
   id: number;
@@ -40,6 +44,7 @@ export default function RiderHome() {
     rating: 4.8,
   });
   const [availableOrdersCount, setAvailableOrdersCount] = useState(0);
+  const [orderCountConnected, setOrderCountConnected] = useState(false);
 
   // Dispatch Offer Modal State
   const [currentDispatchOffer, setCurrentDispatchOffer] = useState<DispatchOffer | null>(null);
@@ -270,23 +275,66 @@ export default function RiderHome() {
 
   useEffect(() => {
     loadRiderData();
-    fetchAvailableOrders();
     
-    // Set up polling for order count (every 15 seconds)
-    const orderPollingInterval = setInterval(() => {
-      console.log('📡 Polling for order updates');
+    // Initial fetch if WebSocket is disabled
+    if (!ENABLE_ORDER_COUNT_WEBSOCKET) {
       fetchAvailableOrders();
-    }, 15000); // 15 seconds
+      
+      // Set up polling for order count (every 15 seconds) - LEGACY
+      const orderPollingInterval = setInterval(() => {
+        console.log('📡 Polling for order updates (LEGACY MODE)');
+        fetchAvailableOrders();
+      }, 15000); // 15 seconds
+      
+      return () => {
+        clearInterval(orderPollingInterval);
+        // Disconnect dispatch WebSocket on unmount
+        if (ENABLE_DISPATCH_WEBSOCKET) {
+          dispatchService.disconnect();
+        }
+      };
+    }
+    
+    // ✅ NEW: Connect to order count WebSocket (replaces polling)
+    if (ENABLE_ORDER_COUNT_WEBSOCKET) {
+      console.log('🔌 Connecting to order count WebSocket');
+      orderCountService.connectToOrderCount(
+        // On count update
+        (count) => {
+          setAvailableOrdersCount((prevCount) => {
+            const timestamp = new Date().toLocaleTimeString();
+            if (count !== prevCount) {
+              console.log(`🔄 [${timestamp}] Order count updated (WebSocket): ${prevCount} → ${count}`);
+            }
+            return count;
+          });
+        },
+        // On connected
+        () => {
+          console.log('✅ Order count WebSocket connected');
+          setOrderCountConnected(true);
+        },
+        // On disconnected
+        () => {
+          console.log('🔌 Order count WebSocket disconnected');
+          setOrderCountConnected(false);
+        }
+      );
+    }
     
     // Cleanup on unmount
     return () => {
-      clearInterval(orderPollingInterval);
+      // Disconnect order count WebSocket
+      if (ENABLE_ORDER_COUNT_WEBSOCKET) {
+        orderCountService.disconnect();
+      }
       // Disconnect dispatch WebSocket on unmount
       if (ENABLE_DISPATCH_WEBSOCKET) {
         dispatchService.disconnect();
       }
     };
-  }, [fetchAvailableOrders]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // fetchAvailableOrders not needed - using WebSocket instead
 
   // Connect to dispatch WebSocket when rider profile is loaded and rider is online
   useEffect(() => {
@@ -368,8 +416,13 @@ export default function RiderHome() {
             <View style={styles.ordersText}>
               <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
                 <Text style={styles.ordersTitle}>{availableOrdersCount} delivery orders found!</Text>
-                <View style={styles.liveBadge}>
-                  <Text style={styles.liveBadgeText}>POLLING</Text>
+                <View style={[
+                  styles.liveBadge, 
+                  orderCountConnected && ENABLE_ORDER_COUNT_WEBSOCKET && styles.liveBadgeConnected
+                ]}>
+                  <Text style={styles.liveBadgeText}>
+                    {ENABLE_ORDER_COUNT_WEBSOCKET ? (orderCountConnected ? 'LIVE' : 'CONNECTING') : 'POLLING'}
+                  </Text>
                 </View>
               </View>
               <TouchableOpacity onPress={() => router.push('/orders/' as any)}>

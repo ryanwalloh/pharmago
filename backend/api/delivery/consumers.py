@@ -273,3 +273,141 @@ class OrderTrackingConsumer(AsyncWebsocketConsumer):
             
         except Exception as e:
             logger.error(f"❌ Error sending order complete: {str(e)}", exc_info=True)
+
+
+class OrderCountConsumer(AsyncWebsocketConsumer):
+    """
+    WebSocket consumer for broadcasting available order count to all riders.
+    All riders connect to the same channel: rider_order_count
+    
+    This provides real-time updates when the available order count changes,
+    eliminating the need for polling.
+    """
+    
+    async def connect(self):
+        """Handle WebSocket connection."""
+        try:
+            # All riders join the same order count broadcast channel
+            self.room_group_name = 'rider_order_count'
+            
+            # Join the order count channel
+            await self.channel_layer.group_add(
+                self.room_group_name,
+                self.channel_name
+            )
+            
+            # Accept the WebSocket connection
+            await self.accept()
+            
+            logger.info(f"✅ Rider connected to order count WebSocket")
+            
+            # Send connection confirmation with current count
+            current_count = await self.get_current_order_count()
+            
+            await self.send(text_data=json.dumps({
+                'type': 'connection_established',
+                'message': 'Connected to order count updates',
+                'count': current_count
+            }))
+            
+        except Exception as e:
+            logger.error(f"❌ Error in order count WebSocket connect: {str(e)}", exc_info=True)
+            await self.close()
+    
+    async def disconnect(self, close_code):
+        """Handle WebSocket disconnection."""
+        try:
+            # Leave order count channel
+            await self.channel_layer.group_discard(
+                self.room_group_name,
+                self.channel_name
+            )
+            
+            logger.info(f"🔌 Rider disconnected from order count WebSocket (code: {close_code})")
+            
+        except Exception as e:
+            logger.error(f"❌ Error in order count disconnect: {str(e)}", exc_info=True)
+    
+    async def receive(self, text_data):
+        """Handle messages from rider (ping for keep-alive)."""
+        try:
+            data = json.loads(text_data)
+            message_type = data.get('type')
+            
+            if message_type == 'ping':
+                # Respond with current count
+                current_count = await self.get_current_order_count()
+                await self.send(text_data=json.dumps({
+                    'type': 'pong',
+                    'count': current_count
+                }))
+            elif message_type == 'request_count':
+                # Manual count request
+                current_count = await self.get_current_order_count()
+                await self.send(text_data=json.dumps({
+                    'type': 'order_count_update',
+                    'count': current_count
+                }))
+            
+        except Exception as e:
+            logger.error(f"❌ Error processing rider message: {str(e)}", exc_info=True)
+    
+    # ========== Event Handlers (triggered from backend) ==========
+    
+    async def order_count_update(self, event):
+        """
+        Send order count update to rider.
+        Triggered when available order count changes.
+        
+        Event structure from backend:
+        {
+            'type': 'order_count_update',
+            'count': 5
+        }
+        """
+        try:
+            count = event['count']
+            
+            logger.debug(f"📤 Broadcasting order count update: {count}")
+            
+            # Send count update to rider's WebSocket
+            await self.send(text_data=json.dumps({
+                'type': 'order_count_update',
+                'count': count
+            }))
+            
+        except Exception as e:
+            logger.error(f"❌ Error sending order count update: {str(e)}", exc_info=True)
+    
+    # ========== Helper Methods ==========
+    
+    @database_sync_to_async
+    def get_current_order_count(self):
+        """
+        Get current count of available orders.
+        This is the same logic as the polling endpoint.
+        """
+        try:
+            from api.orders.models import Order
+            
+            # Get orders that are accepted, preparing, or ready for pickup - but not assigned to a rider
+            available_orders = Order.objects.filter(
+                order_status__in=[
+                    Order.OrderStatus.ACCEPTED,
+                    Order.OrderStatus.PREPARING,
+                    Order.OrderStatus.READY_FOR_PICKUP
+                ]
+            )
+            
+            # Filter out orders that already have rider assignments
+            unassigned_orders = [order for order in available_orders if not order.is_assigned_to_rider()]
+            
+            count = len(unassigned_orders)
+            
+            logger.debug(f"📦 Current available orders count: {count}")
+            
+            return count
+            
+        except Exception as e:
+            logger.error(f"❌ Error getting order count: {str(e)}", exc_info=True)
+            return 0

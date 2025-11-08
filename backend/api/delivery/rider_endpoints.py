@@ -178,6 +178,15 @@ def accept_dispatch_offer(request):
         
         if result['success']:
             logger.info(f"✅ Rider {rider_id} accepted offer {offer_id}")
+            
+            # ✅ NEW: Broadcast order count update when rider accepts offer
+            try:
+                from api.delivery.websocket_service import broadcast_rider_order_count_update
+                broadcast_rider_order_count_update()
+                logger.info(f"📡 Broadcasted order count update to riders (offer {offer_id} accepted)")
+            except Exception as e:
+                logger.warning(f"Failed to broadcast order count update: {str(e)}")
+            
             return JsonResponse({
                 'success': True,
                 'message': 'Offer accepted successfully',
