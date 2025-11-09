@@ -1,5 +1,9 @@
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
+from asgiref.sync import sync_to_async
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def _get_typing_state(cache, room_id):
@@ -9,7 +13,11 @@ def _get_typing_state(cache, room_id):
 
 
 @csrf_exempt
-def get_or_create_order_chat_room(request):
+async def get_or_create_order_chat_room(request):
+    """
+    Async endpoint to get or create a chat room for an order.
+    Called when user opens chat for the first time.
+    """
     try:
         import json
         from api.chat.models import ChatRoom
@@ -25,17 +33,30 @@ def get_or_create_order_chat_room(request):
         if not order_id:
             return JsonResponse({'success': False, 'error': 'order_id is required'}, status=400)
 
-        order = Order.objects.get(id=int(order_id))
-        room, _ = ChatRoom.objects.get_or_create(order=order)
+        # Wrap ORM operations in sync_to_async
+        @sync_to_async
+        def get_or_create_room():
+            order = Order.objects.get(id=int(order_id))
+            room, created = ChatRoom.objects.get_or_create(order=order)
+            return room, created
+        
+        room, created = await get_or_create_room()
+        logger.info(f"✅ Async: {'Created' if created else 'Retrieved'} chat room {room.id} for order {order_id}")
+        
         return JsonResponse({'success': True, 'room_id': room.id, 'room_key': room.room_id})
     except Order.DoesNotExist:
         return JsonResponse({'success': False, 'error': 'Order not found'}, status=404)
     except Exception as e:
+        logger.error(f"❌ Error creating/fetching chat room: {str(e)}")
         return JsonResponse({'success': False, 'error': 'Failed to create room', 'message': str(e)}, status=500)
 
 
 @csrf_exempt
-def get_order_chat_messages(request):
+async def get_order_chat_messages(request):
+    """
+    Async endpoint to fetch chat messages for a room.
+    Wrapped with sync_to_async to prevent blocking the event loop.
+    """
     try:
         from api.chat.models import ChatRoom, ChatMessage
 
@@ -44,9 +65,15 @@ def get_order_chat_messages(request):
         if not room_id:
             return JsonResponse({'success': False, 'error': 'room_id is required'}, status=400)
 
-        room = ChatRoom.objects.select_related('order').get(id=int(room_id))
-        messages_qs = ChatMessage.objects.filter(room=room).order_by('timestamp')  # Oldest first
-        messages = list(messages_qs[:limit])
+        # Wrap ORM queries in sync_to_async to prevent blocking
+        @sync_to_async
+        def fetch_room_and_messages():
+            room = ChatRoom.objects.select_related('order').get(id=int(room_id))
+            messages_qs = ChatMessage.objects.filter(room=room).order_by('timestamp')
+            messages = list(messages_qs[:limit])
+            return room, messages
+        
+        room, messages = await fetch_room_and_messages()
 
         def serialize(msg):
             return {
@@ -64,6 +91,8 @@ def get_order_chat_messages(request):
                 'read_at': msg.read_at.isoformat() if getattr(msg, 'read_at', None) else None,
             }
 
+        logger.info(f"✅ Async: Fetched {len(messages)} messages for room {room.id}")
+        
         return JsonResponse({
             'success': True,
             'room': {'id': room.id, 'room_id': room.room_id},
@@ -73,11 +102,16 @@ def get_order_chat_messages(request):
     except ChatRoom.DoesNotExist:
         return JsonResponse({'success': False, 'error': 'Room not found'}, status=404)
     except Exception as e:
+        logger.error(f"❌ Error fetching chat messages: {str(e)}")
         return JsonResponse({'success': False, 'error': 'Failed to fetch messages', 'message': str(e)}, status=500)
 
 
 @csrf_exempt
-def mark_order_chat_messages_read(request):
+async def mark_order_chat_messages_read(request):
+    """
+    Async endpoint to mark chat messages as read/delivered.
+    Performs bulk updates, so async handling is important.
+    """
     try:
         import json
         from django.utils import timezone
@@ -95,36 +129,44 @@ def mark_order_chat_messages_read(request):
         if not room_id:
             return JsonResponse({'success': False, 'error': 'room_id is required'}, status=400)
 
-        room = ChatRoom.objects.select_related('order__customer__user').get(id=int(room_id))
+        # Wrap all ORM operations in sync_to_async
+        @sync_to_async
+        def mark_messages_read():
+            room = ChatRoom.objects.select_related('order__customer__user').get(id=int(room_id))
 
-        acting_participant = None
-        if pharmacy_id:
-            pharmacy = Pharmacy.objects.get(id=int(pharmacy_id))
-            acting_user = pharmacy.user
-            acting_participant, _ = ChatParticipant.objects.get_or_create(
-                room=room, user=acting_user, defaults={'role': 'pharmacy'}
-            )
-        else:
-            acting_user = room.order.customer.user
-            acting_participant, _ = ChatParticipant.objects.get_or_create(
-                room=room, user=acting_user, defaults={'role': 'customer'}
-            )
+            acting_participant = None
+            if pharmacy_id:
+                pharmacy = Pharmacy.objects.get(id=int(pharmacy_id))
+                acting_user = pharmacy.user
+                acting_participant, _ = ChatParticipant.objects.get_or_create(
+                    room=room, user=acting_user, defaults={'role': 'pharmacy'}
+                )
+            else:
+                acting_user = room.order.customer.user
+                acting_participant, _ = ChatParticipant.objects.get_or_create(
+                    room=room, user=acting_user, defaults={'role': 'customer'}
+                )
 
-        now = timezone.now()
-        delivered_count = (
-            ChatMessage.objects
-            .filter(room=room)
-            .exclude(sender=acting_participant)
-            .filter(delivered_at__isnull=True)
-            .update(status='delivered', delivered_at=now)
-        )
-        read_count = (
-            ChatMessage.objects
-            .filter(room=room)
-            .exclude(sender=acting_participant)
-            .filter(read_at__isnull=True)
-            .update(status='read', read_at=now)
-        )
+            now = timezone.now()
+            delivered_count = (
+                ChatMessage.objects
+                .filter(room=room)
+                .exclude(sender=acting_participant)
+                .filter(delivered_at__isnull=True)
+                .update(status='delivered', delivered_at=now)
+            )
+            read_count = (
+                ChatMessage.objects
+                .filter(room=room)
+                .exclude(sender=acting_participant)
+                .filter(read_at__isnull=True)
+                .update(status='read', read_at=now)
+            )
+            
+            return room, delivered_count, read_count
+        
+        room, delivered_count, read_count = await mark_messages_read()
+        logger.info(f"✅ Async: Marked {read_count} messages as read in room {room.id}")
 
         return JsonResponse({
             'success': True,
@@ -133,11 +175,20 @@ def mark_order_chat_messages_read(request):
             'read_count': int(read_count),
         })
     except Exception as e:
+        logger.error(f"❌ Error marking messages as read: {str(e)}")
         return JsonResponse({'success': False, 'error': 'Failed to mark messages as read', 'message': str(e)}, status=500)
 
 
 @csrf_exempt
-def set_order_chat_typing(request):
+async def set_order_chat_typing(request):
+    """
+    ⚠️ DEPRECATED: Typing indicators disabled system-wide (delivery system, not messaging app)
+    Endpoint kept for backward compatibility but no longer used by frontend.
+    Can be removed in future cleanup.
+    
+    Async endpoint to set typing indicator status.
+    Called frequently during chat interactions.
+    """
     try:
         import json
         from django.core.cache import cache
@@ -156,23 +207,31 @@ def set_order_chat_typing(request):
         if not room_id:
             return JsonResponse({'success': False, 'error': 'room_id is required'}, status=400)
 
-        room = ChatRoom.objects.select_related('order__customer__user').get(id=int(room_id))
+        # Wrap ORM operations in sync_to_async
+        @sync_to_async
+        def update_typing_state():
+            room = ChatRoom.objects.select_related('order__customer__user').get(id=int(room_id))
 
-        role = 'customer'
-        if pharmacy_id:
-            pharmacy = Pharmacy.objects.get(id=int(pharmacy_id))
-            actor_user = pharmacy.user
-            role = 'pharmacy'
-        else:
-            actor_user = room.order.customer.user if getattr(room.order, 'customer', None) else None
+            role = 'customer'
+            if pharmacy_id:
+                pharmacy = Pharmacy.objects.get(id=int(pharmacy_id))
+                actor_user = pharmacy.user
+                role = 'pharmacy'
+            else:
+                actor_user = room.order.customer.user if getattr(room.order, 'customer', None) else None
 
-        if actor_user:
-            ChatParticipant.objects.get_or_create(
-                room=room,
-                user=actor_user,
-                defaults={'role': role},
-            )
+            if actor_user:
+                ChatParticipant.objects.get_or_create(
+                    room=room,
+                    user=actor_user,
+                    defaults={'role': role},
+                )
+            
+            return room, role
+        
+        room, role = await update_typing_state()
 
+        # Cache operations are generally thread-safe and don't need sync_to_async
         key = f"chat_typing:{room.id}:{role}"
         if is_typing:
             cache.set(key, True, timeout=7)
@@ -185,11 +244,20 @@ def set_order_chat_typing(request):
             'typing': {role: bool(is_typing)},
         })
     except Exception as e:
+        logger.error(f"❌ Error setting typing state: {str(e)}")
         return JsonResponse({'success': False, 'error': 'Failed to set typing state', 'message': str(e)}, status=500)
 
 
 @csrf_exempt
-def get_order_chat_typing_status(request):
+async def get_order_chat_typing_status(request):
+    """
+    ⚠️ DEPRECATED: Typing indicators disabled system-wide (delivery system, not messaging app)
+    Endpoint kept for backward compatibility but no longer used by frontend.
+    Can be removed in future cleanup.
+    
+    Async endpoint to fetch typing status for a chat room.
+    This was polled frequently (causing connection issues), so async handling is critical.
+    """
     try:
         from django.core.cache import cache
         from api.chat.models import ChatRoom
@@ -203,17 +271,24 @@ def get_order_chat_typing_status(request):
         if not room_id:
             return JsonResponse({'success': False, 'error': 'room_id is required'}, status=400)
 
-        room = ChatRoom.objects.get(id=int(room_id))
+        # Wrap ORM query in sync_to_async
+        room = await sync_to_async(ChatRoom.objects.get)(id=int(room_id))
         typing = _get_typing_state(cache, room.id)
+        
         return JsonResponse({'success': True, 'room': {'id': room.id, 'room_id': room.room_id}, 'typing': typing})
     except ChatRoom.DoesNotExist:
         return JsonResponse({'success': False, 'error': 'Room not found'}, status=404)
     except Exception as e:
+        logger.error(f"❌ Error fetching typing status: {str(e)}")
         return JsonResponse({'success': False, 'error': 'Failed to fetch typing status', 'message': str(e)}, status=500)
 
 
 @csrf_exempt
-def send_order_chat_message(request):
+async def send_order_chat_message(request):
+    """
+    Async endpoint for pharmacy to send chat messages.
+    Creates message and marks as delivered.
+    """
     try:
         import json
         from api.chat.models import ChatRoom, ChatParticipant, ChatMessage
@@ -234,27 +309,35 @@ def send_order_chat_message(request):
         if not content:
             return JsonResponse({'success': False, 'error': 'content cannot be empty'}, status=400)
 
-        room = ChatRoom.objects.get(id=int(room_id))
-        pharmacy = Pharmacy.objects.get(id=int(pharmacy_id))
-        sender_user = pharmacy.user
+        # Wrap all ORM operations in sync_to_async
+        @sync_to_async
+        def create_message():
+            room = ChatRoom.objects.get(id=int(room_id))
+            pharmacy = Pharmacy.objects.get(id=int(pharmacy_id))
+            sender_user = pharmacy.user
 
-        participant, _ = ChatParticipant.objects.get_or_create(
-            room=room,
-            user=sender_user,
-            defaults={'role': 'pharmacy'},
-        )
+            participant, _ = ChatParticipant.objects.get_or_create(
+                room=room,
+                user=sender_user,
+                defaults={'role': 'pharmacy'},
+            )
 
-        message = ChatMessage.objects.create(
-            room=room,
-            sender=participant,
-            message_type='text',
-            content=content,
-        )
+            message = ChatMessage.objects.create(
+                room=room,
+                sender=participant,
+                message_type='text',
+                content=content,
+            )
 
-        try:
-            message.mark_as_delivered()
-        except Exception:
-            pass
+            try:
+                message.mark_as_delivered()
+            except Exception:
+                pass
+            
+            return message
+        
+        message = await create_message()
+        logger.info(f"✅ Async: Pharmacy sent message {message.id} in room {room_id}")
 
         return JsonResponse({'success': True, 'message': {
             'id': message.id,
@@ -266,14 +349,20 @@ def send_order_chat_message(request):
             'is_system_message': message.is_system_message,
         }}, status=201)
     except Exception as e:
+        logger.error(f"❌ Error sending pharmacy message: {str(e)}")
         return JsonResponse({'success': False, 'error': 'Failed to send message', 'message': str(e)}, status=500)
 
 
 @csrf_exempt
-def send_order_chat_message_customer(request):
+async def send_order_chat_message_customer(request):
+    """
+    Async endpoint for customer to send chat messages.
+    Creates message and marks as delivered.
+    """
     try:
         import json
         from api.chat.models import ChatRoom, ChatParticipant, ChatMessage
+        
         if request.method == 'OPTIONS':
             return JsonResponse({'success': True})
         if request.method != 'POST':
@@ -287,25 +376,33 @@ def send_order_chat_message_customer(request):
         if not content:
             return JsonResponse({'success': False, 'error': 'content cannot be empty'}, status=400)
 
-        room = ChatRoom.objects.select_related('order__customer__user').get(id=int(room_id))
-        customer_user = room.order.customer.user
-        participant, _ = ChatParticipant.objects.get_or_create(
-            room=room,
-            user=customer_user,
-            defaults={'role': 'customer'},
-        )
+        # Wrap all ORM operations in sync_to_async
+        @sync_to_async
+        def create_customer_message():
+            room = ChatRoom.objects.select_related('order__customer__user').get(id=int(room_id))
+            customer_user = room.order.customer.user
+            participant, _ = ChatParticipant.objects.get_or_create(
+                room=room,
+                user=customer_user,
+                defaults={'role': 'customer'},
+            )
 
-        message = ChatMessage.objects.create(
-            room=room,
-            sender=participant,
-            message_type='text',
-            content=content,
-        )
+            message = ChatMessage.objects.create(
+                room=room,
+                sender=participant,
+                message_type='text',
+                content=content,
+            )
 
-        try:
-            message.mark_as_delivered()
-        except Exception:
-            pass
+            try:
+                message.mark_as_delivered()
+            except Exception:
+                pass
+            
+            return message
+        
+        message = await create_customer_message()
+        logger.info(f"✅ Async: Customer sent message {message.id} in room {room_id}")
 
         return JsonResponse({'success': True, 'message': {
             'id': message.id,
@@ -317,6 +414,7 @@ def send_order_chat_message_customer(request):
             'is_system_message': message.is_system_message,
         }}, status=201)
     except Exception as e:
+        logger.error(f"❌ Error sending customer message: {str(e)}")
         return JsonResponse({'success': False, 'error': 'Failed to send message', 'message': str(e)}, status=500)
 
 

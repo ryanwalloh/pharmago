@@ -149,16 +149,22 @@ DATABASES = {
         'HOST': os.getenv('DB_HOST', 'localhost'),
         'PORT': os.getenv('DB_PORT', '5434'),
         
-        # Aggressive connection timeout to prevent exhaustion
-        # Shorter timeout = connections close faster = fewer simultaneous connections
-        'CONN_MAX_AGE': 10,  # 10 seconds - very short to handle WebSocket load
+        # Optimized for ASGI/async environment with WebSockets
+        # Reuse connections for better performance while preventing exhaustion
+        'CONN_MAX_AGE': 300,  # 5 minutes - reuse connections (was 10s, too aggressive)
+        'CONN_HEALTH_CHECKS': True,  # Validate connections before reuse (Django 4.1+)
         
-        # Additional settings for stability
+        # Connection pool and timeout settings
         'OPTIONS': {
-            'connect_timeout': 5,  # Fast timeout on connection attempt
+            'connect_timeout': 10,  # Connection attempt timeout (was 5s, increased for stability)
+            'options': '-c statement_timeout=30000',  # 30s query timeout to prevent hanging queries
         }
     }
 }
+
+# Async database access configuration
+# Ensure sync_to_async uses the correct thread-local connection handling
+DATABASES['default']['ATOMIC_REQUESTS'] = False  # Don't wrap views in transactions for async
 
 
 # Custom User Model
