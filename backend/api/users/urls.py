@@ -4,6 +4,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from .views import UserViewSet, CustomerViewSet, PharmacyViewSet, RiderViewSet, DocumentUploadViewSet
 from .jwt_views import jwt_login, jwt_refresh, jwt_logout, jwt_verify
 from .rider_endpoints import rider_login, rider_session
+from .async_auth import async_user_login
 
 router = DefaultRouter()
 router.register(r'users', UserViewSet, basename='user')
@@ -26,7 +27,8 @@ urlpatterns = [
     path('users/', include([
         path('register/', UserViewSet.as_view({'post': 'register'}), name='user-register'),
         path('register-pharmacy/', UserViewSet.as_view({'post': 'register_pharmacy'}), name='pharmacy-register'),
-        path('login/', UserViewSet.as_view({'post': 'login'}), name='user-login'),
+        path('login/', async_user_login, name='user-login'),  # ✅ ASYNC: Replaced DRF view with async endpoint
+        # path('login/', UserViewSet.as_view({'post': 'login'}), name='user-login-old'),  # Old sync version
         path('logout/', UserViewSet.as_view({'post': 'logout'}), name='user-logout'),
         path('profile/', UserViewSet.as_view({'get': 'profile'}), name='user-profile'),
         path('me/', UserViewSet.as_view({'get': 'me'}), name='user-me'),
