@@ -3,8 +3,14 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 
+@csrf_exempt
+@require_http_methods(["GET", "HEAD"])
 def test_api(request):
-    return JsonResponse({"message": "Hello from Django backend!"})
+    """
+    Lightweight healthcheck endpoint for Railway.
+    Returns 200 OK with minimal processing to verify service is alive.
+    """
+    return JsonResponse({"status": "ok", "message": "Hello from Django backend!"}, status=200)
 from .orders_direct_proxy import direct_prescription_order_creation  # lightweight import alias
 from .orders_direct_proxy import get_order_status  # lightweight import alias
 
