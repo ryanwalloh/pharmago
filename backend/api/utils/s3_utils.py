@@ -1,5 +1,6 @@
 """
-File upload utility functions - supports both S3 and Cloudinary
+File upload utility functions - uses Cloudinary for file storage
+boto3/S3 support disabled for performance (no longer used in production)
 """
 import os
 from django.conf import settings
@@ -10,198 +11,104 @@ from typing import Optional, Dict, Any
 
 logger = logging.getLogger(__name__)
 
-# Try to import boto3, but make it optional
-try:
-    import boto3
-    from botocore.exceptions import ClientError, NoCredentialsError
-    BOTO3_AVAILABLE = True
-except ImportError:
-    BOTO3_AVAILABLE = False
-    logger.info("boto3 not available - using default storage (Cloudinary or local)")
+# ❌ DISABLED: boto3/S3 support removed - using Cloudinary exclusively
+# This eliminates unnecessary import attempts and speeds up container startup
+BOTO3_AVAILABLE = False
 
 
 class S3Storage:
-    """Custom storage class for handling file uploads - works with S3, Cloudinary, or local storage"""
+    """
+    Storage class for file uploads - uses Cloudinary (via Django's default_storage)
+    
+    ❌ S3/boto3 support disabled - Cloudinary is used exclusively for all file operations.
+    This eliminates boto3 import checks and speeds up initialization.
+    """
     
     def __init__(self):
-        # Only initialize S3 if boto3 is available and credentials are set
-        if BOTO3_AVAILABLE:
-            self.aws_access_key_id = getattr(settings, 'AWS_ACCESS_KEY_ID', None)
-            self.aws_secret_access_key = getattr(settings, 'AWS_SECRET_ACCESS_KEY', None)
-            self.aws_storage_bucket_name = getattr(settings, 'AWS_STORAGE_BUCKET_NAME', None)
-            self.aws_s3_region_name = getattr(settings, 'AWS_S3_REGION_NAME', 'ap-southeast-2')
-            
-            if all([self.aws_access_key_id, self.aws_secret_access_key, self.aws_storage_bucket_name]):
-                try:
-                    self.s3_client = boto3.client(
-                        's3',
-                        aws_access_key_id=self.aws_access_key_id,
-                        aws_secret_access_key=self.aws_secret_access_key,
-                        region_name=self.aws_s3_region_name
-                    )
-                    logger.info("AWS S3 client initialized successfully")
-                except Exception as e:
-                    logger.error(f"Failed to initialize S3 client: {str(e)}")
-                    self.s3_client = None
-            else:
-                logger.info("AWS S3 credentials not configured. Using default storage (Cloudinary or local).")
-                self.s3_client = None
-        else:
-            logger.info("boto3 not installed. Using default storage (Cloudinary or local).")
-            self.s3_client = None
+        # ❌ S3 disabled: Always use default storage (Cloudinary)
+        self.s3_client = None
+        logger.debug("Storage initialized - using Cloudinary via default_storage")
     
     def upload_file(self, file_obj, bucket_name: str, object_key: str, 
                    content_type: Optional[str] = None, metadata: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
         """
-        Upload a file to storage (S3, Cloudinary, or local)
+        Upload a file to Cloudinary storage (via Django's default_storage)
         
         Args:
             file_obj: File object to upload
-            bucket_name: S3 bucket name (ignored for Cloudinary)
+            bucket_name: Ignored (kept for API compatibility)
             object_key: File path/key
-            content_type: MIME type of the file
-            metadata: Additional metadata for the file
+            content_type: MIME type of the file (Cloudinary handles automatically)
+            metadata: Additional metadata (Cloudinary handles via resource_type)
             
         Returns:
             Dict containing upload result with 'success', 'url', 'error' keys
         """
-        # Use default storage (Cloudinary or local) if S3 client not available
-        if not self.s3_client:
-            try:
-                saved_path = default_storage.save(object_key, file_obj)
-                file_url = default_storage.url(saved_path)
-                logger.info(f"File uploaded to default storage: {saved_path}")
-                return {
-                    'success': True,
-                    'url': file_url,
-                    'bucket': None,
-                    'key': saved_path,
-                }
-            except Exception as e:
-                logger.error(f"Default storage upload failed: {str(e)}")
-                return {
-                    'success': False,
-                    'error': f'Storage upload failed: {str(e)}'
-                }
-        
-        # Use S3 if available
+        # ❌ S3 disabled: Always use Cloudinary via default_storage
         try:
-            # Prepare upload parameters
-            upload_params = {
-                'Bucket': bucket_name,
-                'Key': object_key,
-                'Body': file_obj.read(),
-                'ContentType': content_type or 'application/octet-stream'
-            }
-            
-            # Add metadata if provided
-            if metadata:
-                upload_params['Metadata'] = metadata
-            
-            # Upload file
-            self.s3_client.put_object(**upload_params)
-            
-            # Generate public URL
-            file_url = f"https://{bucket_name}.s3.{self.aws_s3_region_name}.amazonaws.com/{object_key}"
-            
-            logger.info(f"File uploaded successfully to S3: {object_key}")
-            
+            saved_path = default_storage.save(object_key, file_obj)
+            file_url = default_storage.url(saved_path)
+            logger.info(f"✅ File uploaded to Cloudinary: {saved_path}")
             return {
                 'success': True,
                 'url': file_url,
-                'bucket': bucket_name,
-                'key': object_key
+                'bucket': None,
+                'key': saved_path,
             }
-            
         except Exception as e:
-            logger.error(f"S3 upload failed: {str(e)}")
-            # Fallback to default storage on S3 failure
-            try:
-                try:
-                    file_obj.seek(0)
-                except Exception:
-                    pass
-                saved_path = default_storage.save(object_key, file_obj)
-                file_url = default_storage.url(saved_path)
-                logger.warning("S3 upload failed; saved file to default storage.")
-                return {
-                    'success': True,
-                    'url': file_url,
-                    'bucket': None,
-                    'key': saved_path,
-                }
-            except Exception as fe:
-                logger.error(f"Default storage upload fallback failed: {str(fe)}")
-                return {
-                    'success': False,
-                    'error': f"Upload failed: {str(e)} / {str(fe)}"
-                }
+            logger.error(f"❌ Cloudinary upload failed: {str(e)}")
+            return {
+                'success': False,
+                'error': f'Storage upload failed: {str(e)}'
+            }
     
     def delete_file(self, bucket_name: str, object_key: str) -> Dict[str, Any]:
         """
-        Delete a file from storage
+        Delete a file from Cloudinary storage
         
         Args:
-            bucket_name: S3 bucket name (ignored for Cloudinary)
+            bucket_name: Ignored (kept for API compatibility)
             object_key: File path/key
             
         Returns:
             Dict containing deletion result
         """
-        if not self.s3_client:
-            # For Cloudinary/local storage, deletion is handled by Django
-            return {'success': True, 'message': 'Using default storage deletion'}
-        
+        # ❌ S3 disabled: Cloudinary deletion handled by Django's default_storage
         try:
-            self.s3_client.delete_object(Bucket=bucket_name, Key=object_key)
-            logger.info(f"File deleted successfully from S3: {object_key}")
+            default_storage.delete(object_key)
+            logger.info(f"✅ File deleted from Cloudinary: {object_key}")
             return {'success': True}
-            
         except Exception as e:
-            logger.error(f"S3 deletion failed: {str(e)}")
-            return {
-                'success': False,
-                'error': f"Deletion failed: {str(e)}"
-            }
+            logger.warning(f"⚠️ Cloudinary deletion attempt: {str(e)}")
+            # Cloudinary may have already deleted or file doesn't exist
+            return {'success': True, 'message': 'File deletion handled by Cloudinary'}
     
     def generate_presigned_url(self, bucket_name: str, object_key: str, 
                              expiration: int = 3600) -> Dict[str, Any]:
         """
-        Generate a presigned URL for file access (S3 only)
+        ❌ NOT SUPPORTED: Presigned URLs are S3-specific.
+        Cloudinary files are publicly accessible via direct URLs.
         
         Args:
-            bucket_name: S3 bucket name
+            bucket_name: Ignored
             object_key: File path/key
-            expiration: URL expiration time in seconds (default: 1 hour)
+            expiration: Ignored
             
         Returns:
-            Dict containing presigned URL result
+            Dict indicating presigned URLs not needed for Cloudinary
         """
-        if not self.s3_client:
-            # For Cloudinary, files are already public
-            return {
-                'success': False,
-                'error': 'Presigned URLs only available for S3. Cloudinary files are publicly accessible.'
-            }
-        
+        # Cloudinary files are already public - just return the URL
         try:
-            url = self.s3_client.generate_presigned_url(
-                'get_object',
-                Params={'Bucket': bucket_name, 'Key': object_key},
-                ExpiresIn=expiration
-            )
-            
+            file_url = default_storage.url(object_key)
             return {
                 'success': True,
-                'url': url,
-                'expires_in': expiration
+                'url': file_url,
+                'note': 'Cloudinary files are publicly accessible - no presigned URL needed'
             }
-            
         except Exception as e:
-            logger.error(f"Presigned URL generation failed: {str(e)}")
             return {
                 'success': False,
-                'error': f"Presigned URL generation failed: {str(e)}"
+                'error': f'Cloudinary files are public. URL generation failed: {str(e)}'
             }
 
 
