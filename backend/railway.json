@@ -7,9 +7,7 @@
   "deploy": {
     "startCommand": "daphne -b 0.0.0.0 -p $PORT --application-close-timeout 30 --ping-interval 20 --ping-timeout 10 pharmago.asgi:application",
     "restartPolicyType": "ON_FAILURE",
-    "restartPolicyMaxRetries": 10,
-    "healthcheckPath": "/api/test/",
-    "healthcheckTimeout": 300
+    "restartPolicyMaxRetries": 10
   }
 }
 
