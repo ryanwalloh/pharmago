@@ -86,8 +86,9 @@ const PharmacyDashboard = () => {
   const [chatMessagesLoading, setChatMessagesLoading] = useState(false);
   const chatPollRef = useRef(null);
   const chatMessagesContainerRef = useRef(null);
-  const [chatTyping, setChatTyping] = useState({ customer: false, pharmacy: false });
-  const chatTypingPollRef = useRef(null);
+  // ❌ REMOVED: Typing indicators disabled - unnecessary for delivery system
+  // const [chatTyping, setChatTyping] = useState({ customer: false, pharmacy: false });
+  // const chatTypingPollRef = useRef(null);
   const [chatInput, setChatInput] = useState('');
   const [chatSending, setChatSending] = useState(false);
 
@@ -353,8 +354,7 @@ const PharmacyDashboard = () => {
           await fetchChatMessages(roomId);
           if (chatPollRef.current) clearInterval(chatPollRef.current);
           chatPollRef.current = setInterval(() => fetchChatMessages(roomId, { silent: true }), 12000);
-          if (chatTypingPollRef.current) clearInterval(chatTypingPollRef.current);
-          chatTypingPollRef.current = setInterval(() => pollTypingStatus(roomId), 4000);
+          // ❌ REMOVED: Typing indicator polling disabled
         }
       } catch (e) {
         console.error('Error auto-opening chat:', e);
@@ -882,8 +882,7 @@ const PharmacyDashboard = () => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ room_id: roomId, pharmacy_id: pharmacy?.id }),
         });
-        // Immediately re-poll typing to ensure indicator shows promptly
-        try { pollTypingStatus(roomId); } catch (_) {}
+        // ❌ REMOVED: Typing indicator polling disabled
       } catch (_) {}
     } catch (e) {
       console.error('Fetch messages error', e);
@@ -894,6 +893,14 @@ const PharmacyDashboard = () => {
     }
   };
 
+  // ❌ DISABLED: Typing indicators completely removed
+  // This is a delivery system, not a messaging app. Typing indicators create:
+  // - Excessive polling (4s intervals = 15 req/min per pharmacy)
+  // - Connection exhaustion with multiple open chats
+  // - Unnecessary complexity unrelated to delivery operations
+  // Keeping code commented for reference, can be removed in future cleanup
+  
+  /*
   // Typing: send pharmacy typing state (debounced on input change)
   const sendTypingState = useRef(null);
   if (!sendTypingState.current) {
@@ -946,6 +953,7 @@ const PharmacyDashboard = () => {
       }
     };
   }, [showChatPanel, chatRoom?.id]);
+  */
 
   // Quick Add functionality
   const handleQuickAdd = async () => {
@@ -2805,18 +2813,13 @@ const PharmacyDashboard = () => {
                               <div className="min-w-0">
                                 <h3 className="text-sm font-semibold text-gray-800 truncate">Chat with Customer</h3>
                                 <p className="text-xs text-gray-500 truncate">Order No. {selectedOrder.orderNumber}{chatRoom ? ` • Room ${chatRoom.room_id}` : ''}</p>
-                                {chatTyping.customer && (
-                                  <p className="text-[11px] text-[#2c786c] mt-0.5">Customer is typing…</p>
-                                )}
+                                {/* ❌ REMOVED: Typing indicator disabled */}
                               </div>
                               <button
                                 className="text-xs text-[#2c786c] hover:underline"
                                 onClick={() => {
                                   setShowChatPanel(false);
-                                  if (chatTypingPollRef.current) {
-                                    clearInterval(chatTypingPollRef.current);
-                                    chatTypingPollRef.current = null;
-                                  }
+                                  // ❌ REMOVED: Typing indicator cleanup no longer needed
                                 }}
                               >
                                 Back to Image
@@ -2862,7 +2865,7 @@ const PharmacyDashboard = () => {
                                   value={chatInput}
                                   onChange={(e) => {
                                     setChatInput(e.target.value);
-                                    if (chatRoom) sendTypingState.current(chatRoom.id, true);
+                                    // ❌ REMOVED: Typing indicator disabled
                                   }}
                                   onKeyDown={(e) => {
                                     if (e.key === 'Enter') {
@@ -3220,11 +3223,7 @@ const PharmacyDashboard = () => {
                                   chatPollRef.current = setInterval(() => {
                                     fetchChatMessages(roomId, { silent: true });
                                   }, 12000);
-                                  // Start typing status polling
-                                  if (chatTypingPollRef.current) clearInterval(chatTypingPollRef.current);
-                                  chatTypingPollRef.current = setInterval(() => {
-                                    pollTypingStatus(roomId);
-                                  }, 4000);
+                                  // ❌ REMOVED: Typing status polling disabled
                                   // Persist/refresh totals first so the breakdown is accurate
                                   try {
                                     const base = (process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
@@ -3399,9 +3398,7 @@ const PharmacyDashboard = () => {
                           <div className="px-4 py-3 border-b bg-white">
                             <h3 className="text-sm font-semibold text-gray-800">Chat with Customer</h3>
                             <p className="text-xs text-gray-500">Order No. {selectedOrder.orderNumber}{chatRoom ? ` • Room ${chatRoom.room_id}` : ''}</p>
-                            {chatTyping.customer && (
-                              <p className="text-[11px] text-[#2c786c] mt-0.5">Customer is typing…</p>
-                            )}
+                            {/* ❌ REMOVED: Typing indicator disabled */}
                           </div>
 
                           {/* Messages Container */}
@@ -3442,7 +3439,7 @@ const PharmacyDashboard = () => {
                                 value={chatInput}
                                 onChange={(e) => {
                                   setChatInput(e.target.value);
-                                  if (chatRoom) sendTypingState.current(chatRoom.id, true);
+                                  // ❌ REMOVED: Typing indicator disabled
                                 }}
                                 onKeyDown={(e) => {
                                   if (e.key === 'Enter') {
