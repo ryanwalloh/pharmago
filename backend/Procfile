@@ -1,2 +1,2 @@
-web: python manage.py migrate --noinput && python manage.py collectstatic --noinput && daphne -b 0.0.0.0 -p $PORT pharmago.asgi:application
+web: python manage.py migrate --noinput && python manage.py collectstatic --noinput && daphne -b 0.0.0.0 -p $PORT --application-close-timeout 30 --ping-interval 20 --ping-timeout 10 pharmago.asgi:application
 
