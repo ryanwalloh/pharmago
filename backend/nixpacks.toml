@@ -1,0 +1,20 @@
+# Nixpacks configuration for Railway deployment
+# Handles migrations and static files BEFORE starting the web server
+
+[phases.setup]
+nixPkgs = ["python311", "postgresql"]
+
+[phases.install]
+cmds = ["pip install -r requirements.txt"]
+
+[phases.build]
+cmds = [
+    "python manage.py collectstatic --noinput --clear"
+]
+
+[start]
+cmd = "python manage.py migrate --noinput && daphne -b 0.0.0.0 -p $PORT --application-close-timeout 30 --ping-interval 20 --ping-timeout 10 pharmago.asgi:application"
+
+[variables]
+NIXPACKS_PYTHON_VERSION = "3.11"
+
