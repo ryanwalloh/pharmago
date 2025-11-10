@@ -1,4 +1,4 @@
 # Frontend Procfile for Railway
-# Set HOST env var to bind to all interfaces, use -p for port
-web: sh -c 'HOST=0.0.0.0 npx serve -s build -p $PORT'
+# Use serve with no-port-switching to prevent crashes
+web: npx serve -s build -p $PORT --no-port-switching --no-clipboard
 
