@@ -234,11 +234,12 @@ def serve_prescription_image(request, order_id):
 
 
 @csrf_exempt
-def upload_prescription_image(request):
+async def upload_prescription_image(request):
     """
-    Upload prescription image endpoint that supports both:
+    Async upload prescription image endpoint that supports both:
     1. JSON payload with Cloudinary URL (prescription_url) - Recommended for new implementations
     2. multipart/form-data with file upload (file/image) - Legacy support
+    All DB operations wrapped with sync_to_async to prevent ASGI blocking.
     """
     if request.method != 'POST':
         return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
@@ -246,6 +247,7 @@ def upload_prescription_image(request):
         from django.core.files.storage import default_storage
         from django.utils import timezone
         from api.orders.models import Order
+        from asgiref.sync import sync_to_async
         import uuid
         import os
         import json
@@ -269,49 +271,64 @@ def upload_prescription_image(request):
             except json.JSONDecodeError as e:
                 return JsonResponse({'success': False, 'error': 'Invalid JSON', 'message': str(e)}, status=400)
         
-        # Handle multipart/form-data (legacy file upload)
+        # Handle multipart/form-data (legacy file upload) - wrapped in sync_to_async
         else:
-            file_obj = request.FILES.get('file') or request.FILES.get('image')
-            if not file_obj:
-                return JsonResponse({'success': False, 'error': 'No file uploaded. Use form-data key "file" or "image", or send JSON with "prescription_url".'}, status=400)
+            @sync_to_async
+            def handle_file_upload():
+                """Handle file upload to storage (blocking I/O)"""
+                file_obj = request.FILES.get('file') or request.FILES.get('image')
+                if not file_obj:
+                    return None, None, 'No file uploaded. Use form-data key "file" or "image", or send JSON with "prescription_url".'
 
-            today_path = timezone.now().strftime('%Y/%m/%d')
-            _, ext = os.path.splitext(file_obj.name or '')
-            if not ext:
-                ext = '.jpg'
-            filename = f"prescriptions/{today_path}/{uuid.uuid4().hex}{ext}"
+                today_path = timezone.now().strftime('%Y/%m/%d')
+                _, ext = os.path.splitext(file_obj.name or '')
+                if not ext:
+                    ext = '.jpg'
+                filename = f"prescriptions/{today_path}/{uuid.uuid4().hex}{ext}"
 
-            saved_path = default_storage.save(filename, file_obj)
-            file_url = default_storage.url(saved_path)
-            order_id = request.POST.get('order_id') or request.GET.get('order_id')
+                saved_path = default_storage.save(filename, file_obj)
+                url = default_storage.url(saved_path)
+                oid = request.POST.get('order_id') or request.GET.get('order_id')
+                
+                print(f"📥 Uploaded prescription to storage: {url}")
+                return url, oid, None
             
-            print(f"📥 Uploaded prescription to S3: {file_url}")
+            file_url, order_id, error = await handle_file_upload()
+            if error:
+                return JsonResponse({'success': False, 'error': error}, status=400)
 
-        # Update order if order_id is provided
-        updated = False
-        if order_id:
+        # Update order if order_id is provided - wrapped in sync_to_async
+        @sync_to_async
+        def update_order_prescription():
+            """Update order with prescription URL (DB operation)"""
+            if not order_id:
+                return False, None
+            
             try:
                 order = Order.objects.get(id=int(order_id))
                 order.prescription_image_url = file_url
                 order.save(update_fields=['prescription_image_url'])
-                updated = True
                 print(f"✅ Updated order {order_id} with prescription URL")
+                return True, order_id
             except (Order.DoesNotExist, ValueError):
                 print(f"⚠️ Order {order_id} not found")
-                pass
+                return False, order_id
+        
+        updated, final_order_id = await update_order_prescription()
 
-        return JsonResponse({'success': True, 'url': file_url, 'order_id': order_id, 'order_updated': updated})
+        return JsonResponse({'success': True, 'url': file_url, 'order_id': final_order_id, 'order_updated': updated})
     except Exception as e:
         print(f"❌ Prescription upload error: {e}")
         return JsonResponse({'success': False, 'error': 'Upload failed', 'message': str(e)}, status=500)
 
 
 @csrf_exempt
-def upload_driver_license_image(request):
+async def upload_driver_license_image(request):
     """
-    Upload driver's license image endpoint that supports both:
+    Async upload driver's license image endpoint that supports both:
     1. JSON payload with Cloudinary URL (license_url) - Recommended for new implementations
     2. multipart/form-data with file upload (file/image) - Legacy support
+    All DB operations wrapped with sync_to_async to prevent ASGI blocking.
     """
     if request.method != 'POST':
         return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
@@ -319,6 +336,7 @@ def upload_driver_license_image(request):
         from django.core.files.storage import default_storage
         from django.utils import timezone
         from api.users.models import User, UserDocument
+        from asgiref.sync import sync_to_async
         import uuid, os, json
 
         file_url = None
@@ -340,34 +358,44 @@ def upload_driver_license_image(request):
             except json.JSONDecodeError as e:
                 return JsonResponse({'success': False, 'error': 'Invalid JSON', 'message': str(e)}, status=400)
         
-        # Handle multipart/form-data (legacy file upload)
+        # Handle multipart/form-data (legacy file upload) - wrapped in sync_to_async
         else:
-            file_obj = request.FILES.get('file') or request.FILES.get('image')
-            if not file_obj:
-                return JsonResponse({'success': False, 'error': 'No file uploaded. Use form-data key "file" or "image", or send JSON with "license_url".'}, status=400)
+            @sync_to_async
+            def handle_file_upload():
+                """Handle file upload to storage (blocking I/O)"""
+                file_obj = request.FILES.get('file') or request.FILES.get('image')
+                if not file_obj:
+                    return None, None, 'No file uploaded. Use form-data key "file" or "image", or send JSON with "license_url".'
 
-            today_path = timezone.now().strftime('%Y/%m/%d')
-            _, ext = os.path.splitext(file_obj.name or '')
-            if not ext:
-                ext = '.jpg'
-            filename = f"drivers_licenses/{today_path}/{uuid.uuid4().hex}{ext}"
+                today_path = timezone.now().strftime('%Y/%m/%d')
+                _, ext = os.path.splitext(file_obj.name or '')
+                if not ext:
+                    ext = '.jpg'
+                filename = f"drivers_licenses/{today_path}/{uuid.uuid4().hex}{ext}"
 
-            saved_path = default_storage.save(filename, file_obj)
-            file_url = default_storage.url(saved_path)
-            user_id = request.POST.get('user_id') or request.GET.get('user_id')
+                saved_path = default_storage.save(filename, file_obj)
+                url = default_storage.url(saved_path)
+                uid = request.POST.get('user_id') or request.GET.get('user_id')
+                
+                print(f"📥 Uploaded driver license to storage: {url}")
+                return url, uid, None
             
-            print(f"📥 Uploaded driver license to S3: {file_url}")
+            file_url, user_id, error = await handle_file_upload()
+            if error:
+                return JsonResponse({'success': False, 'error': error}, status=400)
 
-        # Create UserDocument if user_id is provided
-        user = None
-        if user_id:
+        # Create UserDocument if user_id is provided - wrapped in sync_to_async
+        @sync_to_async
+        def create_user_document():
+            """Create UserDocument (DB operations)"""
+            if not user_id:
+                return None
+            
             try:
                 user = User.objects.get(id=int(user_id))
             except (User.DoesNotExist, ValueError):
-                user = None
+                return None
 
-        document = None
-        if user:
             try:
                 document = UserDocument.objects.create(
                     user=user,
@@ -377,11 +405,14 @@ def upload_driver_license_image(request):
                     status='uploaded',
                 )
                 print(f"✅ Created UserDocument {document.id} for user {user.id}")
+                return document.id
             except Exception as e:
                 print(f"⚠️ Failed to create UserDocument: {e}")
-                document = None
+                return None
+        
+        document_id = await create_user_document()
 
-        return JsonResponse({'success': True, 'url': file_url, 'document_id': getattr(document, 'id', None)})
+        return JsonResponse({'success': True, 'url': file_url, 'document_id': document_id})
     except Exception as e:
         print(f"❌ Driver license upload error: {e}")
         return JsonResponse({'success': False, 'error': 'Upload failed', 'message': str(e)}, status=500)
