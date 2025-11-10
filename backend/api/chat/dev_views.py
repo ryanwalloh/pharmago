@@ -141,7 +141,7 @@ async def mark_order_chat_messages_read(request):
         if not room_id:
             return JsonResponse({'success': False, 'error': 'room_id is required'}, status=400)
 
-        # Wrap all ORM operations in sync_to_async
+        # Wrap all ORM operations in sync_to_async - extract model properties inside
         @sync_to_async
         def mark_messages_read():
             room = ChatRoom.objects.select_related('order__customer__user').get(id=int(room_id))
@@ -175,16 +175,22 @@ async def mark_order_chat_messages_read(request):
                 .update(status='read', read_at=now)
             )
             
-            return room, delivered_count, read_count
+            # Extract model properties inside sync context
+            return {
+                'room_id': room.id,
+                'room_key': room.room_id,
+                'delivered_count': delivered_count,
+                'read_count': read_count
+            }
         
-        room, delivered_count, read_count = await mark_messages_read()
-        logger.info(f"✅ Async: Marked {read_count} messages as read in room {room.id}")
+        result = await mark_messages_read()
+        logger.info(f"✅ Async: Marked {result['read_count']} messages as read in room {result['room_id']}")
 
         return JsonResponse({
             'success': True,
-            'room': {'id': room.id, 'room_id': room.room_id},
-            'delivered_count': int(delivered_count),
-            'read_count': int(read_count),
+            'room': {'id': result['room_id'], 'room_id': result['room_key']},
+            'delivered_count': int(result['delivered_count']),
+            'read_count': int(result['read_count']),
         })
     except Exception as e:
         logger.error(f"❌ Error marking messages as read: {str(e)}")
