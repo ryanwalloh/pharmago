@@ -515,16 +515,66 @@ async def get_order_status(request, order_id):
             except Exception as e:
                 logger.warning(f"Could not fetch rider assignment info: {str(e)}")
             
-            # Return all data
+            # Extract all order data as plain values (no lazy loading outside sync context)
+            order_id = order.id
+            order_number = order.order_number
+            order_status = order.order_status
+            prescription_status = order.prescription_status
+            payment_status = order.payment_status
+            subtotal = float(order.subtotal)
+            tax_amount = float(order.tax_amount)
+            delivery_fee = float(order.delivery_fee)
+            discount_amount = float(order.discount_amount)
+            total_amount = float(order.total_amount)
+            prescription_notes = order.prescription_notes
+            notes = order.notes
+            senior_discount_requested = order.senior_discount_requested
+            senior_discount_status = order.senior_discount_status
+            created_at = order.created_at.isoformat()
+            updated_at = order.updated_at.isoformat()
+            estimated_delivery = order.estimated_delivery.isoformat() if order.estimated_delivery else None
+            actual_delivery = order.actual_delivery.isoformat() if order.actual_delivery else None
+            
+            # Extract delivery address data
+            delivery_address_full = order.delivery_address.full_address
+            delivery_latitude = float(order.delivery_address.latitude) if order.delivery_address.latitude is not None else None
+            delivery_longitude = float(order.delivery_address.longitude) if order.delivery_address.longitude is not None else None
+            
+            # Extract pharmacy email
+            pharmacy_email = pharmacy.business_email if pharmacy else None
+            
+            # Return all data as plain values
             return {
-                'order': order,
-                'pharmacy': pharmacy,
+                'order': order,  # Keep for logging
+                'pharmacy': pharmacy,  # Keep for logging
+                'order_id': order_id,
+                'order_number': order_number,
+                'order_status': order_status,
+                'prescription_status': prescription_status,
+                'payment_status': payment_status,
+                'subtotal': subtotal,
+                'tax_amount': tax_amount,
+                'delivery_fee': delivery_fee,
+                'discount_amount': discount_amount,
+                'total_amount': total_amount,
+                'prescription_notes': prescription_notes,
+                'notes': notes,
+                'senior_discount_requested': senior_discount_requested,
+                'senior_discount_status': senior_discount_status,
+                'created_at': created_at,
+                'updated_at': updated_at,
+                'estimated_delivery': estimated_delivery,
+                'actual_delivery': actual_delivery,
+                'delivery_address': delivery_address_full,
+                'delivery_latitude': delivery_latitude,
+                'delivery_longitude': delivery_longitude,
                 'pharmacy_name': pharmacy_name,
                 'pharmacy_id': pharmacy_id,
                 'pharmacy_barangay': pharmacy_barangay,
                 'pharmacy_latitude': pharmacy_latitude,
                 'pharmacy_longitude': pharmacy_longitude,
                 'pharmacy_phone': pharmacy_phone,
+                'pharmacy_email': pharmacy_email,
                 'pharmacy_storefront_image_url': pharmacy_storefront_image_url,
                 'prescription_url': prescription_url,
                 'senior_id_url': senior_id_url,
@@ -536,8 +586,6 @@ async def get_order_status(request, order_id):
         
         # Fetch all data asynchronously
         data = await fetch_complete_order_data()
-        order = data['order']
-        pharmacy = data['pharmacy']
         
         # Build absolute URLs outside sync context (request.build_absolute_uri is async-unsafe)
         def build_absolute_url(url):
@@ -554,22 +602,22 @@ async def get_order_status(request, order_id):
         absolute_senior_id_url = build_absolute_url(data['senior_id_url'])
         absolute_storefront_url = build_absolute_url(data['pharmacy_storefront_image_url'])
         
-        logger.info(f"✅ Async: Fetched order status for order {order.id}")
+        logger.info(f"✅ Async: Fetched order status for order {data['order_id']}")
         logger.info(f"📦 Returning order status with pharmacy_storefront_image_url: {absolute_storefront_url}")
         
         return JsonResponse({
             'success': True,
             'data': {
-                'order_id': order.id,
-                'order_number': order.order_number,
-                'order_status': order.order_status,
-                'prescription_status': order.prescription_status,
-                'payment_status': order.payment_status,
-                'subtotal': float(order.subtotal),
-                'tax_amount': float(order.tax_amount),
-                'delivery_fee': float(order.delivery_fee),
-                'discount_amount': float(order.discount_amount),
-                'total_amount': float(order.total_amount),
+                'order_id': data['order_id'],
+                'order_number': data['order_number'],
+                'order_status': data['order_status'],
+                'prescription_status': data['prescription_status'],
+                'payment_status': data['payment_status'],
+                'subtotal': data['subtotal'],
+                'tax_amount': data['tax_amount'],
+                'delivery_fee': data['delivery_fee'],
+                'discount_amount': data['discount_amount'],
+                'total_amount': data['total_amount'],
                 'items': data['items_data'],
                 'pharmacy_name': data['pharmacy_name'],
                 'pharmacy_id': data['pharmacy_id'],
@@ -577,21 +625,21 @@ async def get_order_status(request, order_id):
                 'pharmacy_latitude': data['pharmacy_latitude'],
                 'pharmacy_longitude': data['pharmacy_longitude'],
                 'pharmacy_phone': data['pharmacy_phone'],
-                'pharmacy_email': pharmacy.business_email if pharmacy else None,
+                'pharmacy_email': data['pharmacy_email'],
                 'pharmacy_storefront_image_url': absolute_storefront_url,
-                'delivery_address': order.delivery_address.full_address,
-                'delivery_latitude': float(order.delivery_address.latitude) if getattr(order.delivery_address, 'latitude', None) is not None else None,
-                'delivery_longitude': float(order.delivery_address.longitude) if getattr(order.delivery_address, 'longitude', None) is not None else None,
+                'delivery_address': data['delivery_address'],
+                'delivery_latitude': data['delivery_latitude'],
+                'delivery_longitude': data['delivery_longitude'],
                 'prescription_image_url': absolute_prescription_url,
-                'prescription_notes': order.prescription_notes,
-                'created_at': order.created_at.isoformat(),
-                'updated_at': order.updated_at.isoformat(),
-                'estimated_delivery': order.estimated_delivery.isoformat() if order.estimated_delivery else None,
-                'actual_delivery': order.actual_delivery.isoformat() if order.actual_delivery else None,
-                'notes': order.notes,
+                'prescription_notes': data['prescription_notes'],
+                'created_at': data['created_at'],
+                'updated_at': data['updated_at'],
+                'estimated_delivery': data['estimated_delivery'],
+                'actual_delivery': data['actual_delivery'],
+                'notes': data['notes'],
                 # Senior citizen discount fields
-                'senior_discount_requested': order.senior_discount_requested,
-                'senior_discount_status': order.senior_discount_status,
+                'senior_discount_requested': data['senior_discount_requested'],
+                'senior_discount_status': data['senior_discount_status'],
                 'senior_citizen_id_image': absolute_senior_id_url,
                 # Rider assignment and tracking (NEW!)
                 'rider_info': data['rider_info'],
