@@ -596,10 +596,11 @@ def prepare_price_quote(request):
 
 
 @csrf_exempt
-def accept_cart_order(request, order_id):
+async def accept_cart_order(request, order_id):
     """
-    Pharmacy accepts a cart order (non-prescription order with items already priced)
+    Async pharmacy accepts a cart order (non-prescription order with items already priced)
     Auto-approves pending senior discount if applicable
+    All DB operations wrapped with sync_to_async to prevent ASGI blocking.
     
     POST /api/accept-cart-order/<order_id>/
     {
@@ -617,84 +618,103 @@ def accept_cart_order(request, order_id):
         from decimal import Decimal
         from django.utils import timezone
         from django.db import transaction
+        from asgiref.sync import sync_to_async
         
         data = json.loads(request.body or '{}')
         pharmacy_user_id = data.get('pharmacy_user_id')
         notes = data.get('notes', '')
         
-        # Get order
-        try:
-            order = Order.objects.select_related('customer').get(id=order_id)
-        except Order.DoesNotExist:
-            return JsonResponse({
-                'success': False,
-                'error': f'Order with ID {order_id} not found'
-            }, status=404)
-        
-        # Verify order is pending
-        if order.order_status != Order.OrderStatus.PENDING:
-            return JsonResponse({
-                'success': False,
-                'error': f'Order is already {order.order_status}, cannot accept'
-            }, status=400)
-        
-        # Get pharmacy user (optional for now)
-        pharmacy_user = None
-        if pharmacy_user_id:
+        @sync_to_async
+        def accept_order_in_transaction():
+            """Perform all DB operations in a single sync context"""
             try:
-                pharmacy_user = User.objects.get(id=pharmacy_user_id)
-            except User.DoesNotExist:
-                pass
-        
-        # Auto-approve senior discount if pending
-        senior_discount_auto_approved = False
-        discount_amount = 0
-        senior_discount_message = None
-        
-        with transaction.atomic():
-            if order.senior_discount_requested and order.senior_discount_status == 'pending':
-                # Calculate 20% discount on subtotal
-                subtotal = order.subtotal or Decimal('0.00')
-                discount = subtotal * Decimal('0.20')
-                
-                # Update order with approved senior discount
-                order.senior_discount_status = 'approved'
-                order.discount_amount = discount
-                if pharmacy_user:
-                    order.senior_discount_reviewed_by = pharmacy_user
-                order.senior_discount_review_date = timezone.now()
-                order.senior_discount_notes = 'Auto-approved when order was accepted'
-                
-                # Recalculate totals (this will also waive service fee)
-                order.calculate_totals()
-                
-                senior_discount_auto_approved = True
-                discount_amount = float(discount)
-                senior_discount_message = f"Your order has been accepted! Your senior citizen discount of ₱{discount_amount:.2f} has been approved. Total: ₱{float(order.total_amount):.2f}"
-                
-                logger.info(f"💚 Auto-approved senior discount for Order #{order.order_number}: ₱{discount}")
+                order = Order.objects.select_related('customer').get(id=order_id)
+            except Order.DoesNotExist:
+                return {'error': 'not_found', 'message': f'Order with ID {order_id} not found'}
             
-            # Update order status to accepted
-            order.update_status(
-                Order.OrderStatus.ACCEPTED,
-                notes=notes or 'Cart order accepted by pharmacy'
-            )
+            # Verify order is pending
+            if order.order_status != Order.OrderStatus.PENDING:
+                return {'error': 'invalid_status', 'message': f'Order is already {order.order_status}, cannot accept'}
+            
+            # Get pharmacy user (optional for now)
+            pharmacy_user = None
+            if pharmacy_user_id:
+                try:
+                    pharmacy_user = User.objects.get(id=pharmacy_user_id)
+                except User.DoesNotExist:
+                    pass
+            
+            # Auto-approve senior discount if pending
+            senior_discount_auto_approved = False
+            discount_amount = 0
+            senior_discount_message = None
+            
+            with transaction.atomic():
+                if order.senior_discount_requested and order.senior_discount_status == 'pending':
+                    # Calculate 20% discount on subtotal
+                    subtotal = order.subtotal or Decimal('0.00')
+                    discount = subtotal * Decimal('0.20')
+                    
+                    # Update order with approved senior discount
+                    order.senior_discount_status = 'approved'
+                    order.discount_amount = discount
+                    if pharmacy_user:
+                        order.senior_discount_reviewed_by = pharmacy_user
+                    order.senior_discount_review_date = timezone.now()
+                    order.senior_discount_notes = 'Auto-approved when order was accepted'
+                    
+                    # Recalculate totals (this will also waive service fee)
+                    order.calculate_totals()
+                    
+                    senior_discount_auto_approved = True
+                    discount_amount = float(discount)
+                    senior_discount_message = f"Your order has been accepted! Your senior citizen discount of ₱{discount_amount:.2f} has been approved. Total: ₱{float(order.total_amount):.2f}"
+                    
+                    logger.info(f"💚 Auto-approved senior discount for Order #{order.order_number}: ₱{discount}")
+                
+                # Update order status to accepted
+                order.update_status(
+                    Order.OrderStatus.ACCEPTED,
+                    notes=notes or 'Cart order accepted by pharmacy'
+                )
+            
+            logger.info(f"✅ Cart order accepted: {order.order_number} (ID: {order_id})")
+            
+            # Extract all model data inside sync context
+            return {
+                'success': True,
+                'order_id': order.id,
+                'order_number': order.order_number,
+                'order_status': order.order_status,
+                'total_amount': float(order.total_amount),
+                'senior_discount_auto_approved': senior_discount_auto_approved,
+                'discount_amount': discount_amount,
+                'senior_discount_message': senior_discount_message
+            }
         
-        logger.info(f"✅ Cart order accepted: {order.order_number} (ID: {order_id})")
+        result = await accept_order_in_transaction()
         
+        # Handle errors
+        if 'error' in result:
+            if result['error'] == 'not_found':
+                return JsonResponse({'success': False, 'error': result['message']}, status=404)
+            elif result['error'] == 'invalid_status':
+                return JsonResponse({'success': False, 'error': result['message']}, status=400)
+        
+        # Build response
         response_data = {
             'success': True,
             'message': 'Order accepted successfully',
-            'order_id': order.id,
-            'order_number': order.order_number,
-            'order_status': order.order_status,
-            'total_amount': float(order.total_amount),
-            'senior_discount_auto_approved': senior_discount_auto_approved
+            'order_id': result['order_id'],
+            'order_number': result['order_number'],
+            'order_status': result['order_status'],
+            'total_amount': result['total_amount'],
+            'senior_discount_auto_approved': result['senior_discount_auto_approved']
         }
         
-        if senior_discount_auto_approved:
-            response_data['discount_amount'] = discount_amount
-            response_data['senior_discount_message'] = senior_discount_message
+        if result['senior_discount_auto_approved']:
+            response_data['discount_amount'] = result['discount_amount']
+            response_data['senior_discount_message'] = result['senior_discount_message']
         
         return JsonResponse(response_data)
         
