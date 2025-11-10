@@ -419,12 +419,9 @@ async def get_order_status(request, order_id):
                                 )
                                 logger.info(f"Generated S3 presigned URL for pharmacy {pharmacy.id}")
                             except Exception as e:
-                                # Use backend proxy endpoint
+                                # Use backend proxy endpoint (relative URL, will be made absolute later)
                                 logger.warning(f"Failed to generate S3 presigned URL: {e}")
-                                try:
-                                    pharmacy_storefront_image_url = request.build_absolute_uri(f"/api/pharmacy-storefront/{pharmacy.id}/")
-                                except Exception:
-                                    pharmacy_storefront_image_url = request.build_absolute_uri(f"/api/document/{storefront_doc.id}/")
+                                pharmacy_storefront_image_url = f"/api/pharmacy-storefront/{pharmacy.id}/"
                                 logger.info(f"Using backend proxy URL for pharmacy {pharmacy.id}")
                     elif storefront_doc:
                         logger.warning(f"⚠️ Storefront document found but no file_url for pharmacy {pharmacy.id}")
@@ -434,27 +431,9 @@ async def get_order_status(request, order_id):
                 except Exception as e:
                     logger.error(f"❌ Could not fetch pharmacy storefront image: {str(e)}", exc_info=True)
             
-            # Normalize prescription image URL to absolute
-            absolute_prescription_url = None
-            if order.prescription_image_url:
-                try:
-                    if str(order.prescription_image_url).startswith('http'):
-                        absolute_prescription_url = order.prescription_image_url
-                    else:
-                        absolute_prescription_url = request.build_absolute_uri(order.prescription_image_url)
-                except Exception:
-                    absolute_prescription_url = order.prescription_image_url
-
-            # Normalize senior citizen ID image URL to absolute
-            absolute_senior_id_url = None
-            if order.senior_citizen_id_image:
-                try:
-                    if str(order.senior_citizen_id_image).startswith('http'):
-                        absolute_senior_id_url = order.senior_citizen_id_image
-                    else:
-                        absolute_senior_id_url = request.build_absolute_uri(order.senior_citizen_id_image)
-                except Exception:
-                    absolute_senior_id_url = order.senior_citizen_id_image
+            # Return raw prescription and senior ID URLs (will be made absolute outside sync context)
+            prescription_url = order.prescription_image_url if order.prescription_image_url else None
+            senior_id_url = order.senior_citizen_id_image if order.senior_citizen_id_image else None
 
             # Build items data (exclude zero-priced placeholder lines)
             items_data = []
@@ -547,8 +526,8 @@ async def get_order_status(request, order_id):
                 'pharmacy_longitude': pharmacy_longitude,
                 'pharmacy_phone': pharmacy_phone,
                 'pharmacy_storefront_image_url': pharmacy_storefront_image_url,
-                'absolute_prescription_url': absolute_prescription_url,
-                'absolute_senior_id_url': absolute_senior_id_url,
+                'prescription_url': prescription_url,
+                'senior_id_url': senior_id_url,
                 'items_data': items_data,
                 'rider_info': rider_info,
                 'assignment_status': assignment_status,
@@ -560,8 +539,23 @@ async def get_order_status(request, order_id):
         order = data['order']
         pharmacy = data['pharmacy']
         
+        # Build absolute URLs outside sync context (request.build_absolute_uri is async-unsafe)
+        def build_absolute_url(url):
+            if not url:
+                return None
+            if str(url).startswith('http'):
+                return url
+            try:
+                return request.build_absolute_uri(url)
+            except:
+                return url
+        
+        absolute_prescription_url = build_absolute_url(data['prescription_url'])
+        absolute_senior_id_url = build_absolute_url(data['senior_id_url'])
+        absolute_storefront_url = build_absolute_url(data['pharmacy_storefront_image_url'])
+        
         logger.info(f"✅ Async: Fetched order status for order {order.id}")
-        logger.info(f"📦 Returning order status with pharmacy_storefront_image_url: {data['pharmacy_storefront_image_url']}")
+        logger.info(f"📦 Returning order status with pharmacy_storefront_image_url: {absolute_storefront_url}")
         
         return JsonResponse({
             'success': True,
@@ -584,11 +578,11 @@ async def get_order_status(request, order_id):
                 'pharmacy_longitude': data['pharmacy_longitude'],
                 'pharmacy_phone': data['pharmacy_phone'],
                 'pharmacy_email': pharmacy.business_email if pharmacy else None,
-                'pharmacy_storefront_image_url': data['pharmacy_storefront_image_url'],
+                'pharmacy_storefront_image_url': absolute_storefront_url,
                 'delivery_address': order.delivery_address.full_address,
                 'delivery_latitude': float(order.delivery_address.latitude) if getattr(order.delivery_address, 'latitude', None) is not None else None,
                 'delivery_longitude': float(order.delivery_address.longitude) if getattr(order.delivery_address, 'longitude', None) is not None else None,
-                'prescription_image_url': data['absolute_prescription_url'],
+                'prescription_image_url': absolute_prescription_url,
                 'prescription_notes': order.prescription_notes,
                 'created_at': order.created_at.isoformat(),
                 'updated_at': order.updated_at.isoformat(),
@@ -598,7 +592,7 @@ async def get_order_status(request, order_id):
                 # Senior citizen discount fields
                 'senior_discount_requested': order.senior_discount_requested,
                 'senior_discount_status': order.senior_discount_status,
-                'senior_citizen_id_image': data['absolute_senior_id_url'],
+                'senior_citizen_id_image': absolute_senior_id_url,
                 # Rider assignment and tracking (NEW!)
                 'rider_info': data['rider_info'],
                 'assignment_status': data['assignment_status'],
