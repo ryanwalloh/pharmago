@@ -770,15 +770,18 @@ def bulk_set_inventory_max_stock(request):
 
 
 @csrf_exempt
-def calculate_distance_and_fee(request):
+async def calculate_distance_and_fee(request):
     """
-    Calculate distance and delivery fee between two points.
+    Async endpoint to calculate distance and delivery fee between two points.
+    Wrapped with sync_to_async to prevent blocking on Google Maps API calls.
+    
     Query parameters:
     - pharmacy_lat, pharmacy_lng: Pharmacy coordinates
     - customer_lat, customer_lng: Customer coordinates
     """
     try:
         from api.orders.pricing_service import DeliveryPricingService
+        from asgiref.sync import sync_to_async
         
         pharmacy_lat = request.GET.get('pharmacy_lat')
         pharmacy_lng = request.GET.get('pharmacy_lng')
@@ -797,25 +800,32 @@ def calculate_distance_and_fee(request):
         customer_lat = float(customer_lat)
         customer_lng = float(customer_lng)
         
-        # Calculate delivery fee and distance
-        delivery_fee, distance_km = DeliveryPricingService.calculate_delivery_fee(
-            pharmacy_lat,
-            pharmacy_lng,
-            customer_lat,
-            customer_lng,
-            use_google_maps=True
-        )
-        
-        # Get pricing breakdown
-        breakdown = DeliveryPricingService.get_pricing_breakdown(distance_km or 0)
-        
-        return JsonResponse({
-            'success': True,
-            'data': {
+        # Wrap the Google Maps API call in sync_to_async (blocking HTTP request)
+        @sync_to_async
+        def calculate_fee_and_distance():
+            """Calculate delivery fee using Google Maps API (blocking I/O)"""
+            delivery_fee, distance_km = DeliveryPricingService.calculate_delivery_fee(
+                pharmacy_lat,
+                pharmacy_lng,
+                customer_lat,
+                customer_lng,
+                use_google_maps=True
+            )
+            
+            # Get pricing breakdown
+            breakdown = DeliveryPricingService.get_pricing_breakdown(distance_km or 0)
+            
+            return {
                 'distance_km': distance_km,
                 'delivery_fee': float(delivery_fee),
                 'breakdown': breakdown
             }
+        
+        data = await calculate_fee_and_distance()
+        
+        return JsonResponse({
+            'success': True,
+            'data': data
         })
         
     except Exception as e:
