@@ -5,10 +5,8 @@
     "buildCommand": "npm install && npm run build"
   },
   "deploy": {
-    "startCommand": "sh -c 'HOST=0.0.0.0 npx serve -s build -p $PORT'",
+    "startCommand": "npx serve -s build -p $PORT --no-port-switching --no-clipboard",
     "restartPolicyType": "ON_FAILURE",
-    "restartPolicyMaxRetries": 10,
-    "healthcheckPath": "/",
-    "healthcheckTimeout": 100
+    "restartPolicyMaxRetries": 10
   }
 }
