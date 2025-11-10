@@ -21,10 +21,11 @@ stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
 
 @csrf_exempt
 @require_http_methods(["POST"])
-def create_payment_intent(request):
+async def create_payment_intent(request):
     """
-    Create a Stripe payment intent for an order
-    Mobile app calls this before showing the payment sheet
+    Async endpoint to create a Stripe payment intent for an order.
+    Mobile app calls this before showing the payment sheet.
+    Wrapped with sync_to_async to prevent blocking the ASGI event loop.
     """
     try:
         data = json.loads(request.body)
@@ -36,60 +37,67 @@ def create_payment_intent(request):
                 'error': 'order_id is required'
             }, status=400)
         
-        # Get order
-        order = Order.objects.get(id=order_id)
-        
-        # Convert total amount to cents (Stripe uses smallest currency unit)
-        # PHP (Philippine Peso) smallest unit is centavos (1/100)
-        amount_cents = int(float(order.total_amount) * 100)
-        
-        # Create or retrieve payment intent
-        if order.stripe_payment_intent_id:
-            # Update existing payment intent
-            try:
-                payment_intent = stripe.PaymentIntent.retrieve(order.stripe_payment_intent_id)
-                
-                # Update amount if changed
-                if payment_intent.amount != amount_cents:
-                    payment_intent = stripe.PaymentIntent.modify(
-                        order.stripe_payment_intent_id,
-                        amount=amount_cents,
-                    )
-                    logger.info(f"💳 Updated payment intent {order.stripe_payment_intent_id} amount to ₱{order.total_amount}")
-                
-            except stripe.error.InvalidRequestError:
-                # Payment intent doesn't exist, create new one
-                order.stripe_payment_intent_id = None
-                payment_intent = None
-        
-        if not order.stripe_payment_intent_id:
-            # Create new payment intent
-            payment_intent = stripe.PaymentIntent.create(
-                amount=amount_cents,
-                currency='php',
-                metadata={
-                    'order_id': order.id,
-                    'order_number': order.order_number,
-                    'customer_id': order.customer.id,
-                },
-                description=f'PharmGo Order {order.order_number}',
-            )
+        @sync_to_async
+        def process_payment_intent():
+            # Get order
+            order = Order.objects.get(id=order_id)
             
-            # Save payment intent ID to order
-            order.stripe_payment_intent_id = payment_intent.id
-            order.stripe_payment_status = payment_intent.status
-            order.save(update_fields=['stripe_payment_intent_id', 'stripe_payment_status'])
+            # Convert total amount to cents (Stripe uses smallest currency unit)
+            # PHP (Philippine Peso) smallest unit is centavos (1/100)
+            amount_cents = int(float(order.total_amount) * 100)
             
-            logger.info(f"💳 Created payment intent {payment_intent.id} for order {order.order_number}: ₱{order.total_amount}")
-        
-        return JsonResponse({
-            'success': True,
-            'data': {
+            # Create or retrieve payment intent
+            payment_intent = None
+            if order.stripe_payment_intent_id:
+                # Update existing payment intent
+                try:
+                    payment_intent = stripe.PaymentIntent.retrieve(order.stripe_payment_intent_id)
+                    
+                    # Update amount if changed
+                    if payment_intent.amount != amount_cents:
+                        payment_intent = stripe.PaymentIntent.modify(
+                            order.stripe_payment_intent_id,
+                            amount=amount_cents,
+                        )
+                        logger.info(f"💳 Updated payment intent {order.stripe_payment_intent_id} amount to ₱{order.total_amount}")
+                    
+                except stripe.error.InvalidRequestError:
+                    # Payment intent doesn't exist, create new one
+                    order.stripe_payment_intent_id = None
+                    payment_intent = None
+            
+            if not order.stripe_payment_intent_id:
+                # Create new payment intent
+                payment_intent = stripe.PaymentIntent.create(
+                    amount=amount_cents,
+                    currency='php',
+                    metadata={
+                        'order_id': order.id,
+                        'order_number': order.order_number,
+                        'customer_id': order.customer.id,
+                    },
+                    description=f'PharmGo Order {order.order_number}',
+                )
+                
+                # Save payment intent ID to order
+                order.stripe_payment_intent_id = payment_intent.id
+                order.stripe_payment_status = payment_intent.status
+                order.save(update_fields=['stripe_payment_intent_id', 'stripe_payment_status'])
+                
+                logger.info(f"💳 Created payment intent {payment_intent.id} for order {order.order_number}: ₱{order.total_amount}")
+            
+            return {
                 'payment_intent_id': payment_intent.id,
                 'client_secret': payment_intent.client_secret,
                 'amount': float(order.total_amount),
                 'currency': 'php',
             }
+        
+        payment_data = await process_payment_intent()
+        
+        return JsonResponse({
+            'success': True,
+            'data': payment_data
         })
         
     except Order.DoesNotExist:
@@ -200,10 +208,11 @@ async def stripe_webhook(request):
 
 @csrf_exempt
 @require_http_methods(["POST"])
-def confirm_payment(request):
+async def confirm_payment(request):
     """
-    Confirm payment after successful Stripe payment
-    Called by mobile app after payment sheet completion
+    Async endpoint to confirm payment after successful Stripe payment.
+    Called by mobile app after payment sheet completion.
+    Wrapped with sync_to_async to prevent blocking the ASGI event loop.
     """
     try:
         data = json.loads(request.body)
@@ -216,34 +225,45 @@ def confirm_payment(request):
                 'error': 'order_id and payment_intent_id are required'
             }, status=400)
         
-        # Get order
-        order = Order.objects.get(id=order_id)
-        
-        # Verify payment intent with Stripe
-        payment_intent = stripe.PaymentIntent.retrieve(payment_intent_id)
-        
-        if payment_intent.status == 'succeeded':
-            # Update order payment status
-            order.payment_status = Order.PaymentStatus.PAID
-            order.stripe_payment_status = 'succeeded'
-            order.save(update_fields=['payment_status', 'stripe_payment_status'])
+        @sync_to_async
+        def verify_and_confirm_payment():
+            # Get order
+            order = Order.objects.get(id=order_id)
             
-            logger.info(f"✅ Payment confirmed for order {order.order_number}")
+            # Verify payment intent with Stripe
+            payment_intent = stripe.PaymentIntent.retrieve(payment_intent_id)
             
-            return JsonResponse({
-                'success': True,
-                'data': {
-                    'order_id': order.id,
-                    'order_number': order.order_number,
-                    'payment_status': order.payment_status,
-                    'total_amount': float(order.total_amount),
+            if payment_intent.status == 'succeeded':
+                # Update order payment status
+                order.payment_status = Order.PaymentStatus.PAID
+                order.stripe_payment_status = 'succeeded'
+                order.save(update_fields=['payment_status', 'stripe_payment_status'])
+                
+                logger.info(f"✅ Payment confirmed for order {order.order_number}")
+                
+                return {
+                    'success': True,
+                    'data': {
+                        'order_id': order.id,
+                        'order_number': order.order_number,
+                        'payment_status': order.payment_status,
+                        'total_amount': float(order.total_amount),
+                    }
                 }
-            })
+            else:
+                return {
+                    'success': False,
+                    'error': f'Payment not completed. Status: {payment_intent.status}',
+                    'status_code': 400
+                }
+        
+        result = await verify_and_confirm_payment()
+        
+        if result.get('success'):
+            return JsonResponse(result)
         else:
-            return JsonResponse({
-                'success': False,
-                'error': f'Payment not completed. Status: {payment_intent.status}'
-            }, status=400)
+            status_code = result.pop('status_code', 400)
+            return JsonResponse(result, status=status_code)
         
     except Order.DoesNotExist:
         return JsonResponse({
