@@ -516,7 +516,7 @@ async def get_order_status(request, order_id):
                 logger.warning(f"Could not fetch rider assignment info: {str(e)}")
             
             # Extract all order data as plain values (no lazy loading outside sync context)
-            order_id = order.id
+            fetched_order_id = order.id  # Use different name to avoid shadowing parameter
             order_number = order.order_number
             order_status = order.order_status
             prescription_status = order.prescription_status
@@ -547,7 +547,7 @@ async def get_order_status(request, order_id):
             return {
                 'order': order,  # Keep for logging
                 'pharmacy': pharmacy,  # Keep for logging
-                'order_id': order_id,
+                'order_id': fetched_order_id,
                 'order_number': order_number,
                 'order_status': order_status,
                 'prescription_status': prescription_status,
