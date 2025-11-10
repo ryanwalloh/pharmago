@@ -1,4 +1,4 @@
 # Frontend Procfile for Railway
-# Use serve with no-port-switching to prevent crashes
-web: npx serve -s build -p $PORT --no-port-switching --no-clipboard
+# Use custom Express server that binds to 0.0.0.0
+web: node server.js
 
