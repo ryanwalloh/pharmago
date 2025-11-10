@@ -1,4 +1,4 @@
 # Frontend Procfile for Railway
-# Use -L flag to bind to 0.0.0.0 and -p for port
-web: npx serve -s build -L 0.0.0.0 -p $PORT
+# Use -l flag with 0.0.0.0:$PORT format
+web: npx serve -s build -l 0.0.0.0:$PORT
 
