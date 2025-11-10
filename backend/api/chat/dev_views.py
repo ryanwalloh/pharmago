@@ -33,17 +33,22 @@ async def get_or_create_order_chat_room(request):
         if not order_id:
             return JsonResponse({'success': False, 'error': 'order_id is required'}, status=400)
 
-        # Wrap ORM operations in sync_to_async
+        # Wrap ORM operations in sync_to_async - extract all model properties inside sync context
         @sync_to_async
         def get_or_create_room():
             order = Order.objects.get(id=int(order_id))
             room, created = ChatRoom.objects.get_or_create(order=order)
-            return room, created
+            # Extract model properties inside sync context to avoid async-unsafe access
+            return {
+                'room_id': room.id,
+                'room_key': room.room_id,
+                'created': created
+            }
         
-        room, created = await get_or_create_room()
-        logger.info(f"✅ Async: {'Created' if created else 'Retrieved'} chat room {room.id} for order {order_id}")
+        room_data = await get_or_create_room()
+        logger.info(f"✅ Async: {'Created' if room_data['created'] else 'Retrieved'} chat room {room_data['room_id']} for order {order_id}")
         
-        return JsonResponse({'success': True, 'room_id': room.id, 'room_key': room.room_id})
+        return JsonResponse({'success': True, 'room_id': room_data['room_id'], 'room_key': room_data['room_key']})
     except Order.DoesNotExist:
         return JsonResponse({'success': False, 'error': 'Order not found'}, status=404)
     except Exception as e:
