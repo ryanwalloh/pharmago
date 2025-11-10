@@ -287,18 +287,28 @@ def direct_riders_suspended(request):
         })
     return JsonResponse(data, safe=False)
 
-def direct_pending_pharmacies(request):
-    """Direct pending pharmacies endpoint that bypasses all authentication"""
+async def direct_pending_pharmacies(request):
+    """
+    Async endpoint for pending pharmacies that bypasses authentication.
+    Wrapped with sync_to_async to prevent blocking the ASGI event loop.
+    """
     try:
         from api.users.models import Pharmacy
         from api.pharmacies.serializers import PharmacyDetailSerializer
+        from asgiref.sync import sync_to_async
 
-        pending_pharmacies = Pharmacy.objects.filter(
-            is_fully_verified=False
-        ).order_by('created_at')
+        @sync_to_async
+        def fetch_pending_pharmacies():
+            """Fetch and serialize pending pharmacies (DB operations)"""
+            pending_pharmacies = Pharmacy.objects.filter(
+                is_fully_verified=False
+            ).order_by('created_at')
 
-        serializer = PharmacyDetailSerializer(pending_pharmacies, many=True)
-        return JsonResponse(serializer.data, safe=False)
+            serializer = PharmacyDetailSerializer(pending_pharmacies, many=True)
+            return serializer.data
+        
+        data = await fetch_pending_pharmacies()
+        return JsonResponse(data, safe=False)
     except Exception as e:
         return JsonResponse({
             'error': 'Failed to fetch pending pharmacies',
