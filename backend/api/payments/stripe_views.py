@@ -9,6 +9,7 @@ from decimal import Decimal
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
+from asgiref.sync import sync_to_async
 from api.orders.models import Order
 import logging
 
@@ -115,10 +116,10 @@ def create_payment_intent(request):
 
 @csrf_exempt
 @require_http_methods(["POST"])
-def stripe_webhook(request):
+async def stripe_webhook(request):
     """
-    Handle Stripe webhook events
-    Confirms payment and updates order status
+    Async Stripe webhook handler to prevent blocking the ASGI event loop.
+    Handles payment status updates for orders.
     """
     payload = request.body
     sig_header = request.META.get('HTTP_STRIPE_SIGNATURE')
@@ -143,18 +144,20 @@ def stripe_webhook(request):
         # Get order from metadata
         order_id = payment_intent['metadata'].get('order_id')
         if order_id:
-            try:
-                order = Order.objects.get(id=int(order_id))
-                
-                # Update payment status
-                order.payment_status = Order.PaymentStatus.PAID
-                order.stripe_payment_status = 'succeeded'
-                order.save(update_fields=['payment_status', 'stripe_payment_status'])
-                
-                logger.info(f"✅ Order {order.order_number} marked as PAID via Stripe")
-                
-            except Order.DoesNotExist:
-                logger.error(f"❌ Order {order_id} not found for payment intent {payment_intent['id']}")
+            @sync_to_async
+            def update_order_paid():
+                try:
+                    order = Order.objects.get(id=int(order_id))
+                    order.payment_status = Order.PaymentStatus.PAID
+                    order.stripe_payment_status = 'succeeded'
+                    order.save(update_fields=['payment_status', 'stripe_payment_status'])
+                    logger.info(f"✅ Order {order.order_number} marked as PAID via Stripe")
+                    return True
+                except Order.DoesNotExist:
+                    logger.error(f"❌ Order {order_id} not found for payment intent {payment_intent['id']}")
+                    return False
+            
+            await update_order_paid()
     
     elif event['type'] == 'payment_intent.payment_failed':
         payment_intent = event['data']['object']
@@ -163,15 +166,17 @@ def stripe_webhook(request):
         # Get order from metadata
         order_id = payment_intent['metadata'].get('order_id')
         if order_id:
-            try:
-                order = Order.objects.get(id=int(order_id))
-                order.stripe_payment_status = 'failed'
-                order.save(update_fields=['stripe_payment_status'])
-                
-                logger.warning(f"⚠️ Payment failed for order {order.order_number}")
-                
-            except Order.DoesNotExist:
-                logger.error(f"❌ Order {order_id} not found for failed payment {payment_intent['id']}")
+            @sync_to_async
+            def update_order_failed():
+                try:
+                    order = Order.objects.get(id=int(order_id))
+                    order.stripe_payment_status = 'failed'
+                    order.save(update_fields=['stripe_payment_status'])
+                    logger.warning(f"⚠️ Payment failed for order {order.order_number}")
+                except Order.DoesNotExist:
+                    logger.error(f"❌ Order {order_id} not found for failed payment {payment_intent['id']}")
+            
+            await update_order_failed()
     
     elif event['type'] == 'payment_intent.canceled':
         payment_intent = event['data']['object']
@@ -179,13 +184,16 @@ def stripe_webhook(request):
         
         order_id = payment_intent['metadata'].get('order_id')
         if order_id:
-            try:
-                order = Order.objects.get(id=int(order_id))
-                order.stripe_payment_status = 'canceled'
-                order.save(update_fields=['stripe_payment_status'])
-                
-            except Order.DoesNotExist:
-                pass
+            @sync_to_async
+            def update_order_canceled():
+                try:
+                    order = Order.objects.get(id=int(order_id))
+                    order.stripe_payment_status = 'canceled'
+                    order.save(update_fields=['stripe_payment_status'])
+                except Order.DoesNotExist:
+                    pass
+            
+            await update_order_canceled()
     
     return JsonResponse({'success': True})
 
