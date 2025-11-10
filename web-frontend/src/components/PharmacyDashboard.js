@@ -3879,13 +3879,13 @@ const PharmacyDashboard = () => {
                       <h3 className="text-sm lg:text-lg font-medium">00:30:00</h3>
                       <p className="text-gray-600 text-xs lg:text-sm">{formatTime(order.createdAt)}</p>
                     </div>
-                    <div className="text-center">
-                      <h3 className="text-sm lg:text-lg font-medium">
-                        {order.isPrescriptionOrder ? 'Prescription Order' : `₱${(order.totalAmount||0).toFixed(2)}`}
-                      </h3>
-                      <p className="text-gray-600 text-xs lg:text-sm">
-                        {order.isPrescriptionOrder ? 'Needs review for pricing' : (order.payment_method || 'COD')}
-                      </p>
+                  <div className="text-center">
+                    <h3 className="text-sm lg:text-lg font-medium">
+                      {order.isPrescriptionOrder ? 'Prescription Order' : `₱${(order.subtotal||0).toFixed(2)}`}
+                    </h3>
+                    <p className="text-gray-600 text-xs lg:text-sm">
+                      {order.isPrescriptionOrder ? 'Needs review for pricing' : (order.payment_method || 'COD')}
+                    </p>
                     </div>
                     <div className="text-center">
                       <button 
@@ -3933,7 +3933,7 @@ const PharmacyDashboard = () => {
                   </div>
                   <div className="text-center">
                     <h3 className="text-sm lg:text-lg font-medium">
-                      {order.isPrescriptionOrder ? 'Prescription Order' : `₱${(order.totalAmount||0).toFixed(2)}`}
+                      {order.isPrescriptionOrder ? 'Prescription Order' : `₱${(order.subtotal||0).toFixed(2)}`}
                     </h3>
                     <p className="text-gray-600 text-xs lg:text-sm">
                       {order.isPrescriptionOrder ? 'Needs review for pricing' : 'Paid'}
@@ -3978,7 +3978,7 @@ const PharmacyDashboard = () => {
                   </div>
                   <div className="text-center">
                     <h3 className="text-sm lg:text-lg font-medium">
-                      {order.isPrescriptionOrder ? 'Prescription Order' : `₱${(order.totalAmount||0).toFixed(2)}`}
+                      {order.isPrescriptionOrder ? 'Prescription Order' : `₱${(order.subtotal||0).toFixed(2)}`}
                     </h3>
                     <p className="text-gray-600 text-xs lg:text-sm">
                       {order.isPrescriptionOrder ? 'Needs review for pricing' : 'Paid'}
