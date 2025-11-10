@@ -1,4 +1,4 @@
 # Frontend Procfile for Railway
-# Use -l flag with 0.0.0.0:$PORT format
-web: npx serve -s build -l 0.0.0.0:$PORT
+# Set HOST env var to bind to all interfaces, use -p for port
+web: sh -c 'HOST=0.0.0.0 npx serve -s build -p $PORT'
 
