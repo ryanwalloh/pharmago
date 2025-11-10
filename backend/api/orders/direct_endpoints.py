@@ -19,10 +19,11 @@ logger = logging.getLogger(__name__)
 
 @csrf_exempt
 @require_http_methods(["POST"])
-def direct_prescription_order_creation(request):
+async def direct_prescription_order_creation(request):
     """
-    Direct prescription order creation endpoint that bypasses authentication middleware.
+    Async prescription order creation endpoint to prevent ASGI blocking.
     Creates order with prescription data from mobile app.
+    All database operations wrapped with sync_to_async for non-blocking execution.
     """
     try:
         # Parse request data
@@ -90,215 +91,232 @@ def direct_prescription_order_creation(request):
                 'error': 'Valid GPS coordinates are required'
             }, status=400)
         
-        # Get customer
-        try:
-            user = User.objects.get(username=customer_username)
-            customer = user.customer
-        except User.DoesNotExist:
+        @sync_to_async
+        def get_customer_and_pharmacy():
+            """Fetch customer and pharmacy from database"""
+            try:
+                user = User.objects.get(username=customer_username)
+                customer = user.customer
+            except User.DoesNotExist:
+                return None, None, 'Customer not found'
+            except:
+                return None, None, 'Customer profile not found'
+            
+            try:
+                pharmacy = Pharmacy.objects.get(id=pharmacy_id)
+            except Pharmacy.DoesNotExist:
+                return customer, None, 'Pharmacy not found'
+            
+            return customer, pharmacy, None
+        
+        customer, pharmacy, error = await get_customer_and_pharmacy()
+        
+        if error:
             return JsonResponse({
                 'success': False,
-                'error': 'Customer not found'
-            }, status=404)
-        except:
-            return JsonResponse({
-                'success': False,
-                'error': 'Customer profile not found'
+                'error': error
             }, status=404)
         
-        # Get pharmacy
-        try:
-            pharmacy = Pharmacy.objects.get(id=pharmacy_id)
-        except Pharmacy.DoesNotExist:
-            return JsonResponse({
-                'success': False,
-                'error': 'Pharmacy not found'
-            }, status=404)
-        
-        # Create or get delivery address
-        with transaction.atomic():
-            # Reuse existing address with same label to avoid unique constraint issues
-            delivery_address = Address.objects.filter(
-                customer=customer,
-                label=address_label
-            ).first()
-
-            if delivery_address:
-                # Update fields
-                delivery_address.street_address = street_address
-                delivery_address.barangay = barangay
-                delivery_address.city = city
-                delivery_address.province = province
-                delivery_address.postal_code = postal_code or delivery_address.postal_code
-                delivery_address.latitude = latitude
-                delivery_address.longitude = longitude
-                delivery_address.building_name = building_name or None
-                delivery_address.floor_number = floor_number or None
-                delivery_address.unit_number = unit_number or None
-                delivery_address.landmark = landmark or None
-                delivery_address.is_default = is_default
-                delivery_address.save()
-            else:
-                # Create delivery address
-                delivery_address = Address.objects.create(
+        @sync_to_async
+        def create_order_with_address():
+            """Create delivery address and order in atomic transaction"""
+            with transaction.atomic():
+                # Reuse existing address with same label to avoid unique constraint issues
+                delivery_address = Address.objects.filter(
                     customer=customer,
-                    street_address=street_address,
-                    barangay=barangay,
-                    city=city,
-                    province=province,
-                    postal_code=postal_code,
-                    latitude=latitude,
-                    longitude=longitude,
-                    building_name=building_name,
-                    floor_number=floor_number,
-                    unit_number=unit_number,
-                    landmark=landmark,
-                    label=address_label,
-                    is_default=is_default
-                )
-            
-            # Calculate dynamic delivery fee based on distance
-            from decimal import Decimal
-            from api.orders.pricing_service import DeliveryPricingService
-            
-            delivery_fee = Decimal('29.00')  # Default fallback
-            calculated_distance = None
-            
-            # Calculate delivery fee if both pharmacy and delivery address have coordinates
-            if (pharmacy.latitude and pharmacy.longitude and 
-                delivery_address.latitude and delivery_address.longitude):
+                    label=address_label
+                ).first()
+
+                if delivery_address:
+                    # Update fields
+                    delivery_address.street_address = street_address
+                    delivery_address.barangay = barangay
+                    delivery_address.city = city
+                    delivery_address.province = province
+                    delivery_address.postal_code = postal_code or delivery_address.postal_code
+                    delivery_address.latitude = latitude
+                    delivery_address.longitude = longitude
+                    delivery_address.building_name = building_name or None
+                    delivery_address.floor_number = floor_number or None
+                    delivery_address.unit_number = unit_number or None
+                    delivery_address.landmark = landmark or None
+                    delivery_address.is_default = is_default
+                    delivery_address.save()
+                else:
+                    # Create delivery address
+                    delivery_address = Address.objects.create(
+                        customer=customer,
+                        street_address=street_address,
+                        barangay=barangay,
+                        city=city,
+                        province=province,
+                        postal_code=postal_code,
+                        latitude=latitude,
+                        longitude=longitude,
+                        building_name=building_name,
+                        floor_number=floor_number,
+                        unit_number=unit_number,
+                        landmark=landmark,
+                        label=address_label,
+                        is_default=is_default
+                    )
                 
-                try:
-                    calculated_fee, distance_km = DeliveryPricingService.calculate_delivery_fee(
-                        float(pharmacy.latitude),
-                        float(pharmacy.longitude),
-                        float(delivery_address.latitude),
-                        float(delivery_address.longitude),
-                        use_google_maps=True
-                    )
-                    delivery_fee = calculated_fee
-                    calculated_distance = distance_km
+                # Calculate dynamic delivery fee based on distance
+                from decimal import Decimal
+                from api.orders.pricing_service import DeliveryPricingService
+                
+                delivery_fee = Decimal('29.00')  # Default fallback
+                calculated_distance = None
+                
+                # Calculate delivery fee if both pharmacy and delivery address have coordinates
+                if (pharmacy.latitude and pharmacy.longitude and 
+                    delivery_address.latitude and delivery_address.longitude):
                     
-                    logger.info(
-                        f"💰 Dynamic pricing: {distance_km:.2f}km → ₱{delivery_fee:.2f} "
-                        f"(Pharmacy: {pharmacy.pharmacy_name} → Customer: {customer.full_name})"
-                    )
-                except Exception as e:
-                    logger.warning(f"⚠️ Failed to calculate dynamic delivery fee: {str(e)}, using default ₱29.00")
-            else:
-                logger.warning("⚠️ Missing coordinates for dynamic pricing, using default ₱29.00")
-            
-            # Create prescription order
-            order = Order.objects.create(
-                customer=customer,
-                delivery_address=delivery_address,
-                order_status=Order.OrderStatus.PENDING,
-                payment_status=Order.PaymentStatus.UNPAID,
-                delivery_type=Order.DeliveryType.STANDARD,
-                subtotal=0.00,  # Will be calculated when pharmacist adds items
-                tax_amount=Decimal('19.00'),  # Dev default service fee
-                delivery_fee=delivery_fee,  # Dynamic delivery fee based on distance
-                discount_amount=0.00,
-                total_amount=0.00,  # Will be calculated when pharmacist adds items
-                source='mobile',
-                notes=f"Prescription order - Doctor: {doctor_name}, Date: {prescription_date}. Notes: {prescription_notes_detail}",
-                prescription_image_url=prescription_image_url,
-                prescription_status='pending',
-                prescription_notes=f"Doctor: {doctor_name}, Date: {prescription_date}. {prescription_notes_detail}",
-                # Senior citizen discount fields
-                senior_discount_requested=apply_senior_discount,
-                senior_citizen_id_image=senior_id_image_url,
-                senior_discount_status=senior_discount_status
-            )
-            
-            # Create a placeholder order line for prescription review
-            # This will be updated when pharmacist reviews and adds actual medicines
-            placeholder_inventory = PharmacyInventory.objects.filter(
-                pharmacy=pharmacy,
-                is_available=True
-            ).first()
-
-            if not placeholder_inventory:
-                # Ensure a category exists for custom/placeholder products
-                category, _ = MedicineCategory.objects.get_or_create(
-                    name='Custom Products',
-                    defaults={
-                        'description': 'Custom products created by pharmacies',
-                        'is_active': True,
-                        'sort_order': 0,
-                    }
+                    try:
+                        calculated_fee, distance_km = DeliveryPricingService.calculate_delivery_fee(
+                            float(pharmacy.latitude),
+                            float(pharmacy.longitude),
+                            float(delivery_address.latitude),
+                            float(delivery_address.longitude),
+                            use_google_maps=True
+                        )
+                        delivery_fee = calculated_fee
+                        calculated_distance = distance_km
+                        
+                        logger.info(
+                            f"💰 Dynamic pricing: {distance_km:.2f}km → ₱{delivery_fee:.2f} "
+                            f"(Pharmacy: {pharmacy.pharmacy_name} → Customer: {customer.full_name})"
+                        )
+                    except Exception as e:
+                        logger.warning(f"⚠️ Failed to calculate dynamic delivery fee: {str(e)}, using default ₱29.00")
+                else:
+                    logger.warning("⚠️ Missing coordinates for dynamic pricing, using default ₱29.00")
+                
+                # Create prescription order
+                order = Order.objects.create(
+                    customer=customer,
+                    delivery_address=delivery_address,
+                    order_status=Order.OrderStatus.PENDING,
+                    payment_status=Order.PaymentStatus.UNPAID,
+                    delivery_type=Order.DeliveryType.STANDARD,
+                    subtotal=0.00,  # Will be calculated when pharmacist adds items
+                    tax_amount=Decimal('19.00'),  # Dev default service fee
+                    delivery_fee=delivery_fee,  # Dynamic delivery fee based on distance
+                    discount_amount=0.00,
+                    total_amount=0.00,  # Will be calculated when pharmacist adds items
+                    source='mobile',
+                    notes=f"Prescription order - Doctor: {doctor_name}, Date: {prescription_date}. Notes: {prescription_notes_detail}",
+                    prescription_image_url=prescription_image_url,
+                    prescription_status='pending',
+                    prescription_notes=f"Doctor: {doctor_name}, Date: {prescription_date}. {prescription_notes_detail}",
+                    # Senior citizen discount fields
+                    senior_discount_requested=apply_senior_discount,
+                    senior_citizen_id_image=senior_id_image_url,
+                    senior_discount_status=senior_discount_status
                 )
-
-                # Create a deterministic placeholder inventory item for this pharmacy
-                placeholder_inventory = PharmacyInventory.objects.create(
+            
+                # Create a placeholder order line for prescription review
+                # This will be updated when pharmacist reviews and adds actual medicines
+                placeholder_inventory = PharmacyInventory.objects.filter(
                     pharmacy=pharmacy,
-                    medicine=None,
-                    category=category,
-                    name='Prescription Review',
-                    form='solution',  # valid choice from MedicineCatalog.MedicineForm
-                    dosage='N/A',
-                    description='Placeholder for prescription-only orders',
-                    prescription_required=True,
-                    price=0.00,
-                    original_price=0.00,
-                    cost_price=0.00,
-                    stock_quantity=0,
                     is_available=True
+                ).first()
+
+                if not placeholder_inventory:
+                    # Ensure a category exists for custom/placeholder products
+                    category, _ = MedicineCategory.objects.get_or_create(
+                        name='Custom Products',
+                        defaults={
+                            'description': 'Custom products created by pharmacies',
+                            'is_active': True,
+                            'sort_order': 0,
+                        }
+                    )
+
+                    # Create a deterministic placeholder inventory item for this pharmacy
+                    placeholder_inventory = PharmacyInventory.objects.create(
+                        pharmacy=pharmacy,
+                        medicine=None,
+                        category=category,
+                        name='Prescription Review',
+                        form='solution',  # valid choice from MedicineCatalog.MedicineForm
+                        dosage='N/A',
+                        description='Placeholder for prescription-only orders',
+                        prescription_required=True,
+                        price=0.00,
+                        original_price=0.00,
+                        cost_price=0.00,
+                        stock_quantity=0,
+                        is_available=True
+                    )
+
+                # Link order to pharmacy via placeholder inventory item
+                OrderLine.objects.create(
+                    order=order,
+                    inventory_item=placeholder_inventory,
+                    quantity=1,
+                    unit_price=0.00,
+                    total_price=0.00,
+                    prescription_required=True,
+                    prescription_status='pending',
+                    prescription_notes=f"Prescription review required. Doctor: {doctor_name}, Date: {prescription_date}",
+                    notes="Prescription order - awaiting pharmacist review"
                 )
+                
+                # Log senior discount request if applicable
+                if apply_senior_discount:
+                    logger.info(f"👴 Senior discount requested for order {order.order_number}: Status={senior_discount_status}, ID Image={'Uploaded' if senior_id_image_url else 'Not Uploaded'}")
+                
+                logger.info(f"✅ Prescription order created successfully: {order.order_number}")
+                
+                # Build absolute prescription image URL for client convenience
+                absolute_prescription_url = None
+                if prescription_image_url:
+                    try:
+                        absolute_prescription_url = request.build_absolute_uri(prescription_image_url)
+                    except Exception:
+                        absolute_prescription_url = prescription_image_url
 
-            # Link order to pharmacy via placeholder inventory item
-            OrderLine.objects.create(
-                order=order,
-                inventory_item=placeholder_inventory,
-                quantity=1,
-                unit_price=0.00,
-                total_price=0.00,
-                prescription_required=True,
-                prescription_status='pending',
-                prescription_notes=f"Prescription review required. Doctor: {doctor_name}, Date: {prescription_date}",
-                notes="Prescription order - awaiting pharmacist review"
-            )
-            
-            # Log senior discount request if applicable
-            if apply_senior_discount:
-                logger.info(f"👴 Senior discount requested for order {order.order_number}: Status={senior_discount_status}, ID Image={'Uploaded' if senior_id_image_url else 'Not Uploaded'}")
-            
-            logger.info(f"✅ Prescription order created successfully: {order.order_number}")
-            
-            # Build absolute prescription image URL for client convenience
-            absolute_prescription_url = None
-            if prescription_image_url:
-                try:
-                    absolute_prescription_url = request.build_absolute_uri(prescription_image_url)
-                except Exception:
-                    absolute_prescription_url = prescription_image_url
-
-            return JsonResponse({
-                'success': True,
-                'message': 'Prescription order created successfully',
-                'data': {
-                    'order_id': order.id,
-                    'order_number': order.order_number,
-                    'order_status': order.order_status,
-                    'prescription_status': order.prescription_status,
-                    'pharmacy_name': pharmacy.pharmacy_name,
-                    'pharmacy_id': pharmacy.id,
-                    'delivery_address': {
-                        'street_address': delivery_address.street_address,
-                        'barangay': delivery_address.barangay,
-                        'city': delivery_address.city,
-                        'province': delivery_address.province,
-                        'full_address': delivery_address.full_address
-                    },
-                    'payment_method': payment_method_name,
-                    'prescription_image_url': absolute_prescription_url,
-                    'created_at': order.created_at.isoformat(),
-                    'estimated_delivery': None,  # Will be set when pharmacist processes
-                    # Senior discount information
-                    'senior_discount_requested': order.senior_discount_requested,
-                    'senior_discount_status': order.senior_discount_status,
-                    'senior_citizen_id_image': order.senior_citizen_id_image
+                # Return order data (not JsonResponse - will be built by caller)
+                return {
+                    'order': order,
+                    'delivery_address': delivery_address,
+                    'absolute_prescription_url': absolute_prescription_url,
                 }
-            })
+        
+        # Call the async wrapped function
+        result = await create_order_with_address()
+        order = result['order']
+        delivery_address = result['delivery_address']
+        absolute_prescription_url = result['absolute_prescription_url']
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Prescription order created successfully',
+            'data': {
+                'order_id': order.id,
+                'order_number': order.order_number,
+                'order_status': order.order_status,
+                'prescription_status': order.prescription_status,
+                'pharmacy_name': pharmacy.pharmacy_name,
+                'pharmacy_id': pharmacy.id,
+                'delivery_address': {
+                    'street_address': delivery_address.street_address,
+                    'barangay': delivery_address.barangay,
+                    'city': delivery_address.city,
+                    'province': delivery_address.province,
+                    'full_address': delivery_address.full_address
+                },
+                'payment_method': payment_method_name,
+                'prescription_image_url': absolute_prescription_url,
+                'created_at': order.created_at.isoformat(),
+                'estimated_delivery': None,  # Will be set when pharmacist processes
+                # Senior discount information
+                'senior_discount_requested': order.senior_discount_requested,
+                'senior_discount_status': order.senior_discount_status,
+                'senior_citizen_id_image': order.senior_citizen_id_image
+            }
+        })
             
     except json.JSONDecodeError:
         return JsonResponse({
