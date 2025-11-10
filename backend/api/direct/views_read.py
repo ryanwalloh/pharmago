@@ -5,25 +5,24 @@ from django.views.decorators.http import require_http_methods
 
 @csrf_exempt
 @require_http_methods(["GET", "HEAD"])
-def test_api(request):
+async def test_api(request):
     """
-    Lightweight healthcheck endpoint for Railway.
+    Async healthcheck endpoint for Railway.
     Returns 200 OK with minimal processing to verify service is alive.
+    Must be async to prevent blocking the ASGI event loop.
     """
     return JsonResponse({"status": "ok", "message": "Hello from Django backend!"}, status=200)
 from .orders_direct_proxy import direct_prescription_order_creation  # lightweight import alias
 from .orders_direct_proxy import get_order_status  # lightweight import alias
 
 
-def get_cache_value(request):
-    """Lightweight cache read for dev polling.
+async def get_cache_value(request):
+    """
+    Async lightweight cache read for dev polling.
     GET /api/cache-version/?key=...
     Returns { value: str|None }
     """
     try:
-        from django.core.cache import cache
-        import signal
-        
         key = request.GET.get('key')
         if not key:
             return JsonResponse({'error': 'key is required'}, status=400)
@@ -33,7 +32,9 @@ def get_cache_value(request):
         return JsonResponse({'value': None})
         
         # Original code (disabled):
-        # val = cache.get(key)
+        # from asgiref.sync import sync_to_async
+        # from django.core.cache import cache
+        # val = await sync_to_async(cache.get)(key)
         # return JsonResponse({'value': val})
     except Exception as e:
         return JsonResponse({'error': 'Failed to read cache', 'message': str(e)}, status=500)
