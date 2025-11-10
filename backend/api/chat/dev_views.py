@@ -70,39 +70,46 @@ async def get_order_chat_messages(request):
         if not room_id:
             return JsonResponse({'success': False, 'error': 'room_id is required'}, status=400)
 
-        # Wrap ORM queries in sync_to_async to prevent blocking
+        # Wrap ORM queries AND serialization in sync_to_async to prevent async-unsafe access
         @sync_to_async
         def fetch_room_and_messages():
             room = ChatRoom.objects.select_related('order').get(id=int(room_id))
-            messages_qs = ChatMessage.objects.filter(room=room).order_by('timestamp')
+            messages_qs = ChatMessage.objects.filter(room=room).select_related('sender').order_by('timestamp')
             messages = list(messages_qs[:limit])
-            return room, messages
-        
-        room, messages = await fetch_room_and_messages()
-
-        def serialize(msg):
+            
+            # Serialize messages inside sync context to access model properties safely
+            serialized_messages = []
+            for msg in messages:
+                serialized_messages.append({
+                    'id': msg.id,
+                    'sender_name': msg.sender_name,
+                    'sender_role': msg.sender_role,
+                    'sender_role_code': getattr(msg.sender, 'role', None) if msg.sender else None,
+                    'message_type': msg.message_type,
+                    'content': msg.content,
+                    'file_path': msg.file_path,
+                    'timestamp': msg.timestamp.isoformat() if msg.timestamp else None,
+                    'is_system_message': msg.is_system_message,
+                    'status': getattr(msg, 'status', None),
+                    'delivered_at': msg.delivered_at.isoformat() if msg.delivered_at else None,
+                    'read_at': msg.read_at.isoformat() if msg.read_at else None,
+                })
+            
             return {
-                'id': msg.id,
-                'sender_name': msg.sender_name,
-                'sender_role': msg.sender_role,
-                'sender_role_code': getattr(msg.sender, 'role', None),
-                'message_type': msg.message_type,
-                'content': msg.content,
-                'file_path': msg.file_path,
-                'timestamp': msg.timestamp.isoformat() if msg.timestamp else None,
-                'is_system_message': msg.is_system_message,
-                'status': getattr(msg, 'status', None),
-                'delivered_at': msg.delivered_at.isoformat() if getattr(msg, 'delivered_at', None) else None,
-                'read_at': msg.read_at.isoformat() if getattr(msg, 'read_at', None) else None,
+                'room_id': room.id,
+                'room_key': room.room_id,
+                'messages': serialized_messages
             }
+        
+        data = await fetch_room_and_messages()
 
-        logger.info(f"✅ Async: Fetched {len(messages)} messages for room {room.id}")
+        logger.info(f"✅ Async: Fetched {len(data['messages'])} messages for room {data['room_id']}")
         
         return JsonResponse({
             'success': True,
-            'room': {'id': room.id, 'room_id': room.room_id},
-            'count': len(messages),
-            'messages': [serialize(m) for m in messages],
+            'room': {'id': data['room_id'], 'room_id': data['room_key']},
+            'count': len(data['messages']),
+            'messages': data['messages'],
         })
     except ChatRoom.DoesNotExist:
         return JsonResponse({'success': False, 'error': 'Room not found'}, status=404)
