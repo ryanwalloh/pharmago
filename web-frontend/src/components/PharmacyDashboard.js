@@ -397,15 +397,13 @@ const PharmacyDashboard = () => {
     setChatError('');
   };
 
-  const handlePrepareOrder = (orderId) => {
-    // Move order from pending to preparing
-    const orderToMove = orders.pending.find(order => order.id === orderId);
-    if (orderToMove) {
-      setOrders(prev => ({
-        ...prev,
-        pending: prev.pending.filter(order => order.id !== orderId),
-        preparing: [...prev.preparing, orderToMove]
-      }));
+  const handlePrepareOrder = async (orderId) => {
+    // ✅ FIX: Let WebSocket handle state update to prevent duplicates
+    // Fetch updated orders immediately to reflect changes
+    const storedPharmacyInfo = localStorage.getItem('pharmacy_info');
+    const pharmacy = storedPharmacyInfo ? JSON.parse(storedPharmacyInfo) : null;
+    if (pharmacy?.id) {
+      await fetchOrders(pharmacy.id);
     }
     setSelectedOrder(null);
   };
@@ -433,23 +431,18 @@ const PharmacyDashboard = () => {
 
       console.log('✅ Order marked as ready:', data);
 
-      // Update local state to move order from preparing to ready
-    const orderToMove = orders.preparing.find(order => order.id === orderId);
-    if (orderToMove) {
-        // Update the order's status in the object
-        orderToMove.order_status = 'ready_for_pickup';
-        
-      setOrders(prev => ({
-        ...prev,
-        preparing: prev.preparing.filter(order => order.id !== orderId),
-        ready: [...prev.ready, orderToMove]
-      }));
-    }
+      // ✅ FIX: Let WebSocket handle state update to prevent duplicates
+      // Fetch updated orders immediately to reflect changes
+      const storedPharmacyInfo = localStorage.getItem('pharmacy_info');
+      const pharmacy = storedPharmacyInfo ? JSON.parse(storedPharmacyInfo) : null;
+      if (pharmacy?.id) {
+        await fetchOrders(pharmacy.id);
+      }
 
-    setSelectedOrder(null);
+      setSelectedOrder(null);
 
       // Success - no alert, just console log
-      console.log(`✅ Order #${orderToMove?.orderNumber || orderId} marked as ready for pickup`);
+      console.log(`✅ Order #${orderId} marked as ready for pickup`);
       
     } catch (error) {
       console.error('Error marking order as ready:', error);
@@ -481,11 +474,13 @@ const PharmacyDashboard = () => {
 
       console.log('✅ Order archived:', data);
 
-      // Remove from local state (will stay hidden after refresh due to backend filter)
-    setOrders(prev => ({
-      ...prev,
-      ready: prev.ready.filter(order => order.id !== orderId)
-    }));
+      // ✅ FIX: Let WebSocket handle state update to prevent duplicates
+      // Fetch updated orders immediately to reflect changes (archived orders won't be returned)
+      const storedPharmacyInfo = localStorage.getItem('pharmacy_info');
+      const pharmacy = storedPharmacyInfo ? JSON.parse(storedPharmacyInfo) : null;
+      if (pharmacy?.id) {
+        await fetchOrders(pharmacy.id);
+      }
 
       console.log(`✅ Order #${orderId} marked as done and removed from live view`);
       
@@ -711,14 +706,15 @@ const PharmacyDashboard = () => {
           }
         }
         
-        // Move order from pending to preparing
-        const orderToMove = orders.pending.find(order => order.id === orderId);
-        if (orderToMove) {
-          setOrders(prev => ({
-            ...prev,
-            pending: prev.pending.filter(order => order.id !== orderId),
-            preparing: [...prev.preparing, { ...orderToMove, order_status: 'accepted' }]
-          }));
+        // ✅ FIX: Let WebSocket handle state update to prevent duplicates
+        // Don't manually update local state - WebSocket will trigger fetchOrders()
+        // which ensures a single source of truth from the backend
+        
+        // Fetch updated orders to reflect changes immediately
+        const storedPharmacyInfo = localStorage.getItem('pharmacy_info');
+        const pharmacy = storedPharmacyInfo ? JSON.parse(storedPharmacyInfo) : null;
+        if (pharmacy?.id) {
+          await fetchOrders(pharmacy.id);
         }
         
         // Close modal
