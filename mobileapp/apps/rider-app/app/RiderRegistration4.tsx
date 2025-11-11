@@ -159,32 +159,91 @@ export default function RiderRegistration4() {
 
               // Validate required data from previous steps
               const s1 = obj?.step1 || {};
+              const s2 = obj?.step2 || {};
               const s3 = obj?.step3 || {};
+              const isBicycle = s2.vehicle_type === 'bicycle';
               if (!s1.first_name || !s1.last_name || !s1.date_of_birth || !s1.gender) {
                 Alert.alert('Incomplete Step 1', 'Please complete Step 1 details (name, date of birth, gender).');
                 setSubmitting(false);
                 router.replace('/RiderRegistration1');
                 return;
               }
-              if (!s3.vehicle_type || !s3.vehicle_brand || !s3.vehicle_model || !s3.plate_number || !s3.vehicle_color) {
-                Alert.alert('Incomplete Step 3', 'Please complete Step 3 vehicle details.');
+              if (!s2.vehicle_type) {
+                Alert.alert('Incomplete Step 2', 'Please select your vehicle type.');
                 setSubmitting(false);
                 router.replace('/RiderRegistration3');
                 return;
               }
 
-              // Upload driver's license first if local file path
-              let drivers_license_url: string | undefined = obj?.step2?.drivers_license_url;
-              const localUri: string | undefined = obj?.step2?.drivers_license_local_uri;
-              if ((!drivers_license_url || (typeof drivers_license_url === 'string' && drivers_license_url.startsWith('file:'))) && localUri) {
-                const uploadRes = await apiService.uploadDriverLicenseFile(localUri);
-                if (!uploadRes.success || !uploadRes.data?.url) {
-                  Alert.alert('Upload Failed', "Could not upload driver's license. Please try again.");
+              let drivers_license_url: string | undefined = obj?.step3?.drivers_license_url;
+              let bike_photo_url: string | undefined = s2.bike_photo_url;
+              let bike_id_url: string | undefined = s2.bike_id_url;
+
+              if (isBicycle) {
+                const hasBikePhoto = bike_photo_url || s2.bike_photo_local_uri;
+                const hasBikeId = (bike_id_url || s2.bike_id_local_uri) && s2.bike_id_type;
+
+                if (!hasBikePhoto || !hasBikeId) {
+                  Alert.alert('Incomplete Step 2', 'Please complete the bicycle photo and valid ID uploads.');
                   setSubmitting(false);
+                  router.replace('/RiderRegistration3');
                   return;
                 }
-                drivers_license_url = uploadRes.data.url;
-                await savePartial({ drivers_license_url });
+
+                const { uploadToCloudinary } = await import('../../customer-app/services/cloudinaryService');
+
+                if ((!bike_photo_url || bike_photo_url.startsWith('file:')) && s2.bike_photo_local_uri) {
+                  const uploadRes = await uploadToCloudinary(s2.bike_photo_local_uri, 'pharmago-file-uploads/bicycle-photos', `bicycle_${Date.now()}.jpg`);
+                  if (!uploadRes.success || !uploadRes.url) {
+                    Alert.alert('Upload Failed', 'Could not upload bicycle photo. Please try again.');
+                    setSubmitting(false);
+                    return;
+                  }
+                  bike_photo_url = uploadRes.url;
+                  obj.step2 = { ...(obj.step2 || {}), bike_photo_url };
+                  await AsyncStorage.setItem('rider_registration', JSON.stringify(obj));
+                }
+
+                if ((!bike_id_url || bike_id_url.startsWith('file:')) && s2.bike_id_local_uri) {
+                  const uploadRes = await uploadToCloudinary(s2.bike_id_local_uri, 'pharmago-file-uploads/valid-ids', `valid_id_${Date.now()}.jpg`);
+                  if (!uploadRes.success || !uploadRes.url) {
+                    Alert.alert('Upload Failed', 'Could not upload valid ID image. Please try again.');
+                    setSubmitting(false);
+                    return;
+                  }
+                  bike_id_url = uploadRes.url;
+                  obj.step2 = { ...(obj.step2 || {}), bike_id_url };
+                  await AsyncStorage.setItem('rider_registration', JSON.stringify(obj));
+                }
+              } else {
+                if (!s2.vehicle_brand || !s2.vehicle_model || !s2.plate_number || !s2.vehicle_color) {
+                  Alert.alert('Incomplete Step 2', 'Please complete Step 2 vehicle details.');
+                  setSubmitting(false);
+                  router.replace('/RiderRegistration3');
+                  return;
+                }
+
+                const hasLicense = s3.drivers_license_url || s3.drivers_license_local_uri;
+                if (!hasLicense) {
+                  Alert.alert("Incomplete Step 3", "Please upload your driver's license before proceeding.");
+                  setSubmitting(false);
+                  router.replace('/RiderRegistration2');
+                  return;
+                }
+
+                const localUri: string | undefined = obj?.step3?.drivers_license_local_uri;
+                if ((!drivers_license_url || (typeof drivers_license_url === 'string' && drivers_license_url.startsWith('file:'))) && localUri) {
+                  const uploadRes = await apiService.uploadDriverLicenseFile(localUri);
+                  if (!uploadRes.success || !uploadRes.data?.url) {
+                    Alert.alert('Upload Failed', "Could not upload driver's license. Please try again.");
+                    setSubmitting(false);
+                    return;
+                  }
+                  drivers_license_url = uploadRes.data.url;
+                  obj.step3 = { ...(obj.step3 || {}), drivers_license_url };
+                  await AsyncStorage.setItem('rider_registration', JSON.stringify(obj));
+                  await savePartial({ drivers_license_url });
+                }
               }
 
               // Build payload per models
@@ -204,20 +263,32 @@ export default function RiderRegistration4() {
                   middle_name: s1.middle_name || null,
                   date_of_birth: s1.date_of_birth,
                   gender: s1.gender,
-                  vehicle_type: s3.vehicle_type,
-                  vehicle_brand: s3.vehicle_brand,
-                  vehicle_model: s3.vehicle_model,
-                  plate_number: s3.plate_number,
-                  vehicle_color: s3.vehicle_color,
-                  drivers_license_uploaded: Boolean(drivers_license_url),
+                  vehicle_type: s2.vehicle_type,
+                  vehicle_brand: s2.vehicle_brand || null,
+                  vehicle_model: s2.vehicle_model || null,
+                  plate_number: s2.plate_number || null,
+                  vehicle_color: s2.vehicle_color || null,
+                  drivers_license_uploaded: !isBicycle && Boolean(drivers_license_url),
+                  bicycle_photo_url: isBicycle ? bike_photo_url || null : null,
+                  bicycle_valid_id_type: isBicycle ? s2.bike_id_type || null : null,
+                  bicycle_valid_id_uploaded: isBicycle && Boolean(bike_id_url),
                 },
-                documents: drivers_license_url ? [
-                  {
-                    id_type: 'drivers_license',
-                    file_url: drivers_license_url,
-                  }
-                ] : [],
+                documents: [] as Array<{ id_type: string; file_url: string }>,
               };
+
+              if (!isBicycle && drivers_license_url) {
+                payload.documents.push({
+                  id_type: 'drivers_license',
+                  file_url: drivers_license_url,
+                });
+              }
+
+              if (isBicycle && bike_id_url && s2.bike_id_type) {
+                payload.documents.push({
+                  id_type: s2.bike_id_type,
+                  file_url: bike_id_url,
+                });
+              }
 
               const res = await apiService.completeRiderRegistration(payload);
               if (!res.success) {
