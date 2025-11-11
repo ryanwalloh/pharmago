@@ -224,3 +224,35 @@ python manage.py shell
 The Valid ID system provides a robust, secure, and compliant foundation for user verification in Pharmago. It ensures that all users meet the necessary identity requirements while maintaining flexibility for different verification scenarios.
 
 For technical support or questions about implementation, refer to the Django admin interface or use the provided management commands.
+
+## Rider Registration Bicycle Flow Plan
+
+1. **Analyze Existing Flow**
+   - Map the current step ordering and data saved in `rider_registration.step2` and how Step 4 consumes it.
+   - Inventory reusable upload helpers from the driver's license step for bicycle assets.
+
+2. **Conditional UI in Step 2 (Vehicle Details)**
+   - Render the existing motorcycle form for motorized vehicles.
+   - When “Bicycle” is selected, swap the form for:
+     - Bicycle photo upload (camera/gallery parity with Step 3).
+     - Valid ID selector limited to the 9 primary IDs listed above.
+     - Valid ID image upload for the selected ID.
+   - Persist bicycle-specific fields (photo URI, ID type, ID URI) under `step2`.
+
+3. **Valid ID Selector Implementation**
+   - Create a dropdown/picker component using the primary ID list.
+   - Store the selected option in state and cache it with other bicycle data.
+
+4. **Navigation Logic Updates**
+   - Modify Step 2’s “Next” handler: skip Step 3 when bicycle flow is complete, otherwise continue to the driver’s license step.
+   - Ensure Step 3 gracefully handles navigation if the user somehow reaches it after choosing bicycle (e.g., via back navigation).
+
+5. **Step 4 Submission Adjustments**
+   - Accept either motorized vehicle data + driver’s license (existing path) or bicycle uploads + ID selection.
+   - Upload bicycle photo and ID if stored as local URIs before payload submission.
+   - Include the selected ID type in the final payload when applicable.
+
+6. **Validation & QA**
+   - Add form validations for bicycle uploads/ID selection.
+   - Run linting and walk through both flows (motorcycle and bicycle) to confirm storage, navigation, and submission.
+   - Document any backend assumptions or payload changes for future reference.
