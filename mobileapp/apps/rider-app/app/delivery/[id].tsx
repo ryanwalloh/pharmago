@@ -27,6 +27,9 @@ import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import { apiService } from '../../../customer-app/services/api';
 import { uploadProofOfDelivery } from '../../../customer-app/services/cloudinaryService';
+import PharmacyMarkerAsset from '../../assets/PharmacyCustomMarker.png';
+import CustomerMarkerAsset from '../../assets/CustomerCustomMarker.png';
+import RiderMarkerAsset from '../../assets/RiderCustomMarker.png';
 
 // ✅ FIX: Lazy dimensions to prevent import-time crashes
 let cachedWidth: number | null = null;
@@ -195,6 +198,20 @@ export default function ActiveDeliveryScreen() {
   const [deliveredOrderEarnings, setDeliveredOrderEarnings] = useState(0);
   const [totalEarnings, setTotalEarnings] = useState(0);
   const [allDelivered, setAllDelivered] = useState(false);
+  const [pharmacyMarkerLoaded, setPharmacyMarkerLoaded] = useState(false);
+  const [pharmacyMarkerError, setPharmacyMarkerError] = useState(false);
+  const [riderMarkerLoaded, setRiderMarkerLoaded] = useState(false);
+  const [riderMarkerError, setRiderMarkerError] = useState(false);
+  const [customerMarkerState, setCustomerMarkerState] = useState<Record<number, { loaded: boolean; error: boolean }>>({});
+  const pharmacyAssetDetails = React.useMemo(() => Image.resolveAssetSource(PharmacyMarkerAsset), []);
+
+  useEffect(() => {
+    if (__DEV__ && pharmacyAssetDetails?.width && pharmacyAssetDetails?.height) {
+      console.log(
+        `🖼️ Pharmacy marker intrinsic size: ${pharmacyAssetDetails.width}×${pharmacyAssetDetails.height}`
+      );
+    }
+  }, [pharmacyAssetDetails]);
 
   const fetchDeliveryData = React.useCallback(async () => {
     try {
@@ -704,17 +721,27 @@ export default function ActiveDeliveryScreen() {
           }}
           title={deliveryData.pharmacy.name}
           description="Pickup Location"
-          anchor={{ x: 0.5, y: 0.5 }}
+          anchor={{ x: 0.5, y: 1 }}
+          pinColor={pharmacyMarkerError ? '#F43332' : undefined}
+          tracksViewChanges={!pharmacyMarkerLoaded}
         >
-          <View style={styles.markerWrapper}>
-            <View style={styles.markerContainer}>
-              <Image
-                source={require('../../assets/PharmacyCustomMarker.png')}
-                style={styles.markerImage}
-                resizeMode="contain"
-              />
+          {!pharmacyMarkerError && (
+            <View style={styles.markerWrapper}>
+              <View style={styles.markerContainer}>
+                <Image
+                  source={PharmacyMarkerAsset}
+                  style={styles.markerImage}
+                  resizeMode="contain"
+                  onLoad={() => setTimeout(() => setPharmacyMarkerLoaded(true), 0)}
+                  onLoadEnd={() => setTimeout(() => setPharmacyMarkerLoaded(true), 0)}
+                  onError={() => {
+                    setPharmacyMarkerError(true);
+                    setPharmacyMarkerLoaded(true);
+                  }}
+                />
+              </View>
             </View>
-          </View>
+          )}
         </Marker>
 
         {/* Customer Markers (Delivery) - Custom Image */}
@@ -729,23 +756,58 @@ export default function ActiveDeliveryScreen() {
             }}
             title={order.customer_name}
             description={order.delivery_address.street_address}
-            anchor={{ x: 0.5, y: 0.5 }}
+            anchor={{ x: 0.5, y: 1 }}
             opacity={order.is_delivered ? 0.5 : 1}
+            pinColor={customerMarkerState[order.id]?.error ? '#F43332' : undefined}
+            tracksViewChanges={!(customerMarkerState[order.id]?.loaded ?? false)}
           >
-            <View style={styles.markerWrapper}>
-              <View style={styles.markerContainer}>
-                <Image
-                  source={require('../../assets/CustomerCustomMarker.png')}
-                  style={styles.markerImage}
-                  resizeMode="contain"
-                />
-                {deliveryData.is_batch && (
-                  <View style={styles.markerBadge}>
-                    <Text style={styles.markerBadgeText}>{index + 1}</Text>
-                  </View>
-                )}
+            {!customerMarkerState[order.id]?.error && (
+              <View style={styles.markerWrapper}>
+                <View style={styles.markerContainer}>
+                  <Image
+                    source={CustomerMarkerAsset}
+                    style={styles.markerImage}
+                    resizeMode="contain"
+                    onLoad={() =>
+                      setTimeout(() => {
+                        setCustomerMarkerState(prev => ({
+                          ...prev,
+                          [order.id]: {
+                            ...(prev[order.id] ?? { error: false }),
+                            loaded: true,
+                          },
+                        }));
+                      }, 0)
+                    }
+                    onLoadEnd={() =>
+                      setTimeout(() => {
+                        setCustomerMarkerState(prev => ({
+                          ...prev,
+                          [order.id]: {
+                            ...(prev[order.id] ?? { error: false }),
+                            loaded: true,
+                          },
+                        }));
+                      }, 0)
+                    }
+                    onError={() => {
+                      setCustomerMarkerState(prev => ({
+                        ...prev,
+                        [order.id]: {
+                          loaded: true,
+                          error: true,
+                        },
+                      }));
+                    }}
+                  />
+                  {deliveryData.is_batch && (
+                    <View style={styles.markerBadge}>
+                      <Text style={styles.markerBadgeText}>{index + 1}</Text>
+                    </View>
+                  )}
+                </View>
               </View>
-            </View>
+            )}
           </Marker>
         ))}
 
@@ -755,17 +817,27 @@ export default function ActiveDeliveryScreen() {
             coordinate={riderLocation}
             title="You"
             description="Your current location"
-            anchor={{ x: 0.5, y: 0.5 }}
+            anchor={{ x: 0.5, y: 1 }}
+            pinColor={riderMarkerError ? '#F43332' : undefined}
+            tracksViewChanges={!riderMarkerLoaded}
           >
-            <View style={styles.markerWrapper}>
-              <View style={styles.markerContainer}>
-                <Image
-                  source={require('../../assets/RiderCustomMarker.png')}
-                  style={styles.markerImage}
-                  resizeMode="contain"
-                />
+            {!riderMarkerError && (
+              <View style={styles.markerWrapper}>
+                <View style={styles.markerContainer}>
+                  <Image
+                    source={RiderMarkerAsset}
+                    style={styles.markerImage}
+                    resizeMode="contain"
+                    onLoad={() => setTimeout(() => setRiderMarkerLoaded(true), 0)}
+                    onLoadEnd={() => setTimeout(() => setRiderMarkerLoaded(true), 0)}
+                    onError={() => {
+                      setRiderMarkerError(true);
+                      setRiderMarkerLoaded(true);
+                    }}
+                  />
+                </View>
               </View>
-            </View>
+            )}
           </Marker>
         )}
       </MapView>
