@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Image, Alert, ScrollView } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { apiService } from '../../customer-app/services/api';
 import { useRouter } from 'expo-router';
 
 // Reuse the same patterns as customer prescription upload: camera or gallery then (later) upload to S3
@@ -15,7 +14,7 @@ export default function RiderRegistration2() {
     try {
       const raw = await AsyncStorage.getItem('rider_registration');
       const obj = raw ? JSON.parse(raw) : {};
-      const merged = { ...obj, step2: { ...(obj?.step2 || {}), ...patch } };
+      const merged = { ...obj, step3: { ...(obj?.step3 || {}), ...patch } };
       await AsyncStorage.setItem('rider_registration', JSON.stringify(merged));
     } catch {}
   };
@@ -37,7 +36,7 @@ export default function RiderRegistration2() {
         const raw = await AsyncStorage.getItem('rider_registration');
         if (raw) {
           const obj = JSON.parse(raw);
-          const uri = obj?.step2?.drivers_license_local_uri as string | undefined;
+          const uri = obj?.step3?.drivers_license_local_uri as string | undefined;
           if (uri) setSelectedImageUri(uri);
         }
       } catch {}
@@ -56,7 +55,7 @@ export default function RiderRegistration2() {
       const uri = result.assets[0].uri;
       setSelectedImageUri(uri);
       await savePartial({ drivers_license_local_uri: uri });
-    } catch (e) {
+    } catch {
       Alert.alert('Camera Error', 'Failed to open camera.');
     }
   };
@@ -73,7 +72,7 @@ export default function RiderRegistration2() {
       const uri = result.assets[0].uri;
       setSelectedImageUri(uri);
       await savePartial({ drivers_license_local_uri: uri });
-    } catch (e) {
+    } catch {
       Alert.alert('Gallery Error', 'Failed to open gallery.');
     }
   };
@@ -82,12 +81,12 @@ export default function RiderRegistration2() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Driver's License</Text>
-      <Text style={styles.subtitle}>Step 2 of 3</Text>
+      <Text style={styles.title}>{"Driver's License"}</Text>
+      <Text style={styles.subtitle}>Step 3 of 3</Text>
 
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 16 }}>
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Upload Driver's License Image</Text>
+          <Text style={styles.cardTitle}>{"Upload Driver's License Image"}</Text>
           {selectedImageUri ? (
             <View style={styles.previewWrap}>
               <Image source={{ uri: selectedImageUri }} style={styles.previewImg} />
@@ -120,9 +119,9 @@ export default function RiderRegistration2() {
               Alert.alert('Missing Image', "Please upload a photo of your driver's license.");
               return;
             }
-            // Only persist local URI and proceed to step 3
+            // Only persist local URI and proceed to final step
             await savePartial({ drivers_license_local_uri: selectedImageUri, saved_at: Date.now() });
-            router.push('/RiderRegistration3');
+            router.push('/RiderRegistration4');
           }}
         >
           <Text style={styles.navText}>Next</Text>
