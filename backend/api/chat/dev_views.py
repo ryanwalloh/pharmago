@@ -64,6 +64,7 @@ async def get_order_chat_messages(request):
     """
     try:
         from api.chat.models import ChatRoom, ChatMessage
+        from channels.db import database_sync_to_async
 
         room_id = request.GET.get('room_id')
         limit = int(request.GET.get('limit') or 50)
@@ -71,7 +72,7 @@ async def get_order_chat_messages(request):
             return JsonResponse({'success': False, 'error': 'room_id is required'}, status=400)
 
         # Wrap ORM queries AND serialization in sync_to_async to prevent async-unsafe access
-        @sync_to_async
+        @database_sync_to_async
         def fetch_room_and_messages():
             room = ChatRoom.objects.select_related('order').get(id=int(room_id))
             messages_qs = ChatMessage.objects.filter(room=room).select_related('sender').order_by('timestamp')
@@ -129,6 +130,7 @@ async def mark_order_chat_messages_read(request):
         from django.utils import timezone
         from api.chat.models import ChatRoom, ChatParticipant, ChatMessage
         from api.users.models import Pharmacy
+        from channels.db import database_sync_to_async
 
         if request.method == 'OPTIONS':
             return JsonResponse({'success': True})
@@ -142,7 +144,7 @@ async def mark_order_chat_messages_read(request):
             return JsonResponse({'success': False, 'error': 'room_id is required'}, status=400)
 
         # Wrap all ORM operations in sync_to_async - extract model properties inside
-        @sync_to_async
+        @database_sync_to_async
         def mark_messages_read():
             room = ChatRoom.objects.select_related('order__customer__user').get(id=int(room_id))
 
