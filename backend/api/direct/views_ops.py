@@ -859,13 +859,15 @@ def mark_order_archived(request, order_id):
 
 
 @csrf_exempt
-def customer_approve_pricing(request):
+async def customer_approve_pricing(request):
     """Customer approves or rejects pricing. Updates order status and echoes totals."""
     if request.method != 'POST':
         return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
     try:
         import json
         from api.orders.models import Order
+        from asgiref.sync import sync_to_async
+
         payload = json.loads(request.body or '{}')
         order_id = int(payload.get('order_id') or 0)
         approve = bool(payload.get('approve', True))
@@ -873,27 +875,32 @@ def customer_approve_pricing(request):
         if not order_id:
             return JsonResponse({'success': False, 'error': 'order_id is required'}, status=400)
 
-        order = Order.objects.get(id=order_id)
-        # Recalculate totals to be sure
-        order.calculate_totals()
+        @sync_to_async
+        def process_approval():
+            order = Order.objects.get(id=order_id)
 
-        # Update order status based on approval
-        if approve:
-            order.update_status(Order.OrderStatus.ACCEPTED, notes or 'Customer approved pricing')
-        else:
-            order.update_status(Order.OrderStatus.PENDING, notes or 'Customer requested changes to pricing')
+            # Recalculate totals to be sure
+            order.calculate_totals()
 
-        data = {
-            'order_id': order.id,
-            'order_number': order.order_number,
-            'order_status': order.order_status,
-            'subtotal': float(order.subtotal),
-            'tax_amount': float(order.tax_amount),
-            'delivery_fee': float(order.delivery_fee),
-            'discount_amount': float(order.discount_amount),
-            'total_amount': float(order.total_amount),
-            'approved': bool(approve)
-        }
+            # Update order status based on approval
+            if approve:
+                order.update_status(Order.OrderStatus.ACCEPTED, notes or 'Customer approved pricing')
+            else:
+                order.update_status(Order.OrderStatus.PENDING, notes or 'Customer requested changes to pricing')
+
+            return {
+                'order_id': order.id,
+                'order_number': order.order_number,
+                'order_status': order.order_status,
+                'subtotal': float(order.subtotal),
+                'tax_amount': float(order.tax_amount),
+                'delivery_fee': float(order.delivery_fee),
+                'discount_amount': float(order.discount_amount),
+                'total_amount': float(order.total_amount),
+                'approved': bool(approve)
+            }
+
+        data = await process_approval()
         return JsonResponse({'success': True, 'data': data})
     except Order.DoesNotExist:
         return JsonResponse({'success': False, 'error': 'Order not found'}, status=404)
