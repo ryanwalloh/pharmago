@@ -26,122 +26,138 @@ def direct_medicine_categories(request):
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
 
-def direct_medicine_catalog(request):
+async def direct_medicine_catalog(request):
     try:
-        from django.db.models import Q
         from api.inventory.models import MedicineCatalog
+        from django.db.models import Q
+        from channels.db import database_sync_to_async
 
         search_query = (request.GET.get('search') or '').strip()
         form_filter = (request.GET.get('form') or '').strip()
         prescription_required = (request.GET.get('prescription_required') or '').strip().lower()
         limit_str = request.GET.get('limit') or '100'
 
-        qs = MedicineCatalog.objects.filter(is_active=True, fda_approval=True).select_related('category')
-        if search_query:
-            qs = qs.filter(
-                Q(name__icontains=search_query)
-                | Q(generic_name__icontains=search_query)
-                | Q(therapeutic_class__icontains=search_query)
-                | Q(description__icontains=search_query)
-            )
-        if form_filter:
-            qs = qs.filter(form=form_filter)
-        if prescription_required in ('true', 'false'):
-            qs = qs.filter(prescription_required=(prescription_required == 'true'))
-
         try:
             limit = max(1, min(500, int(limit_str)))
         except Exception:
             limit = 100
 
-        medicines = []
-        for m in qs[:limit]:
-            medicines.append({
-                'id': m.id,
-                'name': m.name,
-                'generic_name': m.generic_name,
-                'form': m.form,
-                'dosage': m.dosage,
-                'description': m.description,
-                'prescription_required': m.prescription_required,
-                'controlled_substance': m.controlled_substance,
-                'therapeutic_class': m.therapeutic_class,
-                'category': {'id': m.category.id, 'name': m.category.name} if m.category_id else None,
-            })
+        @database_sync_to_async
+        def fetch_catalog():
+            qs = MedicineCatalog.objects.filter(is_active=True, fda_approval=True).select_related('category')
+            if search_query:
+                qs = qs.filter(
+                    Q(name__icontains=search_query)
+                    | Q(generic_name__icontains=search_query)
+                    | Q(therapeutic_class__icontains=search_query)
+                    | Q(description__icontains=search_query)
+                )
+            if form_filter:
+                qs = qs.filter(form=form_filter)
+            if prescription_required in ('true', 'false'):
+                qs = qs.filter(prescription_required=(prescription_required == 'true'))
+
+            results = []
+            for m in qs[:limit]:
+                results.append({
+                    'id': m.id,
+                    'name': m.name,
+                    'generic_name': m.generic_name,
+                    'form': m.form,
+                    'dosage': m.dosage,
+                    'description': m.description,
+                    'prescription_required': m.prescription_required,
+                    'controlled_substance': m.controlled_substance,
+                    'therapeutic_class': m.therapeutic_class,
+                    'category': {'id': m.category.id, 'name': m.category.name} if m.category_id else None,
+                })
+            return results
+
+        medicines = await fetch_catalog()
         return JsonResponse({'success': True, 'count': len(medicines), 'medicines': medicines})
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
 
-def direct_pharmacy_inventory(request, pharmacy_id):
+async def direct_pharmacy_inventory(request, pharmacy_id):
     try:
         from api.users.models import Pharmacy
         from api.inventory.models import PharmacyInventory
+        from channels.db import database_sync_to_async
 
-        pharmacy = Pharmacy.objects.get(id=int(pharmacy_id))
-        items = (
-            PharmacyInventory.objects.filter(pharmacy=pharmacy)
-            .select_related('category')
-            .order_by('category__name', 'name')
-        )
+        @database_sync_to_async
+        def fetch_inventory():
+            pharmacy = Pharmacy.objects.get(id=int(pharmacy_id))
+            items = (
+                PharmacyInventory.objects.filter(pharmacy=pharmacy)
+                .select_related('category')
+                .order_by('category__name', 'name')
+            )
 
-        categories_map = {}
-        total_items = 0
-        available_items = 0
-        out_of_stock_items = 0
-        low_stock_items = 0
+            categories_map = {}
+            total_items = 0
+            available_items = 0
+            out_of_stock_items = 0
+            low_stock_items = 0
 
-        for it in items:
-            cat_name = it.category.name if it.category_id else 'Uncategorized'
-            categories_map.setdefault(cat_name, [])
-            categories_map[cat_name].append({
-                'id': it.id,
-                'name': it.name,
-                'form': it.form,
-                'dosage': it.dosage,
-                'description': it.description,
-                'prescription_required': bool(it.prescription_required),
-                'price': _safe_float(it.price),
-                'original_price': _safe_float(it.original_price or 0),
-                'cost_price': _safe_float(it.cost_price or 0),
-                'is_available': bool(it.is_available),
-                'is_on_sale': bool(it.is_on_sale),
-                'discount_percentage': it.discount_percentage or 0,
-                'expiry_date': it.expiry_date.isoformat() if it.expiry_date else None,
-            })
-            total_items += 1
-            if it.is_available:
-                available_items += 1
-            if it.stock_quantity == 0:
-                out_of_stock_items += 1
-            elif it.stock_quantity <= it.min_stock_level:
-                low_stock_items += 1
+            for it in items:
+                cat_name = it.category.name if it.category_id else 'Uncategorized'
+                categories_map.setdefault(cat_name, [])
+                categories_map[cat_name].append({
+                    'id': it.id,
+                    'name': it.name,
+                    'form': it.form,
+                    'dosage': it.dosage,
+                    'description': it.description,
+                    'prescription_required': bool(it.prescription_required),
+                    'price': _safe_float(it.price),
+                    'original_price': _safe_float(it.original_price or 0),
+                    'cost_price': _safe_float(it.cost_price or 0),
+                    'is_available': bool(it.is_available),
+                    'is_on_sale': bool(it.is_on_sale),
+                    'discount_percentage': it.discount_percentage or 0,
+                    'expiry_date': it.expiry_date.isoformat() if it.expiry_date else None,
+                })
+                total_items += 1
+                if it.is_available:
+                    available_items += 1
+                if it.stock_quantity == 0:
+                    out_of_stock_items += 1
+                elif it.stock_quantity <= it.min_stock_level:
+                    low_stock_items += 1
 
-        categories = [{
-            'category_name': cat,
-            'items': arr,
-        } for cat, arr in categories_map.items()]
+            categories = [{
+                'category_name': cat,
+                'items': arr,
+            } for cat, arr in categories_map.items()]
+
+            return {
+                'categories': categories,
+                'total_items': total_items,
+                'available_items': available_items,
+                'out_of_stock_items': out_of_stock_items,
+                'low_stock_items': low_stock_items,
+            }
+
+        data = await fetch_inventory()
 
         return JsonResponse({
             'success': True,
-            'categories': categories,
-            'total_items': total_items,
-            'available_items': available_items,
-            'out_of_stock_items': out_of_stock_items,
-            'low_stock_items': low_stock_items,
+            **data,
         })
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
 
 @csrf_exempt
-def add_medicines_to_inventory(request):
+async def add_medicines_to_inventory(request):
     if request.method != 'POST':
         return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
     try:
         import json
         from api.users.models import Pharmacy
         from api.inventory.models import MedicineCatalog, PharmacyInventory, MedicineCategory
+        from channels.db import database_sync_to_async
 
         data = json.loads(request.body or '{}')
         pharmacy_id = int(data.get('pharmacy_id') or 0)
@@ -149,60 +165,66 @@ def add_medicines_to_inventory(request):
         if not pharmacy_id or not medicines:
             return JsonResponse({'success': False, 'error': 'pharmacy_id and medicines are required'}, status=400)
 
-        pharmacy = Pharmacy.objects.get(id=pharmacy_id)
+        @database_sync_to_async
+        def process_inventory():
+            pharmacy = Pharmacy.objects.get(id=pharmacy_id)
 
-        added = []
-        skipped = []
-        for m in medicines:
-            mid = m.get('id')
-            try:
-                mc = MedicineCatalog.objects.select_related('category').get(id=int(mid))
-                pricing = m.get('pricing') or {}
-                inv, created = PharmacyInventory.objects.get_or_create(
-                    pharmacy=pharmacy,
-                    medicine=mc,
-                    defaults={
-                        'category': mc.category,
-                        'name': mc.name,
-                        'form': mc.form,
-                        'dosage': mc.dosage,
-                        'description': mc.description,
-                        'prescription_required': mc.prescription_required,
-                        'price': _safe_float(pricing.get('price', 0)),
-                        'original_price': _safe_float(pricing.get('original_price', pricing.get('price', 0))),
-                        'cost_price': _safe_float(pricing.get('cost_price', 0)),
-                        'stock_quantity': 1000,  # Set to max stock (availability managed by toggle)
-                        'max_stock_level': 1000,
-                    }
-                )
-                if not created:
-                    # update pricing if provided
-                    updated = False
-                    if 'price' in pricing:
-                        inv.price = _safe_float(pricing['price'], inv.price)
-                        updated = True
-                    if 'original_price' in pricing:
-                        inv.original_price = _safe_float(pricing['original_price'], inv.original_price or 0)
-                        updated = True
-                    if 'cost_price' in pricing:
-                        inv.cost_price = _safe_float(pricing['cost_price'], inv.cost_price or 0)
-                        updated = True
-                    if updated:
-                        inv.save()
-                added.append({
-                    'id': inv.id,
-                    'name': inv.name,
-                    'generic_name': getattr(mc, 'generic_name', None),
-                    'form': inv.form,
-                    'dosage': inv.dosage,
-                    'price': _safe_float(inv.price, 0),
-                })
-            except Exception as e:
-                skipped.append({
-                    'id': mid,
-                    'name': (m.get('name') if isinstance(m, dict) else None) or f"ID {mid}",
-                    'reason': str(e),
-                })
+            added = []
+            skipped = []
+            for m in medicines:
+                mid = m.get('id')
+                try:
+                    mc = MedicineCatalog.objects.select_related('category').get(id=int(mid))
+                    pricing = m.get('pricing') or {}
+                    inv, created = PharmacyInventory.objects.get_or_create(
+                        pharmacy=pharmacy,
+                        medicine=mc,
+                        defaults={
+                            'category': mc.category,
+                            'name': mc.name,
+                            'form': mc.form,
+                            'dosage': mc.dosage,
+                            'description': mc.description,
+                            'prescription_required': mc.prescription_required,
+                            'price': _safe_float(pricing.get('price', 0)),
+                            'original_price': _safe_float(pricing.get('original_price', pricing.get('price', 0))),
+                            'cost_price': _safe_float(pricing.get('cost_price', 0)),
+                            'stock_quantity': 1000,  # Set to max stock (availability managed by toggle)
+                            'max_stock_level': 1000,
+                        }
+                    )
+                    if not created:
+                        # update pricing if provided
+                        updated = False
+                        if 'price' in pricing:
+                            inv.price = _safe_float(pricing['price'], inv.price)
+                            updated = True
+                        if 'original_price' in pricing:
+                            inv.original_price = _safe_float(pricing['original_price'], inv.original_price or 0)
+                            updated = True
+                        if 'cost_price' in pricing:
+                            inv.cost_price = _safe_float(pricing['cost_price'], inv.cost_price or 0)
+                            updated = True
+                        if updated:
+                            inv.save()
+                    added.append({
+                        'id': inv.id,
+                        'name': inv.name,
+                        'generic_name': getattr(mc, 'generic_name', None),
+                        'form': inv.form,
+                        'dosage': inv.dosage,
+                        'price': _safe_float(inv.price, 0),
+                    })
+                except Exception as e:
+                    skipped.append({
+                        'id': mid,
+                        'name': (m.get('name') if isinstance(m, dict) else None) or f"ID {mid}",
+                        'reason': str(e),
+                    })
+
+            return added, skipped
+
+        added, skipped = await process_inventory()
 
         return JsonResponse({
             'success': True,
@@ -216,13 +238,14 @@ def add_medicines_to_inventory(request):
 
 
 @csrf_exempt
-def add_custom_products_to_inventory(request):
+async def add_custom_products_to_inventory(request):
     if request.method != 'POST':
         return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
     try:
         import json
         from api.users.models import Pharmacy
         from api.inventory.models import PharmacyInventory, MedicineCategory
+        from channels.db import database_sync_to_async
 
         data = json.loads(request.body or '{}')
         pharmacy_id = int(data.get('pharmacy_id') or 0)
@@ -230,58 +253,64 @@ def add_custom_products_to_inventory(request):
         if not pharmacy_id or not products:
             return JsonResponse({'success': False, 'error': 'pharmacy_id and custom_products are required'}, status=400)
 
-        pharmacy = Pharmacy.objects.get(id=pharmacy_id)
+        @database_sync_to_async
+        def process_custom_products():
+            pharmacy = Pharmacy.objects.get(id=pharmacy_id)
 
-        added = []
-        skipped = []
-        for p in products:
-            try:
-                # Resolve category by id or name (accept both)
-                cat_input = p.get('category')
-                cat = None
-                if isinstance(cat_input, int):
-                    try:
-                        cat = MedicineCategory.objects.get(id=cat_input)
-                    except MedicineCategory.DoesNotExist:
-                        cat = None
-                elif isinstance(cat_input, str) and cat_input.strip():
-                    # If numeric string, try ID first; else treat as name
-                    if cat_input.isdigit():
+            added = []
+            skipped = []
+            for p in products:
+                try:
+                    # Resolve category by id or name (accept both)
+                    cat_input = p.get('category')
+                    cat = None
+                    if isinstance(cat_input, int):
                         try:
-                            cat = MedicineCategory.objects.get(id=int(cat_input))
+                            cat = MedicineCategory.objects.get(id=cat_input)
                         except MedicineCategory.DoesNotExist:
                             cat = None
+                    elif isinstance(cat_input, str) and cat_input.strip():
+                        # If numeric string, try ID first; else treat as name
+                        if cat_input.isdigit():
+                            try:
+                                cat = MedicineCategory.objects.get(id=int(cat_input))
+                            except MedicineCategory.DoesNotExist:
+                                cat = None
+                        if cat is None:
+                            cat, _ = MedicineCategory.objects.get_or_create(name=cat_input.strip())
                     if cat is None:
-                        cat, _ = MedicineCategory.objects.get_or_create(name=cat_input.strip())
-                if cat is None:
-                    cat, _ = MedicineCategory.objects.get_or_create(name='Custom Products')
-                inv = PharmacyInventory.objects.create(
-                    pharmacy=pharmacy,
-                    medicine=None,
-                    category=cat,
-                    name=p.get('name') or 'Custom Product',
-                    form=(p.get('form') or p.get('customForm') or 'tablet'),
-                    dosage=p.get('dosage') or '',
-                    description=p.get('description') or '',
-                    prescription_required=bool(p.get('prescription_required')),
-                    price=_safe_float(p.get('price', 0)),
-                    original_price=_safe_float(p.get('original_price', p.get('price', 0))),
-                    cost_price=_safe_float(p.get('cost_price', 0)),
-                    stock_quantity=1000,  # Set to max stock (availability managed by toggle)
-                    max_stock_level=1000,
-                )
-                added.append({
-                    'id': inv.id,
-                    'name': inv.name,
-                    'form': inv.form,
-                    'dosage': inv.dosage,
-                    'price': _safe_float(inv.price, 0),
-                })
-            except Exception as e:
-                skipped.append({
-                    'name': p.get('name') or 'Custom Product',
-                    'reason': str(e),
-                })
+                        cat, _ = MedicineCategory.objects.get_or_create(name='Custom Products')
+                    inv = PharmacyInventory.objects.create(
+                        pharmacy=pharmacy,
+                        medicine=None,
+                        category=cat,
+                        name=p.get('name') or 'Custom Product',
+                        form=(p.get('form') or p.get('customForm') or 'tablet'),
+                        dosage=p.get('dosage') or '',
+                        description=p.get('description') or '',
+                        prescription_required=bool(p.get('prescription_required')),
+                        price=_safe_float(p.get('price', 0)),
+                        original_price=_safe_float(p.get('original_price', p.get('price', 0))),
+                        cost_price=_safe_float(p.get('cost_price', 0)),
+                        stock_quantity=1000,
+                        max_stock_level=1000,
+                    )
+                    added.append({
+                        'id': inv.id,
+                        'name': inv.name,
+                        'form': inv.form,
+                        'dosage': inv.dosage,
+                        'price': _safe_float(inv.price, 0),
+                    })
+                except Exception as e:
+                    skipped.append({
+                        'name': p.get('name') or 'Custom Product',
+                        'reason': str(e),
+                    })
+
+            return added, skipped
+
+        added, skipped = await process_custom_products()
 
         return JsonResponse({
             'success': True,
@@ -294,16 +323,22 @@ def add_custom_products_to_inventory(request):
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
 
-def toggle_inventory_availability(request, pharmacy_id, item_id):
+async def toggle_inventory_availability(request, pharmacy_id, item_id):
     try:
         from api.users.models import Pharmacy
         from api.inventory.models import PharmacyInventory
+        from channels.db import database_sync_to_async
 
-        pharmacy = Pharmacy.objects.get(id=int(pharmacy_id))
-        item = PharmacyInventory.objects.get(id=int(item_id), pharmacy=pharmacy)
-        item.is_available = not bool(item.is_available)
-        item.save(update_fields=['is_available'])
-        return JsonResponse({'success': True, 'is_available': bool(item.is_available), 'message': 'Availability updated'})
+        @database_sync_to_async
+        def toggle_availability():
+            pharmacy = Pharmacy.objects.get(id=int(pharmacy_id))
+            item = PharmacyInventory.objects.get(id=int(item_id), pharmacy=pharmacy)
+            item.is_available = not bool(item.is_available)
+            item.save(update_fields=['is_available'])
+            return bool(item.is_available)
+
+        is_available = await toggle_availability()
+        return JsonResponse({'success': True, 'is_available': is_available, 'message': 'Availability updated'})
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
