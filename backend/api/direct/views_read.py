@@ -451,94 +451,7 @@ def direct_pharmacy_details(request, pharmacy_id):
 
 
 @csrf_exempt
-def direct_search_medicines(request):
-    """
-    Direct search for medicines in pharmacy inventories.
-    Query parameters:
-    - q: search query (required)
-    - limit: max results (default: 10)
-    """
-    try:
-        from api.inventory.models import PharmacyInventory
-        from django.db.models import Q
-        
-        query = request.GET.get('q', '').strip()
-        limit = int(request.GET.get('limit', 10))
-        
-        if not query or len(query) < 2:
-            return JsonResponse({
-                'success': False,
-                'error': 'Search query must be at least 2 characters'
-            }, status=400)
-        
-        # Search in pharmacy inventory (available items only)
-        # Include category name in search
-        medicines = PharmacyInventory.objects.filter(
-            Q(name__icontains=query) | 
-            Q(custom_name__icontains=query) |
-            Q(medicine__name__icontains=query) |
-            Q(medicine__generic_name__icontains=query) |
-            Q(category__name__icontains=query),  # Search by category name
-            is_available=True,
-            pharmacy__status='approved'
-        ).select_related('pharmacy', 'medicine', 'category').order_by('name', 'dosage', 'form').distinct('name', 'dosage', 'form')[:limit]
-        
-        results = []
-        for medicine in medicines:
-            # Get count of pharmacies that have this medicine AVAILABLE
-            # Using is_available toggle instead of stock_quantity
-            pharmacy_count = PharmacyInventory.objects.filter(
-                name=medicine.name,
-                dosage=medicine.dosage,
-                form=medicine.form,
-                is_available=True,  # Only check availability toggle
-                pharmacy__status='approved'
-            ).values('pharmacy').distinct().count()
-            
-            # Get price range (only from available pharmacies)
-            prices = PharmacyInventory.objects.filter(
-                name__iexact=medicine.name,
-                dosage__iexact=medicine.dosage,
-                form=medicine.form,
-                is_available=True,  # Only check availability toggle
-                pharmacy__status='approved'
-            ).values_list('price', flat=True)
-            
-            price_range = None
-            if prices:
-                price_range = {
-                    'min': float(min(prices)),
-                    'max': float(max(prices))
-                }
-            
-            results.append({
-                'id': medicine.id,
-                'name': medicine.display_name,
-                'dosage': medicine.dosage,
-                'form': medicine.get_form_display(),
-                'category': medicine.category.name if medicine.category else None,
-                'prescription_required': medicine.prescription_required,
-                'price_range': price_range,
-                'pharmacy_count': pharmacy_count,
-                'type': 'medicine'
-            })
-        
-        return JsonResponse({
-            'success': True,
-            'data': results,
-            'count': len(results)
-        })
-        
-    except Exception as e:
-        print(f"ERROR in direct_search_medicines: {e}")
-        return JsonResponse({
-            'success': False,
-            'error': str(e)
-        }, status=500)
-
-
-@csrf_exempt
-def direct_search_pharmacies(request):
+async def direct_search_pharmacies(request):
     """
     Direct search for pharmacies by name or location.
     Query parameters:
@@ -548,62 +461,72 @@ def direct_search_pharmacies(request):
     try:
         from api.users.models import Pharmacy
         from django.db.models import Q
-        
+        from channels.db import database_sync_to_async
+
         query = request.GET.get('q', '').strip()
         limit = int(request.GET.get('limit', 10))
-        
+
         if not query or len(query) < 2:
             return JsonResponse({
                 'success': False,
                 'error': 'Search query must be at least 2 characters'
             }, status=400)
-        
-        # Search pharmacies by name, address
-        pharmacies = Pharmacy.objects.filter(
-            Q(pharmacy_name__icontains=query) |
-            Q(street_address__icontains=query) |
-            Q(barangay__icontains=query) |
-            Q(city__icontains=query),
-            status='approved'
-        ).order_by('pharmacy_name')[:limit]
-        
-        results = []
-        for pharmacy in pharmacies:
-            # Get storefront image URL
-            storefront_image_url = None
-            try:
-                from api.users.models import UserDocument
-                storefront_doc = UserDocument.objects.filter(
-                    user=pharmacy.user,
-                    id_type__name__icontains='storefront'
-                ).first()
-                
-                if storefront_doc and storefront_doc.file_url:
-                    # Check if it's a Cloudinary URL
-                    if 'cloudinary.com' in storefront_doc.file_url or storefront_doc.file_url.startswith('http'):
-                        storefront_image_url = storefront_doc.file_url
-            except Exception as e:
-                print(f"Error fetching storefront for pharmacy {pharmacy.id}: {e}")
-            
-            results.append({
-                'id': pharmacy.id,
-                'pharmacy_name': pharmacy.pharmacy_name,
-                'address': f"{pharmacy.street_address}, {pharmacy.barangay}",
-                'barangay': pharmacy.barangay,
-                'city': pharmacy.city,
-                'province': pharmacy.province,
-                'latitude': float(pharmacy.latitude) if pharmacy.latitude else None,
-                'longitude': float(pharmacy.longitude) if pharmacy.longitude else None,
-                'storefront_image_url': storefront_image_url,
-                'type': 'pharmacy'
-            })
-        
+
+        @database_sync_to_async
+        def search():
+            pharmacies = list(
+                Pharmacy.objects.filter(
+                    Q(pharmacy_name__icontains=query) |
+                    Q(street_address__icontains=query) |
+                    Q(barangay__icontains=query) |
+                    Q(city__icontains=query),
+                    status='approved'
+                ).order_by('pharmacy_name')[:limit]
+            )
+
+            results = []
+            from api.users.models import UserDocument
+
+            for pharmacy in pharmacies:
+                storefront_image_url = None
+                try:
+                    storefront_doc = UserDocument.objects.filter(
+                        user=pharmacy.user,
+                        id_type__name__icontains='storefront'
+                    ).first()
+
+                    if storefront_doc and storefront_doc.file_url:
+                        if 'cloudinary.com' in storefront_doc.file_url or str(storefront_doc.file_url).startswith('http'):
+                            storefront_image_url = storefront_doc.file_url
+                except Exception as doc_err:
+                    print(f"Error fetching storefront for pharmacy {pharmacy.id}: {doc_err}")
+
+                results.append({
+                    'id': pharmacy.id,
+                    'pharmacy_name': pharmacy.pharmacy_name,
+                    'address': f"{pharmacy.street_address}, {pharmacy.barangay}" if pharmacy.street_address else pharmacy.barangay,
+                    'barangay': pharmacy.barangay,
+                    'city': pharmacy.city,
+                    'province': pharmacy.province,
+                    'latitude': float(pharmacy.latitude) if pharmacy.latitude else None,
+                    'longitude': float(pharmacy.longitude) if pharmacy.longitude else None,
+                    'storefront_image_url': storefront_image_url,
+                    'type': 'pharmacy'
+                })
+
+            return results
+
+        results = await search()
+
+        if results is None:
+            results = []
+
         return JsonResponse({
             'success': True,
             'data': results,
             'count': len(results)
         })
-        
+
     except Exception as e:
         print(f"ERROR in direct_search_pharmacies: {e}")
         return JsonResponse({
