@@ -451,6 +451,108 @@ def direct_pharmacy_details(request, pharmacy_id):
 
 
 @csrf_exempt
+async def direct_search_medicines(request):
+    """
+    Direct search for medicines in pharmacy inventories.
+    Query parameters:
+    - q: search query (required)
+    - limit: max results (default: 10)
+    """
+    try:
+        from api.inventory.models import PharmacyInventory
+        from django.db.models import Q
+        from channels.db import database_sync_to_async
+
+        query = request.GET.get('q', '').strip()
+        limit = int(request.GET.get('limit', 10))
+
+        if not query or len(query) < 2:
+            return JsonResponse({
+                'success': False,
+                'error': 'Search query must be at least 2 characters'
+            }, status=400)
+
+        @database_sync_to_async
+        def search():
+            medicines = list(
+                PharmacyInventory.objects.filter(
+                    Q(name__icontains=query) |
+                    Q(custom_name__icontains=query) |
+                    Q(medicine__name__icontains=query) |
+                    Q(medicine__generic_name__icontains=query) |
+                    Q(category__name__icontains=query),
+                    is_available=True,
+                    pharmacy__status='approved'
+                )
+                .select_related('pharmacy', 'medicine', 'category')
+                .order_by('name', 'dosage', 'form')
+                .distinct('name', 'dosage', 'form')[:limit]
+            )
+
+            results = []
+            for medicine in medicines:
+                pharmacy_count = PharmacyInventory.objects.filter(
+                    name=medicine.name,
+                    dosage=medicine.dosage,
+                    form=medicine.form,
+                    is_available=True,
+                    pharmacy__status='approved'
+                ).values('pharmacy').distinct().count()
+
+                prices = PharmacyInventory.objects.filter(
+                    name__iexact=medicine.name,
+                    dosage__iexact=medicine.dosage,
+                    form=medicine.form,
+                    is_available=True,
+                    pharmacy__status='approved'
+                ).values_list('price', flat=True)
+
+                price_range = None
+                if prices:
+                    try:
+                        prices_list = [float(p) for p in prices if p is not None]
+                        if prices_list:
+                            price_range = {
+                                'min': min(prices_list),
+                                'max': max(prices_list)
+                            }
+                    except Exception:
+                        pass
+
+                results.append({
+                    'id': medicine.id,
+                    'name': medicine.display_name,
+                    'dosage': medicine.dosage,
+                    'form': medicine.get_form_display(),
+                    'category': medicine.category.name if medicine.category else None,
+                    'prescription_required': medicine.prescription_required,
+                    'price_range': price_range,
+                    'pharmacy_count': pharmacy_count,
+                    'type': 'medicine'
+                })
+
+            return results
+
+        results = await search()
+
+        if results is None:
+            results = []
+
+        return JsonResponse({
+            'success': True,
+            'data': results,
+            'count': len(results)
+        })
+
+    except Exception as e:
+        print(f"ERROR in direct_search_medicines: {e}")
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
+@csrf_exempt
 async def direct_search_pharmacies(request):
     """
     Direct search for pharmacies by name or location.
