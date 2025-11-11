@@ -409,105 +409,114 @@ def update_inventory_item(request, pharmacy_id, item_id):
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
 
-def direct_pharmacy_orders(request, pharmacy_id):
+async def direct_pharmacy_orders(request, pharmacy_id):
     try:
         from api.users.models import Pharmacy
         from api.orders.models import Order
-
-        pharmacy = Pharmacy.objects.get(id=int(pharmacy_id))
-        qs = (
-            Order.objects.filter(order_lines__inventory_item__pharmacy=pharmacy)
-            .select_related('customer__user')
-            .prefetch_related('order_lines')
-            .distinct()
-        )
-        def serialize(order):
-            # Better detection: Check if prescription image URL is actually set (not None/empty)
-            # Prescription orders have an image URL, cart orders don't
-            raw_img = getattr(order, 'prescription_image_url', '') or ''
-            has_prescription_image = bool(raw_img and str(raw_img).strip())
-            
-            # Cart orders have items from the start, prescription orders start with 0 items
-            has_items = order.order_lines.count() > 0
-            
-            # It's a prescription order if it has a prescription image OR has no items yet
-            is_rx = has_prescription_image or not has_items
-            
-            img_url = raw_img
-            try:
-                if raw_img and not str(raw_img).startswith('http'):
-                    img_url = request.build_absolute_uri(raw_img)
-            except Exception:
-                img_url = raw_img
-            
-            # Get order items (for cart orders)
-            items_list = []
-            try:
-                for line in order.order_lines.all():
-                    # Skip zero-price placeholder items
-                    if float(line.total_price) > 0:
-                        items_list.append({
-                            'id': line.id,
-                            'name': line.inventory_item.name,
-                            'quantity': line.quantity,
-                            'unit_price': float(line.unit_price),
-                            'total_price': float(line.total_price),
-                            'prescription_required': line.prescription_required
-                        })
-            except Exception:
-                items_list = []
-            
-            # Get senior discount info
-            senior_id_url = getattr(order, 'senior_citizen_id_image', '') or ''
-            try:
-                if senior_id_url and not str(senior_id_url).startswith('http'):
-                    senior_id_url = request.build_absolute_uri(senior_id_url)
-            except Exception:
-                pass
-            
-            return {
-                'id': order.id,
-                'order_number': getattr(order, 'order_number', order.id),
-                'order_status': getattr(order, 'order_status', ''),
-                'payment_method': getattr(order, 'payment_method', 'COD'),
-                'total_amount': _safe_float(getattr(order, 'total_amount', 0)),
-                'subtotal': _safe_float(getattr(order, 'subtotal', 0)),
-                'tax_amount': _safe_float(getattr(order, 'tax_amount', 0)),
-                'delivery_fee': _safe_float(getattr(order, 'delivery_fee', 0)),
-                'discount_amount': _safe_float(getattr(order, 'discount_amount', 0)),
-                'created_at': order.created_at.isoformat() if getattr(order, 'created_at', None) else None,
-                # Frontend compatibility (camelCase fields used by PharmacyDashboard)
-                'totalAmount': _safe_float(getattr(order, 'total_amount', 0)),
-                'createdAt': order.created_at.isoformat() if getattr(order, 'created_at', None) else None,
-                'isPrescriptionOrder': is_rx,
-                'prescriptionNotes': getattr(order, 'prescription_notes', ''),
-                'prescriptionImageUrl': img_url,
-                'customerName': getattr(getattr(order, 'customer', None), 'first_name', '') or '',
-                'customerAddress': '',
-                'riderName': '',
-                'riderPhone': '',
-                # Cart order specific fields
-                'items': items_list,
-                'seniorDiscountRequested': getattr(order, 'senior_discount_requested', False),
-                'seniorCitizenIdImage': senior_id_url,
-                'seniorDiscountStatus': getattr(order, 'senior_discount_status', 'not_requested'),
-            }
-        # ✅ NEW: Exclude archived orders (those marked with [PHARMACY_ARCHIVED])
+        from channels.db import database_sync_to_async
         from django.db.models import Q
-        pend = [serialize(o) for o in qs.filter(order_status='pending').exclude(Q(notes__contains='[PHARMACY_ARCHIVED]'))[:200]]
-        prep = [serialize(o) for o in qs.filter(order_status__in=['preparing', 'accepted']).exclude(Q(notes__contains='[PHARMACY_ARCHIVED]'))[:200]]
-        ready = [serialize(o) for o in qs.filter(order_status='ready_for_pickup').exclude(Q(notes__contains='[PHARMACY_ARCHIVED]'))[:200]]
+
+        @database_sync_to_async
+        def fetch_orders():
+            pharmacy = Pharmacy.objects.get(id=int(pharmacy_id))
+            qs = (
+                Order.objects.filter(order_lines__inventory_item__pharmacy=pharmacy)
+                .select_related('customer__user')
+                .prefetch_related('order_lines')
+                .distinct()
+            )
+
+            def serialize(order):
+                raw_img = getattr(order, 'prescription_image_url', '') or ''
+                has_prescription_image = bool(raw_img and str(raw_img).strip())
+                has_items = order.order_lines.count() > 0
+                is_rx = has_prescription_image or not has_items
+
+                items_list = []
+                try:
+                    for line in order.order_lines.all():
+                        if float(line.total_price) > 0:
+                            items_list.append({
+                                'id': line.id,
+                                'name': line.inventory_item.name,
+                                'quantity': line.quantity,
+                                'unit_price': float(line.unit_price),
+                                'total_price': float(line.total_price),
+                                'prescription_required': line.prescription_required
+                            })
+                except Exception:
+                    items_list = []
+
+                senior_id_url = getattr(order, 'senior_citizen_id_image', '') or ''
+
+                return {
+                    'id': order.id,
+                    'order_number': getattr(order, 'order_number', order.id),
+                    'order_status': getattr(order, 'order_status', ''),
+                    'payment_method': getattr(order, 'payment_method', 'COD'),
+                    'total_amount': _safe_float(getattr(order, 'total_amount', 0)),
+                    'subtotal': _safe_float(getattr(order, 'subtotal', 0)),
+                    'tax_amount': _safe_float(getattr(order, 'tax_amount', 0)),
+                    'delivery_fee': _safe_float(getattr(order, 'delivery_fee', 0)),
+                    'discount_amount': _safe_float(getattr(order, 'discount_amount', 0)),
+                    'created_at': order.created_at.isoformat() if getattr(order, 'created_at', None) else None,
+                    'totalAmount': _safe_float(getattr(order, 'total_amount', 0)),
+                    'createdAt': order.created_at.isoformat() if getattr(order, 'created_at', None) else None,
+                    'isPrescriptionOrder': is_rx,
+                    'prescriptionNotes': getattr(order, 'prescription_notes', ''),
+                    'prescriptionImageUrl': raw_img,
+                    'customerName': getattr(getattr(order, 'customer', None), 'first_name', '') or '',
+                    'customerAddress': '',
+                    'riderName': '',
+                    'riderPhone': '',
+                    'items': items_list,
+                    'seniorDiscountRequested': getattr(order, 'senior_discount_requested', False),
+                    'seniorCitizenIdImage': senior_id_url,
+                    'seniorDiscountStatus': getattr(order, 'senior_discount_status', 'not_requested'),
+                }
+
+            pending = [serialize(o) for o in qs.filter(order_status='pending').exclude(Q(notes__contains='[PHARMACY_ARCHIVED]'))[:200]]
+            preparing = [serialize(o) for o in qs.filter(order_status__in=['preparing', 'accepted']).exclude(Q(notes__contains='[PHARMACY_ARCHIVED]'))[:200]]
+            ready = [serialize(o) for o in qs.filter(order_status='ready_for_pickup').exclude(Q(notes__contains='[PHARMACY_ARCHIVED]'))[:200]]
+
+            return {
+                'pending': pending,
+                'preparing': preparing,
+                'ready': ready,
+                'totalOrders': qs.count(),
+                'pendingOrders': len(pending),
+                'preparingOrders': len(preparing),
+                'readyOrders': len(ready),
+            }
+
+        result = await fetch_orders()
+
+        def absolutize(url):
+            if not url:
+                return url
+            if str(url).startswith('http'):
+                return url
+            try:
+                return request.build_absolute_uri(url)
+            except Exception:
+                return url
+
+        for bucket in ('pending', 'preparing', 'ready'):
+            for order in result[bucket]:
+                order['prescriptionImageUrl'] = absolutize(order.get('prescriptionImageUrl'))
+                order['seniorCitizenIdImage'] = absolutize(order.get('seniorCitizenIdImage'))
+
         return JsonResponse({
             'success': True,
             'orders': {
-                'pending': pend,
-                'preparing': prep,
-                'ready': ready,
+                'pending': result['pending'],
+                'preparing': result['preparing'],
+                'ready': result['ready'],
             },
-            'totalOrders': qs.count(),
-            'pendingOrders': len(pend),
-            'preparingOrders': len(prep),
-            'readyOrders': len(ready),
+            'totalOrders': result['totalOrders'],
+            'pendingOrders': result['pendingOrders'],
+            'preparingOrders': result['preparingOrders'],
+            'readyOrders': result['readyOrders'],
         })
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
