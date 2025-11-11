@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Image, ActivityIndicator, Alert } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Image, ImageBackground, ActivityIndicator, Alert, Animated, Keyboard, Platform, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { apiService } from '../../customer-app/services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -7,28 +7,43 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 export default function RiderLoginScreen() {
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
-  const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<string | null>(null);
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const modalTranslateY = useState(new Animated.Value(0))[0];
 
-  const handleTestBackend = async () => {
-    try {
-      setTesting(true);
-      setTestResult(null);
-      const res = await apiService.makeDirectRequest('/ping/');
-      if (res && (res as any).success !== false) {
-        setTestResult('Connected to backend ✔');
-      } else {
-        setTestResult('Backend ping failed');
-      }
-    } catch (e) {
-      setTestResult('Backend connection error');
-    } finally {
-      setTesting(false);
-    }
-  };
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const handleKeyboardShow = (event: any) => {
+      const keyboardHeight = event?.endCoordinates?.height || 0;
+      Animated.spring(modalTranslateY, {
+        toValue: -keyboardHeight * 0.5,
+        useNativeDriver: true,
+        speed: 20,
+        bounciness: 0,
+      }).start();
+    };
+
+    const handleKeyboardHide = () => {
+      Animated.spring(modalTranslateY, {
+        toValue: 0,
+        useNativeDriver: true,
+        speed: 20,
+        bounciness: 0,
+      }).start();
+    };
+
+    const keyboardShowListener = Keyboard.addListener(showEvent, handleKeyboardShow);
+    const keyboardHideListener = Keyboard.addListener(hideEvent, handleKeyboardHide);
+
+    return () => {
+      keyboardShowListener.remove();
+      keyboardHideListener.remove();
+    };
+  }, [modalTranslateY]);
+
   const handleLogin = async () => {
     if (!identifier.trim() || !password.trim()) {
       Alert.alert('Missing credentials', 'Please enter your phone/email and password.');
@@ -120,60 +135,64 @@ export default function RiderLoginScreen() {
 
   return (
     <View style={styles.container}>
-      <Image source={require('../assets/logo.png')} style={styles.logo} resizeMode="contain" />
-      <Text style={styles.title}>Rider Login</Text>
-      <View style={styles.form}>
-        <Text style={styles.label}>Phone or Email</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="e.g. 0917 123 4567 or you@example.com"
-          placeholderTextColor="#9E9E9E"
-          value={identifier}
-          onChangeText={setIdentifier}
-          autoCapitalize="none"
-        />
-        <Text style={[styles.label, { marginTop: 14 }]}>Password</Text>
-        <View style={styles.passwordRow}>
-          <TextInput
-            style={[styles.input, { flex: 1, paddingRight: 44 }]}
-            placeholder="••••••••"
-            secureTextEntry={!showPassword}
-            placeholderTextColor="#9E9E9E"
-            value={password}
-            onChangeText={setPassword}
-          />
-          <TouchableOpacity style={styles.eyeButton} onPress={() => setShowPassword(!showPassword)}>
-            <Image
-              source={showPassword ? require('../assets/hide.png') : require('../assets/eye.png')}
-              style={styles.eyeIcon}
-              resizeMode="contain"
-            />
-          </TouchableOpacity>
-        </View>
-        <TouchableOpacity style={styles.loginButton} activeOpacity={0.8} onPress={handleLogin} disabled={submitting}>
-          {submitting ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.loginText}>Login</Text>}
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.googleButton} activeOpacity={0.8}>
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <Image source={require('../assets/googlelogo.png')} style={styles.googleIcon} resizeMode="contain" />
-            <Text style={styles.googleText}>Login with Google</Text>
+      <ImageBackground source={require('../assets/loginpage.png')} style={styles.background} resizeMode="cover">
+        <View style={styles.overlay} />
+        <View style={styles.wrapper}>
+          <View style={styles.header}>
+            <Image source={require('../assets/pharmarider.png')} style={styles.brandLogo} resizeMode="contain" />
           </View>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.testButton} activeOpacity={0.8} onPress={handleTestBackend} disabled={testing}>
-          {testing ? <ActivityIndicator color="#333333" /> : <Text style={styles.testText}>Test Backend</Text>}
-        </TouchableOpacity>
-        {testResult ? (
-          <Text style={styles.testResult}>{testResult}</Text>
-        ) : null}
-        <TouchableOpacity style={styles.forgot}>
-          <Text style={styles.forgotText}>Forgot password?</Text>
-        </TouchableOpacity>
-      </View>
-      <View style={styles.footer}>
-        <TouchableOpacity style={styles.signupFooterButton} activeOpacity={0.8} onPress={() => router.push('/RiderRegistration1')}>
-          <Text style={styles.signupText}>Sign Up</Text>
-        </TouchableOpacity>
-      </View>
+          <Animated.View style={[styles.formSheet, { transform: [{ translateY: modalTranslateY }] }]}>
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={styles.formContent}
+            >
+              <Text style={styles.formTitle}>Welcome back</Text>
+              <Text style={styles.formSubtitle}>Log in to manage deliveries</Text>
+              <View style={styles.form}>
+                <Text style={styles.label}>Phone or Email</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="e.g. 0917 123 4567 or you@example.com"
+                  placeholderTextColor="#9E9E9E"
+                  value={identifier}
+                  onChangeText={setIdentifier}
+                  autoCapitalize="none"
+                />
+                <Text style={[styles.label, { marginTop: 14 }]}>Password</Text>
+                <View style={styles.passwordRow}>
+                  <TextInput
+                    style={[styles.input, { flex: 1, paddingRight: 44 }]}
+                    placeholder="••••••••"
+                    secureTextEntry={!showPassword}
+                    placeholderTextColor="#9E9E9E"
+                    value={password}
+                    onChangeText={setPassword}
+                  />
+                  <TouchableOpacity style={styles.eyeButton} onPress={() => setShowPassword(!showPassword)}>
+                    <Image
+                      source={showPassword ? require('../assets/hide.png') : require('../assets/eye.png')}
+                      style={styles.eyeIcon}
+                      resizeMode="contain"
+                    />
+                  </TouchableOpacity>
+                </View>
+                <TouchableOpacity style={styles.loginButton} activeOpacity={0.8} onPress={handleLogin} disabled={submitting}>
+                  {submitting ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.loginText}>Login</Text>}
+                </TouchableOpacity>
+                <View style={styles.metaRow}>
+                  <TouchableOpacity style={styles.forgot}>
+                    <Text style={styles.forgotText}>Forgot password?</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity activeOpacity={0.8} onPress={() => router.push('/RiderRegistration1')}>
+                    <Text style={styles.signupLinkText}>Sign Up</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </ScrollView>
+          </Animated.View>
+        </View>
+      </ImageBackground>
     </View>
   );
 }
@@ -181,29 +200,52 @@ export default function RiderLoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingHorizontal: 24,
-    paddingTop: 80,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#000000',
   },
-  logo: {
-    width: 140,
-    height: 60,
-    alignSelf: 'center',
+  background: {
+    flex: 1,
+  },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+  },
+  wrapper: {
+    flex: 1,
+    justifyContent: 'space-between',
+  },
+  header: {
+    paddingHorizontal: 24,
+    paddingTop: 70,
+  },
+  brandLogo: {
+    width: 160,
+    height: 80,
     marginBottom: 12,
   },
-  title: {
-    fontSize: 24,
+  formSheet: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    paddingHorizontal: 24,
+    paddingTop: 32,
+    paddingBottom: 40,
+  },
+  formContent: {
+    paddingBottom: 32,
+  },
+  formTitle: {
+    fontSize: 20,
     fontWeight: '700',
-    textAlign: 'center',
-    color: '#222',
+    color: '#222222',
+  },
+  formSubtitle: {
+    fontSize: 14,
+    color: '#666666',
+    marginTop: 4,
     marginBottom: 24,
   },
   form: {
-    backgroundColor: '#FAFAFA',
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#EEEEEE',
+    marginTop: 16,
   },
   label: {
     fontSize: 12,
@@ -213,10 +255,10 @@ const styles = StyleSheet.create({
   input: {
     borderWidth: 1,
     borderColor: '#E0E0E0',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 11,
-    color: '#222',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    color: '#222222',
     backgroundColor: '#FFFFFF',
   },
   passwordRow: {
@@ -225,9 +267,9 @@ const styles = StyleSheet.create({
   },
   eyeButton: {
     position: 'absolute',
-    right: 10,
-    height: 40,
-    width: 40,
+    right: 12,
+    height: 44,
+    width: 44,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -237,10 +279,10 @@ const styles = StyleSheet.create({
     tintColor: '#828282',
   },
   loginButton: {
-    marginTop: 18,
+    marginTop: 24,
     backgroundColor: '#00BF63',
-    height: 44,
-    borderRadius: 10,
+    height: 52,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -249,71 +291,22 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 16,
   },
-  googleButton: {
-    marginTop: 10,
-    backgroundColor: '#FFFFFF',
-    height: 44,
-    borderRadius: 10,
+  metaRow: {
+    marginTop: 20,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-  },
-  googleText: {
-    color: '#333333',
-    fontWeight: '600',
-    fontSize: 14,
-    marginLeft: 8,
-  },
-  googleIcon: {
-    height: 18,
-    width: 18,
-  },
-  testButton: {
-    marginTop: 10,
-    backgroundColor: '#FFFFFF',
-    height: 44,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-  },
-  testText: {
-    color: '#333333',
-    fontWeight: '600',
-    fontSize: 14,
-  },
-  testResult: {
-    marginTop: 8,
-    textAlign: 'center',
-    color: '#4CAF50',
-    fontSize: 12,
-  },
-  signupText: {
-    color: '#00BF63',
-    fontWeight: '700',
-    fontSize: 16,
-  },
-  footer: {
-    marginTop: 'auto',
-    paddingVertical: 16,
-  },
-  signupFooterButton: {
-    backgroundColor: '#FFFFFF',
-    height: 44,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#00BF63',
+    justifyContent: 'space-between',
   },
   forgot: {
-    marginTop: 12,
-    alignItems: 'center',
+    paddingVertical: 6,
   },
   forgotText: {
     color: '#666666',
+    fontWeight: '500',
+  },
+  signupLinkText: {
+    color: '#00BF63',
+    fontWeight: '700',
   },
 });
 
