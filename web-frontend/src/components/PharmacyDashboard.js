@@ -141,6 +141,33 @@ const PharmacyDashboard = () => {
   });
   const [ordersLoading, setOrdersLoading] = useState(true);
 
+  const parseCurrency = (value) => {
+    const numeric = Number(value ?? 0);
+    return Number.isFinite(numeric) ? numeric : 0;
+  };
+
+  const formatOrderAmountDisplay = (order) => {
+    if (order?.isPrescriptionOrder && String(order?.order_status || '').toLowerCase() === 'pending') {
+      return 'Prescription Order';
+    }
+    const subtotal = parseCurrency(order?.subtotal ?? order?.totalAmount ?? order?.total_amount);
+    return `₱${subtotal.toFixed(2)}`;
+  };
+
+  const formatOrderSubtitle = (order, fallback = '') => {
+    if (!order?.isPrescriptionOrder) {
+      return fallback;
+    }
+    const status = String(order?.order_status || '').toLowerCase();
+    if (status === 'pending') {
+      return 'Needs review for pricing';
+    }
+    if (String(order?.payment_status || '').toLowerCase() === 'paid') {
+      return 'Paid';
+    }
+    return 'Pricing approved';
+  };
+
   // WebSocket connection for real-time updates
   const pharmacyOrdersWebSocket = useRef(null); // Main pharmacy orders WebSocket
 
@@ -3855,14 +3882,73 @@ const PharmacyDashboard = () => {
                   </div>
                 </>
               ) : (
-                orders.pending.map(order => (
+                orders.pending.map(order => {
+                  const amountDisplay = formatOrderAmountDisplay(order);
+                  const subtitleDisplay = formatOrderSubtitle(order, order.payment_method || 'COD');
+                  return (
+                    <div key={order.id} className="flex flex-col lg:flex-row justify-between items-start lg:items-center bg-white rounded-2xl p-4 lg:p-3 lg:px-20 space-y-3 lg:space-y-0">
+                      <div className="text-center">
+                        <h3 className="text-base lg:text-lg font-medium">Order #{order.id}</h3>
+                      </div>
+                      <div className="flex items-center">
+                        <img className="w-6 h-6 lg:w-8 lg:h-8 mr-2 lg:mr-3" src="/images/human.png" alt="Rider" />
+                        <div>
+                          <h3 className="text-sm lg:text-lg font-medium">{order.riderName}</h3>
+                          <p className="text-gray-600 text-xs lg:text-sm">{order.riderPhone}</p>
+                        </div>
+                      </div>
+                      <div className="text-center">
+                        <h3 className="text-sm lg:text-lg font-medium">{order.customerName}</h3>
+                        <p className="text-gray-600 text-xs lg:text-sm truncate">{order.customerAddress}</p>
+                      </div>
+                      <div className="text-center">
+                        <h3 className="text-sm lg:text-lg font-medium">00:30:00</h3>
+                        <p className="text-gray-600 text-xs lg:text-sm">{formatTime(order.createdAt)}</p>
+                      </div>
+                      <div className="text-center">
+                        <h3 className="text-sm lg:text-lg font-medium">
+                          {amountDisplay}
+                        </h3>
+                        <p className="text-gray-600 text-xs lg:text-sm">
+                          {subtitleDisplay}
+                        </p>
+                      </div>
+                      <div className="text-center">
+                        <button 
+                          onClick={() => handleViewOrder(order)}
+                          className="bg-green-500 text-white px-6 lg:px-10 py-2 lg:py-3 rounded-2xl text-sm lg:text-lg cursor-pointer"
+                        >
+                          View
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+
+          {/* Preparing Orders */}
+          <div className="mb-6">
+            <h3 className="ml-2 lg:ml-5 text-gray-600 text-base lg:text-lg mb-3">Preparing({orders.preparing.length})</h3>
+            <div className="space-y-3">
+              {orders.preparing.map(order => {
+                const amountDisplay = formatOrderAmountDisplay(order);
+                const subtitleDisplay = formatOrderSubtitle(order, 'Paid');
+                return (
                   <div key={order.id} className="flex flex-col lg:flex-row justify-between items-start lg:items-center bg-white rounded-2xl p-4 lg:p-3 lg:px-20 space-y-3 lg:space-y-0">
                     <div className="text-center">
                       <h3 className="text-base lg:text-lg font-medium">Order #{order.id}</h3>
+                      <button 
+                        onClick={() => handleViewOrder(order)}
+                        className="text-gray-600 text-sm bg-white border-none"
+                      >
+                        View Order
+                      </button>
                     </div>
                     <div className="flex items-center">
                       <img className="w-6 h-6 lg:w-8 lg:h-8 mr-2 lg:mr-3" src="/images/human.png" alt="Rider" />
-                    <div>
+                      <div>
                         <h3 className="text-sm lg:text-lg font-medium">{order.riderName}</h3>
                         <p className="text-gray-600 text-xs lg:text-sm">{order.riderPhone}</p>
                       </div>
@@ -3875,76 +3961,25 @@ const PharmacyDashboard = () => {
                       <h3 className="text-sm lg:text-lg font-medium">00:30:00</h3>
                       <p className="text-gray-600 text-xs lg:text-sm">{formatTime(order.createdAt)}</p>
                     </div>
-                  <div className="text-center">
-                    <h3 className="text-sm lg:text-lg font-medium">
-                      {order.isPrescriptionOrder ? 'Prescription Order' : `₱${(order.subtotal||0).toFixed(2)}`}
-                    </h3>
-                    <p className="text-gray-600 text-xs lg:text-sm">
-                      {order.isPrescriptionOrder ? 'Needs review for pricing' : (order.payment_method || 'COD')}
-                    </p>
+                    <div className="text-center">
+                      <h3 className="text-sm lg:text-lg font-medium">
+                        {amountDisplay}
+                      </h3>
+                      <p className="text-gray-600 text-xs lg:text-sm">
+                        {subtitleDisplay}
+                      </p>
                     </div>
                     <div className="text-center">
                       <button 
-                        onClick={() => handleViewOrder(order)}
-                        className="bg-green-500 text-white px-6 lg:px-10 py-2 lg:py-3 rounded-2xl text-sm lg:text-lg cursor-pointer"
+                        onClick={() => handleReadyOrder(order.id)}
+                        className="bg-orange-500 text-white px-6 lg:px-10 py-2 lg:py-3 rounded-2xl text-sm lg:text-lg cursor-pointer"
                       >
-                        View
+                        Ready
                       </button>
                     </div>
                   </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          {/* Preparing Orders */}
-          <div className="mb-6">
-            <h3 className="ml-2 lg:ml-5 text-gray-600 text-base lg:text-lg mb-3">Preparing({orders.preparing.length})</h3>
-            <div className="space-y-3">
-              {orders.preparing.map(order => (
-                <div key={order.id} className="flex flex-col lg:flex-row justify-between items-start lg:items-center bg-white rounded-2xl p-4 lg:p-3 lg:px-20 space-y-3 lg:space-y-0">
-                  <div className="text-center">
-                    <h3 className="text-base lg:text-lg font-medium">Order #{order.id}</h3>
-                    <button 
-                      onClick={() => handleViewOrder(order)}
-                      className="text-gray-600 text-sm bg-white border-none"
-                    >
-                      View Order
-                    </button>
-                  </div>
-                  <div className="flex items-center">
-                    <img className="w-6 h-6 lg:w-8 lg:h-8 mr-2 lg:mr-3" src="/images/human.png" alt="Rider" />
-                    <div>
-                      <h3 className="text-sm lg:text-lg font-medium">{order.riderName}</h3>
-                      <p className="text-gray-600 text-xs lg:text-sm">{order.riderPhone}</p>
-                    </div>
-                  </div>
-                  <div className="text-center">
-                    <h3 className="text-sm lg:text-lg font-medium">{order.customerName}</h3>
-                    <p className="text-gray-600 text-xs lg:text-sm truncate">{order.customerAddress}</p>
-                  </div>
-                  <div className="text-center">
-                    <h3 className="text-sm lg:text-lg font-medium">00:30:00</h3>
-                    <p className="text-gray-600 text-xs lg:text-sm">{formatTime(order.createdAt)}</p>
-                  </div>
-                  <div className="text-center">
-                    <h3 className="text-sm lg:text-lg font-medium">
-                      {order.isPrescriptionOrder ? 'Prescription Order' : `₱${(order.subtotal||0).toFixed(2)}`}
-                    </h3>
-                    <p className="text-gray-600 text-xs lg:text-sm">
-                      {order.isPrescriptionOrder ? 'Needs review for pricing' : 'Paid'}
-                    </p>
-                  </div>
-                  <div className="text-center">
-                    <button 
-                      onClick={() => handleReadyOrder(order.id)}
-                      className="bg-orange-500 text-white px-6 lg:px-10 py-2 lg:py-3 rounded-2xl text-sm lg:text-lg cursor-pointer"
-                    >
-                      Ready
-                    </button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
@@ -3952,56 +3987,59 @@ const PharmacyDashboard = () => {
           <div className="mb-6">
             <h3 className="ml-2 lg:ml-5 text-gray-600 text-base lg:text-lg mb-3">Ready Orders({orders.ready.length})</h3>
             <div className="space-y-3">
-              {orders.ready.map(order => (
-                <div key={order.id} className="flex flex-col lg:flex-row justify-between items-start lg:items-center bg-white rounded-2xl p-4 lg:p-3 lg:px-20 space-y-3 lg:space-y-0">
-                  <div className="text-center">
-                    <h3 className="text-base lg:text-lg font-medium">Order #{order.id}</h3>
-                  </div>
-                  <div className="flex items-center">
-                    <img className="w-6 h-6 lg:w-8 lg:h-8 mr-2 lg:mr-3" src="/images/human.png" alt="Rider" />
-                    <div>
-                      <h3 className="text-sm lg:text-lg font-medium">{order.riderName}</h3>
-                      <p className="text-gray-600 text-xs lg:text-sm">{order.riderPhone}</p>
+              {orders.ready.map(order => {
+                const amountDisplay = formatOrderAmountDisplay(order);
+                const subtitleDisplay = formatOrderSubtitle(order, 'Paid');
+                return (
+                  <div key={order.id} className="flex flex-col lg:flex-row justify-between items-start lg:items-center bg-white rounded-2xl p-4 lg:p-3 lg:px-20 space-y-3 lg:space-y-0">
+                    <div className="text-center">
+                      <h3 className="text-base lg:text-lg font-medium">Order #{order.id}</h3>
                     </div>
-                  </div>
-                  <div className="text-center">
-                    <h3 className="text-sm lg:text-lg font-medium">{order.customerName}</h3>
-                    <p className="text-gray-600 text-xs lg:text-sm truncate">{order.customerAddress}</p>
-                  </div>
-                  <div className="text-center">
-                    <h3 className="text-sm lg:text-lg font-medium">00:30:00</h3>
-                    <p className="text-gray-600 text-xs lg:text-sm">{formatTime(order.createdAt)}</p>
-                  </div>
-                  <div className="text-center">
-                    <h3 className="text-sm lg:text-lg font-medium">
-                      {order.isPrescriptionOrder ? 'Prescription Order' : `₱${(order.subtotal||0).toFixed(2)}`}
-                    </h3>
-                    <p className="text-gray-600 text-xs lg:text-sm">
-                      {order.isPrescriptionOrder ? 'Needs review for pricing' : 'Paid'}
-                    </p>
-                  </div>
-                  <div className="text-center">
-                    {/* ✅ Smart status display based on order status */}
-                    {(() => {
-                      const currentStatus = order.order_status;
-                      
-                      if (currentStatus === 'ready_for_pickup') {
-                        return (
-                          <div>
-                            <div className="text-sm lg:text-base font-medium text-orange-600">⏳ Waiting for Rider</div>
-                            <p className="text-xs text-gray-500 mt-1">Order is ready</p>
-                          </div>
-                        );
-                      } else if (currentStatus === 'picked_up') {
-                        return (
-                          <div>
-                            <div className="text-sm lg:text-base font-medium text-blue-600">🚴 Out for Delivery</div>
-                            <p className="text-xs text-gray-500 mt-1">Rider is on the way</p>
-                          </div>
-                        );
-                      } else if (currentStatus === 'delivered') {
-                        return (
-                          <div>
+                    <div className="flex items-center">
+                      <img className="w-6 h-6 lg:w-8 lg:h-8 mr-2 lg:mr-3" src="/images/human.png" alt="Rider" />
+                      <div>
+                        <h3 className="text-sm lg:text-lg font-medium">{order.riderName}</h3>
+                        <p className="text-gray-600 text-xs lg:text-sm">{order.riderPhone}</p>
+                      </div>
+                    </div>
+                    <div className="text-center">
+                      <h3 className="text-sm lg:text-lg font-medium">{order.customerName}</h3>
+                      <p className="text-gray-600 text-xs lg:text-sm truncate">{order.customerAddress}</p>
+                    </div>
+                    <div className="text-center">
+                      <h3 className="text-sm lg:text-lg font-medium">00:30:00</h3>
+                      <p className="text-gray-600 text-xs lg:text-sm">{formatTime(order.createdAt)}</p>
+                    </div>
+                    <div className="text-center">
+                      <h3 className="text-sm lg:text-lg font-medium">
+                        {amountDisplay}
+                      </h3>
+                      <p className="text-gray-600 text-xs lg:text-sm">
+                        {subtitleDisplay}
+                      </p>
+                    </div>
+                    <div className="text-center">
+                      {/* ✅ Smart status display based on order status */}
+                      {(() => {
+                        const currentStatus = order.order_status;
+                        
+                        if (currentStatus === 'ready_for_pickup') {
+                          return (
+                            <div>
+                              <div className="text-sm lg:text-base font-medium text-orange-600">⏳ Waiting for Rider</div>
+                              <p className="text-xs text-gray-500 mt-1">Order is ready</p>
+                            </div>
+                          );
+                        } else if (currentStatus === 'picked_up') {
+                          return (
+                            <div>
+                              <div className="text-sm lg:text-base font-medium text-blue-600">🚴 Out for Delivery</div>
+                              <p className="text-xs text-gray-500 mt-1">Rider is on the way</p>
+                            </div>
+                          );
+                        } else if (currentStatus === 'delivered') {
+                          return (
+                            <div>
                     <button 
                       onClick={() => handleArrivedOrder(order.id)}
                               className="bg-purple-600 text-white px-6 lg:px-10 py-2 lg:py-3 rounded-2xl text-sm lg:text-lg cursor-pointer hover:bg-purple-700 transition-colors"
@@ -4020,9 +4058,10 @@ const PharmacyDashboard = () => {
                         );
                       }
                     })()}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
               </div>
           </div>
             </>
