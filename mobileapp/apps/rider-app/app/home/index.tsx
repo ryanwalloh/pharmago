@@ -16,6 +16,7 @@ import { apiService } from '../../../customer-app/services/api';
 import { dispatchService, DispatchOffer } from '../../../customer-app/services/dispatchService';
 import { orderCountService } from '../../../customer-app/services/orderCountService';
 import DispatchOfferModal from '../../components/DispatchOfferModal';
+import BottomNav from '../../components/BottomNav';
 
 // ⚙️ DEVELOPMENT FLAG: Set to true to enable dispatch WebSocket
 const ENABLE_DISPATCH_WEBSOCKET = true;
@@ -461,44 +462,7 @@ export default function RiderHome() {
         <View style={{ height: 100 }} />
       </ScrollView>
 
-      {/* Bottom Navigation */}
-      <View style={styles.bottomNav}>
-        <TouchableOpacity style={styles.navItem} onPress={() => {}}>
-          <Image 
-            source={require('../../assets/home.png')} 
-            style={styles.navIcon}
-            resizeMode="contain"
-          />
-          <Text style={[styles.navLabel, styles.navLabelActive]}>Home</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.navItem} onPress={() => {}}>
-          <Image 
-            source={require('../../assets/wallet.png')} 
-            style={styles.navIcon}
-            resizeMode="contain"
-          />
-          <Text style={styles.navLabel}>Wallet</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.navItem} onPress={() => {}}>
-          <Image 
-            source={require('../../assets/chat.png')} 
-            style={styles.navIcon}
-            resizeMode="contain"
-          />
-          <Text style={styles.navLabel}>Chat</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/profile/' as any)}>
-          <Image 
-            source={require('../../assets/profile.png')} 
-            style={styles.navIcon}
-            resizeMode="contain"
-          />
-          <Text style={styles.navLabel}>Profile</Text>
-        </TouchableOpacity>
-      </View>
+      <BottomNav active="home" />
 
       {/* Dispatch Offer Modal */}
       <DispatchOfferModal
@@ -709,41 +673,5 @@ const styles = StyleSheet.create({
     backgroundColor: '#F0F0F0',
     width: '90%',
     left: 44,
-  },
-  bottomNav: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: '#FFFFFF',
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingVertical: 12,
-    paddingBottom: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#F0F0F0',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 8,
-  },
-  navItem: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  navIcon: {
-    width: 24,
-    height: 24,
-    marginBottom: 4,
-  },
-  navLabel: {
-    fontSize: 11,
-    color: '#999999',
-    fontWeight: '500',
-  },
-  navLabelActive: {
-    color: '#00BF63',
-    fontWeight: '600',
   },
 });
