@@ -174,55 +174,68 @@ async def direct_rider_stats(request):
 
 
 @csrf_exempt
-def direct_rider_details(request, rider_id):
+async def direct_rider_details(request, rider_id):
     """Direct endpoint to fetch detailed rider info, including driver's license documents."""
     try:
         from api.users.models import Rider
+        from channels.db import database_sync_to_async
 
-        rider = Rider.objects.select_related('user').get(id=rider_id)
-        user = rider.user
-
-        docs_qs = user.documents.all()
-        documents = []
-        for d in docs_qs:
-            is_dl = False
+        @database_sync_to_async
+        def fetch_details():
             try:
-                if getattr(d.id_type, 'name', '') == 'drivers_license':
-                    is_dl = True
-            except Exception:
-                pass
-            if not is_dl and (d.file_url or ''):
-                if 'drivers_licenses/' in d.file_url:
-                    is_dl = True
-            if is_dl:
-                documents.append({
-                    'id': d.id,
-                    'file_url': d.file_url,
-                    'status': d.status,
-                    'document_type': 'drivers_license',
-                })
+                rider = Rider.objects.select_related('user').get(id=rider_id)
+            except Rider.DoesNotExist:
+                return None, {
+                    'error': 'Rider not found'
+                }
 
-        payload = {
-            'id': rider.id,
-            'first_name': rider.first_name,
-            'last_name': rider.last_name,
-            'middle_name': rider.middle_name,
-            'date_of_birth': rider.date_of_birth.isoformat() if rider.date_of_birth else None,
-            'gender': rider.gender,
-            'vehicle_type': rider.vehicle_type,
-            'vehicle_brand': rider.vehicle_brand,
-            'vehicle_model': rider.vehicle_model,
-            'plate_number': rider.plate_number,
-            'vehicle_color': rider.vehicle_color,
-            'status': rider.status,
-            'email': getattr(user, 'email', None),
-            'phone_number': getattr(user, 'phone_number', None),
-            'documents': documents,
-        }
+            user = rider.user
+            documents = []
+            docs_qs = user.documents.all() if user else []
+            for d in docs_qs:
+                is_dl = False
+                try:
+                    if getattr(d.id_type, 'name', '') == 'drivers_license':
+                        is_dl = True
+                except Exception:
+                    pass
+                if not is_dl and (d.file_url or ''):
+                    if 'drivers_licenses/' in d.file_url:
+                        is_dl = True
+                if is_dl:
+                    documents.append({
+                        'id': d.id,
+                        'file_url': d.file_url,
+                        'status': d.status,
+                        'document_type': 'drivers_license',
+                    })
+
+            payload = {
+                'id': rider.id,
+                'first_name': rider.first_name,
+                'last_name': rider.last_name,
+                'middle_name': rider.middle_name,
+                'date_of_birth': rider.date_of_birth.isoformat() if rider.date_of_birth else None,
+                'gender': rider.gender,
+                'vehicle_type': rider.vehicle_type,
+                'vehicle_brand': rider.vehicle_brand,
+                'vehicle_model': rider.vehicle_model,
+                'plate_number': rider.plate_number,
+                'vehicle_color': rider.vehicle_color,
+                'status': rider.status,
+                'email': getattr(user, 'email', None),
+                'phone_number': getattr(user, 'phone_number', None),
+                'documents': documents,
+            }
+
+            return payload, None
+
+        payload, error_payload = await fetch_details()
+
+        if error_payload:
+            return JsonResponse(error_payload, status=404)
 
         return JsonResponse(payload)
-    except Rider.DoesNotExist:
-        return JsonResponse({'error': 'Rider not found'}, status=404)
     except Exception as e:
         return JsonResponse({'error': 'Failed to fetch rider details', 'message': str(e)}, status=500)
 
@@ -384,59 +397,72 @@ async def direct_active_pharmacies(request):
         }, status=500)
 
 
-def direct_pharmacy_details(request, pharmacy_id):
+async def direct_pharmacy_details(request, pharmacy_id):
     """Direct pharmacy details endpoint that bypasses all authentication"""
     try:
         from api.users.models import Pharmacy, UserDocument
+        from channels.db import database_sync_to_async
 
-        pharmacy = Pharmacy.objects.get(id=pharmacy_id)
-        user_documents = UserDocument.objects.filter(user=pharmacy.user)
+        @database_sync_to_async
+        def fetch_details():
+            try:
+                pharmacy = Pharmacy.objects.select_related('user').get(id=pharmacy_id)
+            except Pharmacy.DoesNotExist:
+                return None, {
+                    'error': 'Pharmacy not found',
+                    'pharmacy_id': pharmacy_id,
+                }
 
-        pharmacy_data = {
-            'id': pharmacy.id,
-            'pharmacy_name': pharmacy.pharmacy_name,
-            'owner_first_name': pharmacy.owner_first_name,
-            'owner_last_name': pharmacy.owner_last_name,
-            'business_phone': pharmacy.business_phone,
-            'business_email': pharmacy.business_email,
-            'barangay': pharmacy.barangay,
-            'city': pharmacy.city,
-            'business_permit_number': pharmacy.business_permit_number,
-            'business_permit_expiry': pharmacy.business_permit_expiry.isoformat() if pharmacy.business_permit_expiry else None,
-            'pharmacy_license_number': pharmacy.pharmacy_license_number,
-            'pharmacy_license_expiry': pharmacy.pharmacy_license_expiry.isoformat() if pharmacy.pharmacy_license_expiry else None,
-            'owner_date_of_birth': pharmacy.owner_date_of_birth.isoformat() if pharmacy.owner_date_of_birth else None,
-            'owner_gender': pharmacy.owner_gender,
-            'services_offered': pharmacy.services_offered,
-            'user_id': pharmacy.user.id,
-            'documents': [],
-        }
+            user_documents = list(UserDocument.objects.filter(user=pharmacy.user))
 
-        for doc in user_documents:
-            pharmacy_data['documents'].append({
-                'id': doc.id,
-                'file_url': doc.file_url,
-                'document_type': doc.id_type.name if doc.id_type else 'Unknown',
-                'document_number': doc.document_number,
-                'expiry_date': doc.expiry_date.isoformat() if doc.expiry_date else None,
-                'status': doc.status,
-            })
+            documents_payload = []
+            for doc in user_documents:
+                documents_payload.append({
+                    'id': doc.id,
+                    'file_url': doc.file_url,
+                    'document_type': doc.id_type.name if doc.id_type else 'Unknown',
+                    'document_number': doc.document_number,
+                    'expiry_date': doc.expiry_date.isoformat() if doc.expiry_date else None,
+                    'status': doc.status,
+                })
+
+            payload = {
+                'id': pharmacy.id,
+                'pharmacy_name': pharmacy.pharmacy_name,
+                'owner_first_name': pharmacy.owner_first_name,
+                'owner_last_name': pharmacy.owner_last_name,
+                'business_phone': pharmacy.business_phone,
+                'business_email': pharmacy.business_email,
+                'barangay': pharmacy.barangay,
+                'city': pharmacy.city,
+                'business_permit_number': pharmacy.business_permit_number,
+                'business_permit_expiry': pharmacy.business_permit_expiry.isoformat() if pharmacy.business_permit_expiry else None,
+                'pharmacy_license_number': pharmacy.pharmacy_license_number,
+                'pharmacy_license_expiry': pharmacy.pharmacy_license_expiry.isoformat() if pharmacy.pharmacy_license_expiry else None,
+                'owner_date_of_birth': pharmacy.owner_date_of_birth.isoformat() if pharmacy.owner_date_of_birth else None,
+                'owner_gender': pharmacy.owner_gender,
+                'services_offered': pharmacy.services_offered,
+                'user_id': pharmacy.user.id if pharmacy.user else None,
+                'documents': documents_payload,
+            }
+
+            return payload, None
+
+        payload, error_payload = await fetch_details()
+
+        if error_payload:
+            print(f"ERROR: Pharmacy with ID {pharmacy_id} not found")
+            return JsonResponse(error_payload, status=404)
 
         print(f"=== PHARMACY DETAILS FOR ID {pharmacy_id} ===")
-        print(f"Pharmacy: {pharmacy.pharmacy_name}")
-        print(f"Owner: {pharmacy.owner_first_name} {pharmacy.owner_last_name}")
-        print(f"Business Permit: {pharmacy.business_permit_number}")
-        print(f"License: {pharmacy.pharmacy_license_number}")
-        print(f"Documents: {len(pharmacy_data['documents'])} uploaded")
+        print(f"Pharmacy: {payload['pharmacy_name']}")
+        print(f"Owner: {payload['owner_first_name']} {payload['owner_last_name']}")
+        print(f"Business Permit: {payload['business_permit_number']}")
+        print(f"License: {payload['pharmacy_license_number']}")
+        print(f"Documents: {len(payload['documents'])} uploaded")
         print("=== END PHARMACY DETAILS ===")
 
-        return JsonResponse(pharmacy_data)
-    except Pharmacy.DoesNotExist:
-        print(f"ERROR: Pharmacy with ID {pharmacy_id} not found")
-        return JsonResponse({
-            'error': 'Pharmacy not found',
-            'pharmacy_id': pharmacy_id,
-        }, status=404)
+        return JsonResponse(payload)
     except Exception as e:
         print(f"ERROR in direct_pharmacy_details: {e}")
         return JsonResponse({
