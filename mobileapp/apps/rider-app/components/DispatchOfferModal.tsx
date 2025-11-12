@@ -16,8 +16,8 @@ import {
   Vibration,
   Alert,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { DispatchOffer } from '../../customer-app/services/dispatchService';
+import DispatchOfferCard from './DispatchOfferCard';
 
 // ✅ FIX: Lazy dimensions to prevent import-time crashes
 let cachedHeight: number | null = null;
@@ -47,7 +47,6 @@ export default function DispatchOfferModal({
   rejecting,
 }: DispatchOfferModalProps) {
   const [timeRemaining, setTimeRemaining] = useState(30);
-  const [showDetails, setShowDetails] = useState(false);
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const slideAnim = useRef(new Animated.Value(getScreenHeight())).current;
 
@@ -58,14 +57,12 @@ export default function DispatchOfferModal({
       return;
     }
 
-    // Start countdown from timeout_seconds
     setTimeRemaining(offer.timeout_seconds || 30);
 
     const interval = setInterval(() => {
       setTimeRemaining((prev) => {
         if (prev <= 1) {
           clearInterval(interval);
-          // Auto-reject on timeout
           Alert.alert('Offer Expired', 'You did not respond in time.');
           onReject();
           return 0;
@@ -75,9 +72,8 @@ export default function DispatchOfferModal({
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [visible, offer]);
+  }, [visible, offer, onReject]);
 
-  // Pulse animation for timer when < 10 seconds
   useEffect(() => {
     if (timeRemaining <= 10 && timeRemaining > 0) {
       Animated.loop(
@@ -97,10 +93,8 @@ export default function DispatchOfferModal({
     }
   }, [timeRemaining]);
 
-  // Slide in animation
   useEffect(() => {
     if (visible) {
-      // Vibrate on offer received
       Vibration.vibrate([0, 200, 100, 200]);
 
       Animated.spring(slideAnim, {
@@ -138,154 +132,14 @@ export default function DispatchOfferModal({
           { transform: [{ translateY: slideAnim }] },
         ]}
       >
-        {/* Header - Timer and Badge */}
-        <View style={styles.header}>
-          <View style={styles.headerLeft}>
-            <Ionicons name="flash" size={24} color="#FFD700" />
-            <Text style={styles.headerTitle}>New Delivery!</Text>
-          </View>
-          <Animated.View
-            style={[
-              styles.timerContainer,
-              timeRemaining <= 10 && { transform: [{ scale: pulseAnim }] },
-              timeRemaining <= 10 && styles.timerWarning,
-            ]}
-          >
-            <Text style={styles.timerText}>{timeRemaining}s</Text>
-          </Animated.View>
-        </View>
-
-        {/* Earnings - Main Focus */}
-        <View style={styles.earningsSection}>
-          <Text style={styles.earningsLabel}>You'll Earn</Text>
-          <Text style={styles.earningsAmount}>₱{earnings.toFixed(2)}</Text>
-          {isBatch && (
-            <View style={styles.batchBadge}>
-              <Ionicons name="layers" size={16} color="#00BF63" />
-              <Text style={styles.batchBadgeText}>
-                {ordersCount} Orders Batched
-              </Text>
-            </View>
-          )}
-        </View>
-
-        {/* Order Details */}
-        <View style={styles.detailsSection}>
-          {!isBatch && offer.order ? (
-            // Single Order
-            <>
-              <View style={styles.detailRow}>
-                <Ionicons name="document-text" size={20} color="#666" />
-                <Text style={styles.detailLabel}>Order #</Text>
-                <Text style={styles.detailValue}>
-                  {offer.order.order_number}
-                </Text>
-              </View>
-
-              <View style={styles.detailRow}>
-                <Ionicons name="storefront" size={20} color="#00BF63" />
-                <Text style={styles.detailLabel}>Pickup</Text>
-                <Text style={styles.detailValue} numberOfLines={1}>
-                  {offer.order.pharmacy.name}
-                </Text>
-              </View>
-
-              <View style={styles.detailRow}>
-                <Ionicons name="location" size={20} color="#FF6B35" />
-                <Text style={styles.detailLabel}>Deliver to</Text>
-                <Text style={styles.detailValue} numberOfLines={1}>
-                  {offer.order.customer_name}
-                </Text>
-              </View>
-
-              {offer.pickup_distance_km !== null && (
-                <View style={styles.detailRow}>
-                  <Ionicons name="navigate" size={20} color="#666" />
-                  <Text style={styles.detailLabel}>Distance</Text>
-                  <Text style={styles.detailValue}>
-                    {offer.pickup_distance_km.toFixed(1)} km away
-                  </Text>
-                </View>
-              )}
-            </>
-          ) : (
-            // Batch Orders
-            <>
-              <View style={styles.detailRow}>
-                <Ionicons name="layers" size={20} color="#00BF63" />
-                <Text style={styles.detailLabel}>Orders</Text>
-                <Text style={styles.detailValue}>{ordersCount} orders</Text>
-              </View>
-
-              <TouchableOpacity
-                style={styles.viewDetailsButton}
-                onPress={() => setShowDetails(!showDetails)}
-              >
-                <Text style={styles.viewDetailsText}>
-                  {showDetails ? 'Hide Details' : 'View All Orders'}
-                </Text>
-                <Ionicons
-                  name={showDetails ? 'chevron-up' : 'chevron-down'}
-                  size={20}
-                  color="#00BF63"
-                />
-              </TouchableOpacity>
-
-              {showDetails && offer.orders && (
-                <View style={styles.batchDetailsContainer}>
-                  {offer.orders.map((order, index) => (
-                    <View key={index} style={styles.batchOrderItem}>
-                      <Text style={styles.batchOrderNumber}>
-                        {index + 1}. {order.order_number}
-                      </Text>
-                      <Text style={styles.batchOrderDetail}>
-                        📦 {order.pharmacy_name}
-                      </Text>
-                      <Text style={styles.batchOrderDetail}>
-                        📍 {order.customer_name}
-                      </Text>
-                      <Text style={styles.batchOrderEarnings}>
-                        ₱{order.earnings.toFixed(2)}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
-              )}
-            </>
-          )}
-        </View>
-
-        {/* Action Buttons */}
-        <View style={styles.actionsSection}>
-          <TouchableOpacity
-            style={[styles.rejectButton, rejecting && styles.buttonDisabled]}
-            onPress={onReject}
-            disabled={accepting || rejecting}
-          >
-            <Ionicons name="close-circle" size={24} color="#FF3B30" />
-            <Text style={styles.rejectButtonText}>
-              {rejecting ? 'Declining...' : 'Decline'}
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.acceptButton, accepting && styles.buttonDisabled]}
-            onPress={onAccept}
-            disabled={accepting || rejecting}
-          >
-            <Ionicons name="checkmark-circle" size={24} color="#FFFFFF" />
-            <Text style={styles.acceptButtonText}>
-              {accepting ? 'Accepting...' : 'Accept'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Footer Note */}
-        <Text style={styles.footerNote}>
-          {isBatch
-            ? 'Accepting will assign all orders in this batch to you.'
-            : 'Tap Accept to start this delivery.'}
-        </Text>
+        <DispatchOfferCard
+          offer={offer}
+          onAccept={onAccept}
+          onReject={onReject}
+          accepting={accepting}
+          rejecting={rejecting}
+          variant="full"
+        />
       </Animated.View>
     </Modal>
   );
