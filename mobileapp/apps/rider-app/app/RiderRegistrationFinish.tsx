@@ -1,17 +1,29 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, ImageBackground } from 'react-native';
 import { useRouter } from 'expo-router';
 
 export default function RiderRegistrationFinish() {
   const router = useRouter();
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Registration Complete</Text>
-      <Text style={styles.subtitle}>Your rider application has been submitted successfully.</Text>
+      <ImageBackground source={require('../assets/completed.png')} style={styles.background} resizeMode="cover">
+        <View style={styles.overlay} />
+        <View style={styles.wrapper}>
+          <View style={styles.header}>
+            <Image source={require('../assets/pharmarider.png')} style={styles.brandLogo} resizeMode="contain" />
+          </View>
 
-      <TouchableOpacity style={styles.primaryBtn} onPress={() => router.replace('/') }>
-        <Text style={styles.primaryText}>Go to Home</Text>
-      </TouchableOpacity>
+          <View style={styles.content}>
+            <Text style={styles.title}>You&rsquo;re all set!</Text>
+            <Text style={styles.subtitle}>
+              Thanks for completing your rider profile. We&rsquo;ll review your details and send a confirmation to your email soon.
+            </Text>
+            <TouchableOpacity style={styles.primaryBtn} onPress={() => router.replace('/') }>
+              <Text style={styles.primaryText}>Return to Home</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </ImageBackground>
     </View>
   );
 }
@@ -19,36 +31,60 @@ export default function RiderRegistrationFinish() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 20,
-    paddingTop: 80,
+    backgroundColor: '#000000',
+  },
+  background: {
+    flex: 1,
+  },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.66)',
+  },
+  wrapper: {
+    flex: 1,
+    paddingHorizontal: 24,
+    paddingTop: 60,
+    paddingBottom: 40,
+  },
+  header: {
+    alignItems: 'flex-start',
+  },
+  brandLogo: {
+    width: 160,
+    height: 80,
+  },
+  content: {
+    flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: 12,
   },
   title: {
-    fontSize: 22,
+    fontSize: 26,
     fontWeight: '700',
-    color: '#222222',
+    color: '#FFFFFF',
     textAlign: 'center',
   },
   subtitle: {
-    fontSize: 14,
-    color: '#666666',
+    fontSize: 16,
+    color: '#F1F1F1',
     textAlign: 'center',
     marginTop: 8,
-    marginBottom: 24,
+    marginBottom: 32,
+    lineHeight: 24,
   },
   primaryBtn: {
-    marginTop: 24,
-    backgroundColor: '#00BF63',
-    borderRadius: 10,
-    height: 44,
-    paddingHorizontal: 20,
+    marginTop: 12,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 28,
+    height: 54,
+    paddingHorizontal: 62,
     alignItems: 'center',
     justifyContent: 'center',
-    alignSelf: 'stretch',
+    opacity: 0.8,
   },
   primaryText: {
-    color: '#FFFFFF',
+    color: '#72bf6a',
     fontWeight: '700',
     fontSize: 16,
   },
