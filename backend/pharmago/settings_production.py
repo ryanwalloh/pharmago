@@ -53,6 +53,7 @@ STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 if not DEBUG_MODE:
     # HTTPS/SSL settings
     SECURE_SSL_REDIRECT = True
+    SECURE_REDIRECT_EXEMPT = [r'^health/?$']
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     
