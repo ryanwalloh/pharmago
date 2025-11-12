@@ -72,8 +72,6 @@ const DispatchOfferCard: React.FC<DispatchOfferCardProps> = ({
       setTimeRemaining((prev) => {
         if (prev <= 1) {
           clearInterval(interval);
-          onExpired?.();
-          onReject();
           return 0;
         }
         return prev - 1;
@@ -82,6 +80,16 @@ const DispatchOfferCard: React.FC<DispatchOfferCardProps> = ({
 
     return () => clearInterval(interval);
   }, [offer, onReject, onExpired]);
+
+  useEffect(() => {
+    if (timeRemaining === 0 && (accepting || rejecting)) {
+      return;
+    }
+    if (timeRemaining === 0) {
+      onExpired?.();
+      onReject();
+    }
+  }, [timeRemaining, onExpired, onReject, accepting, rejecting]);
 
   useEffect(() => {
     if (variant === 'compact') {
@@ -254,6 +262,9 @@ const styles = StyleSheet.create({
   },
   compactCard: {
     marginHorizontal: 16,
+    alignSelf: 'center',
+    width: '92%',
+    maxWidth: 420,
     paddingHorizontal: 16,
     paddingVertical: 18,
   },
