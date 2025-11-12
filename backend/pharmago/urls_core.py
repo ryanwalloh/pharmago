@@ -18,6 +18,7 @@ def redirect_magic_link(request, token):
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('health/', views.health),
     path('api/ping/', views.ping),
     path('api/', include(('api.direct.urls', 'direct'), namespace='direct')),
     path('api/', include(('api.files.urls', 'files'), namespace='files')),
