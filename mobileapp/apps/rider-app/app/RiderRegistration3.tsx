@@ -12,7 +12,6 @@ export default function RiderRegistration3() {
   const [vehicle_model, setVehicleModel] = useState('');
   const [plate_number, setPlateNumber] = useState('');
   const [vehicle_color, setVehicleColor] = useState('');
-  const [bikePhotoUri, setBikePhotoUri] = useState<string | null>(null);
   const [bikeIdType, setBikeIdType] = useState<string>('');
   const [bikeIdUri, setBikeIdUri] = useState<string | null>(null);
   const [showIdModal, setShowIdModal] = useState(false);
@@ -54,12 +53,10 @@ export default function RiderRegistration3() {
       });
     } else {
       // Clear bicycle-only fields when returning to motorized flow
-      setBikePhotoUri(null);
       setBikeIdType('');
       setBikeIdUri(null);
       savePartial({
         vehicle_type: val,
-        bike_photo_local_uri: null,
         bike_id_type: null,
         bike_id_local_uri: null,
       });
@@ -129,7 +126,6 @@ export default function RiderRegistration3() {
           if (s2.vehicle_model) setVehicleModel(s2.vehicle_model);
           if (s2.plate_number) setPlateNumber(s2.plate_number);
           if (s2.vehicle_color) setVehicleColor(s2.vehicle_color);
-          if (s2.bike_photo_local_uri) setBikePhotoUri(s2.bike_photo_local_uri);
           if (s2.bike_id_type) setBikeIdType(s2.bike_id_type);
           if (s2.bike_id_local_uri) setBikeIdUri(s2.bike_id_local_uri);
         }
@@ -208,36 +204,6 @@ export default function RiderRegistration3() {
                 </View>
                 {vehicle_type === 'bicycle' ? (
                   <>
-                    <Text style={[styles.label, styles.spacing]}>Bicycle Photo</Text>
-                    {bikePhotoUri ? (
-                      <View style={styles.previewWrap}>
-                        <Image source={{ uri: bikePhotoUri }} style={styles.previewImg} />
-                        <TouchableOpacity
-                          style={styles.changeBtn}
-                          onPress={async () => {
-                            setBikePhotoUri(null);
-                            await savePartial({ bike_photo_local_uri: null });
-                          }}
-                        >
-                          <Text style={styles.changeText}>Remove Photo</Text>
-                        </TouchableOpacity>
-                      </View>
-                    ) : null}
-                    <View style={styles.actionsRow}>
-                      <TouchableOpacity
-                        style={styles.actionBtn}
-                        onPress={() => pickImage('camera', setBikePhotoUri, 'bike_photo_local_uri')}
-                      >
-                        <Text style={styles.actionText}>Use Camera</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[styles.actionBtn, styles.actionBtnLast]}
-                        onPress={() => pickImage('library', setBikePhotoUri, 'bike_photo_local_uri')}
-                      >
-                        <Text style={styles.actionText}>Choose File</Text>
-                      </TouchableOpacity>
-                    </View>
-
                     <Text style={[styles.label, styles.spacing]}>Valid ID Type</Text>
                     <TouchableOpacity
                       style={styles.selectInput}
@@ -343,13 +309,12 @@ export default function RiderRegistration3() {
                 style={[styles.navBtn, styles.nextBtn]}
                 onPress={async () => {
                   if (vehicle_type === 'bicycle') {
-                    if (!bikePhotoUri || !bikeIdType || !bikeIdUri) {
-                      Alert.alert('Missing Information', 'Please provide your bicycle photo, select a valid ID, and upload the ID image.');
+                    if (!bikeIdType || !bikeIdUri) {
+                      Alert.alert('Missing Information', 'Please select a valid ID and upload the ID image.');
                       return;
                     }
                     await savePartial({
                       vehicle_type,
-                      bike_photo_local_uri: bikePhotoUri,
                       bike_id_type: bikeIdType,
                       bike_id_local_uri: bikeIdUri,
                       saved_at: Date.now(),
