@@ -154,12 +154,15 @@ export default function RiderHome() {
    */
   const handleOfferCancelled = useCallback((offerId: string) => {
     console.log('🚫 Offer cancelled:', offerId);
-    if (currentDispatchOffer?.offer_id === offerId) {
-      setShowDispatchModal(false);
-      setCurrentDispatchOffer(null);
-      Alert.alert('Offer Cancelled', 'This order was assigned to another rider.');
-    }
-  }, [currentDispatchOffer]);
+    setCurrentDispatchOffer((prev) => {
+      if (prev?.offer_id === offerId) {
+        setShowDispatchModal(false);
+        Alert.alert('Offer Cancelled', 'This order was assigned to another rider.');
+        return null;
+      }
+      return prev;
+    });
+  }, []);
 
   /**
    * Accept dispatch offer
