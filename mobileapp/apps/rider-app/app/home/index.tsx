@@ -11,7 +11,7 @@ import {
   Alert
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { apiService } from '../../../customer-app/services/api';
 import { dispatchService, DispatchOffer } from '../../../customer-app/services/dispatchService';
 import { orderCountService } from '../../../customer-app/services/orderCountService';
@@ -277,30 +277,24 @@ export default function RiderHome() {
   useEffect(() => {
     loadRiderData();
     
-    // Initial fetch if WebSocket is disabled
     if (!ENABLE_ORDER_COUNT_WEBSOCKET) {
       fetchAvailableOrders();
-      
-      // Set up polling for order count (every 15 seconds) - LEGACY
       const orderPollingInterval = setInterval(() => {
         console.log('📡 Polling for order updates (LEGACY MODE)');
         fetchAvailableOrders();
-      }, 15000); // 15 seconds
+      }, 15000);
       
       return () => {
         clearInterval(orderPollingInterval);
-        // Disconnect dispatch WebSocket on unmount
         if (ENABLE_DISPATCH_WEBSOCKET) {
           dispatchService.disconnect();
         }
       };
     }
     
-    // ✅ NEW: Connect to order count WebSocket (replaces polling)
     if (ENABLE_ORDER_COUNT_WEBSOCKET) {
       console.log('🔌 Connecting to order count WebSocket');
       orderCountService.connectToOrderCount(
-        // On count update
         (count) => {
           setAvailableOrdersCount((prevCount) => {
             const timestamp = new Date().toLocaleTimeString();
@@ -310,12 +304,10 @@ export default function RiderHome() {
             return count;
           });
         },
-        // On connected
         () => {
           console.log('✅ Order count WebSocket connected');
           setOrderCountConnected(true);
         },
-        // On disconnected
         () => {
           console.log('🔌 Order count WebSocket disconnected');
           setOrderCountConnected(false);
@@ -323,37 +315,38 @@ export default function RiderHome() {
       );
     }
     
-    // Cleanup on unmount
     return () => {
-      // Disconnect order count WebSocket
       if (ENABLE_ORDER_COUNT_WEBSOCKET) {
         orderCountService.disconnect();
       }
-      // Disconnect dispatch WebSocket on unmount
       if (ENABLE_DISPATCH_WEBSOCKET) {
         dispatchService.disconnect();
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // fetchAvailableOrders not needed - using WebSocket instead
+  }, []);
 
-  // Connect to dispatch WebSocket when rider profile is loaded and rider is online
-  useEffect(() => {
-    if (ENABLE_DISPATCH_WEBSOCKET && riderProfile?.id && isOnline) {
-      console.log('🔌 Connecting to dispatch WebSocket (rider is online)');
+  useFocusEffect(
+    useCallback(() => {
+      if (!(ENABLE_DISPATCH_WEBSOCKET && riderProfile?.id && isOnline)) {
+        return () => {};
+      }
+
+      console.log('🔌 Connecting to dispatch WebSocket (home focused)');
       dispatchService.connectToDispatchChannel(
         riderProfile.id,
         handleDispatchOffer,
         handleOfferCancelled
       );
 
-      // Cleanup: disconnect when offline or unmount
       return () => {
-        console.log('🔌 Cleaning up dispatch WebSocket');
+        console.log('🔌 Disconnecting dispatch WebSocket (home blurred)');
         dispatchService.disconnect();
+        setShowDispatchModal(false);
+        setCurrentDispatchOffer(null);
       };
-    }
-  }, [riderProfile?.id, isOnline, handleDispatchOffer, handleOfferCancelled]);
+    }, [riderProfile?.id, isOnline, handleDispatchOffer, handleOfferCancelled])
+  );
 
   const riderFirstName = riderProfile?.first_name || user?.first_name || user?.email?.split('@')[0] || 'Rider';
   

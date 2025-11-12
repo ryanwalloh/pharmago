@@ -133,7 +133,7 @@ async def get_available_orders(request):
 # ========== DISPATCH SYSTEM ENDPOINTS ==========
 
 @csrf_exempt
-def accept_dispatch_offer(request):
+async def accept_dispatch_offer(request):
     """
     Rider accepts a dispatch offer.
     
@@ -148,53 +148,57 @@ def accept_dispatch_offer(request):
     
     try:
         import json
-        from api.delivery.dispatch_service import DispatchService
-        
+        from channels.db import database_sync_to_async
+
         data = json.loads(request.body)
         offer_id = data.get('offer_id')
         rider_id = data.get('rider_id')
-        
+
         if not offer_id or not rider_id:
             return JsonResponse({
                 'success': False,
                 'error': 'Missing offer_id or rider_id'
             }, status=400)
-        
-        # Verify rider exists and owns this offer
-        try:
+
+        @database_sync_to_async
+        def process_offer():
             from api.delivery.models import DispatchOffer
-            offer = DispatchOffer.objects.get(offer_id=offer_id, rider_id=rider_id)
-        except DispatchOffer.DoesNotExist:
-            return JsonResponse({
+            from api.delivery.dispatch_service import DispatchService
+
+            try:
+                DispatchOffer.objects.get(offer_id=offer_id, rider_id=rider_id)
+            except DispatchOffer.DoesNotExist:
+                return 404, {
+                    'success': False,
+                    'error': 'Offer not found or does not belong to this rider'
+                }
+
+            result = DispatchService.handle_rider_response(offer_id, accepted=True)
+            if result.get('success'):
+                return 200, {
+                    'success': True,
+                    'message': 'Offer accepted successfully',
+                    'assignment_id': result.get('assignment_id')
+                }
+
+            return 400, {
                 'success': False,
-                'error': 'Offer not found or does not belong to this rider'
-            }, status=404)
-        
-        # Process acceptance
-        result = DispatchService.handle_rider_response(offer_id, accepted=True)
-        
-        if result['success']:
+                'error': result.get('message', 'Failed to accept offer')
+            }
+
+        status_code, payload = await process_offer()
+
+        if status_code == 200:
             logger.info(f"✅ Rider {rider_id} accepted offer {offer_id}")
-            
-            # ✅ NEW: Broadcast order count update when rider accepts offer
             try:
                 from api.delivery.websocket_service import broadcast_rider_order_count_update
                 broadcast_rider_order_count_update()
                 logger.info(f"📡 Broadcasted order count update to riders (offer {offer_id} accepted)")
             except Exception as e:
                 logger.warning(f"Failed to broadcast order count update: {str(e)}")
-            
-            return JsonResponse({
-                'success': True,
-                'message': 'Offer accepted successfully',
-                'assignment_id': result.get('assignment_id')
-            }, status=200)
-        else:
-            return JsonResponse({
-                'success': False,
-                'error': result.get('message', 'Failed to accept offer')
-            }, status=400)
-        
+
+        return JsonResponse(payload, status=status_code)
+
     except Exception as e:
         logger.error(f"❌ Error accepting offer: {str(e)}", exc_info=True)
         return JsonResponse({
@@ -204,7 +208,7 @@ def accept_dispatch_offer(request):
 
 
 @csrf_exempt
-def reject_dispatch_offer(request):
+async def reject_dispatch_offer(request):
     """
     Rider rejects a dispatch offer.
     
@@ -220,43 +224,50 @@ def reject_dispatch_offer(request):
     
     try:
         import json
-        from api.delivery.dispatch_service import DispatchService
-        
+        from channels.db import database_sync_to_async
+
         data = json.loads(request.body)
         offer_id = data.get('offer_id')
         rider_id = data.get('rider_id')
         reason = data.get('reason')
-        
+
         if not offer_id or not rider_id:
             return JsonResponse({
                 'success': False,
                 'error': 'Missing offer_id or rider_id'
             }, status=400)
-        
-        # Verify rider exists and owns this offer
-        try:
+
+        @database_sync_to_async
+        def process_rejection():
             from api.delivery.models import DispatchOffer
-            offer = DispatchOffer.objects.get(offer_id=offer_id, rider_id=rider_id)
-        except DispatchOffer.DoesNotExist:
-            return JsonResponse({
-                'success': False,
-                'error': 'Offer not found or does not belong to this rider'
-            }, status=404)
-        
-        # Process rejection
-        result = DispatchService.handle_rider_response(
-            offer_id, 
-            accepted=False, 
-            rejection_reason=reason
-        )
-        
-        logger.info(f"❌ Rider {rider_id} rejected offer {offer_id} (reason: {reason or 'not specified'})")
-        
-        return JsonResponse({
-            'success': True,
-            'message': result.get('message', 'Offer rejected, trying next rider')
-        }, status=200)
-        
+            from api.delivery.dispatch_service import DispatchService
+
+            try:
+                DispatchOffer.objects.get(offer_id=offer_id, rider_id=rider_id)
+            except DispatchOffer.DoesNotExist:
+                return 404, {
+                    'success': False,
+                    'error': 'Offer not found or does not belong to this rider'
+                }
+
+            result = DispatchService.handle_rider_response(
+                offer_id,
+                accepted=False,
+                rejection_reason=reason
+            )
+
+            return 200, {
+                'success': True,
+                'message': result.get('message', 'Offer rejected, trying next rider')
+            }
+
+        status_code, payload = await process_rejection()
+
+        if status_code == 200:
+            logger.info(f"❌ Rider {rider_id} rejected offer {offer_id} (reason: {reason or 'not specified'})")
+
+        return JsonResponse(payload, status=status_code)
+
     except Exception as e:
         logger.error(f"❌ Error rejecting offer: {str(e)}", exc_info=True)
         return JsonResponse({
