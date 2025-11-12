@@ -3,6 +3,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 from django.http import JsonResponse
+from channels.db import database_sync_to_async
 
 
 @csrf_exempt
@@ -56,7 +57,7 @@ def approve_rider_direct(request, rider_id):
 
 
 @csrf_exempt
-def complete_rider_registration(request):
+async def complete_rider_registration(request):
     """Direct endpoint to create User, Rider, and UserDocument entries for a rider registration.
 
     Expected JSON body:
@@ -83,7 +84,7 @@ def complete_rider_registration(request):
         user_data = payload.get('user') or {}
         rider_data = payload.get('rider') or {}
         documents = payload.get('documents') or []
-        
+
         logger.info(f"👤 User data: email={user_data.get('email')}, phone={user_data.get('phone_number')}")
         logger.info(f"🏍️ Rider data: name={rider_data.get('first_name')} {rider_data.get('last_name')}, vehicle={rider_data.get('vehicle_type')}")
         logger.info(f"📄 Documents count: {len(documents)}")
@@ -96,92 +97,110 @@ def complete_rider_registration(request):
         if user_data.get('role') != 'rider':
             user_data['role'] = 'rider'
 
-        with transaction.atomic():
-            username = user_data.get('username') or user_data.get('email')
-            from django.utils.dateparse import parse_date
+        @database_sync_to_async
+        def create_rider():
+            with transaction.atomic():
+                username = user_data.get('username') or user_data.get('email')
+                from django.utils.dateparse import parse_date
 
-            user = User.objects.create_user(
-                email=user_data.get('email'),
-                phone_number=user_data.get('phone_number'),
-                password=user_data.get('password'),
-                username=username,
-                role='rider',
-                first_name=user_data.get('first_name') or rider_data.get('first_name') or '',
-                last_name=user_data.get('last_name') or rider_data.get('last_name') or '',
-                status=User.UserStatus.PENDING,
-            )
+                user = User.objects.create_user(
+                    email=user_data.get('email'),
+                    phone_number=user_data.get('phone_number'),
+                    password=user_data.get('password'),
+                    username=username,
+                    role='rider',
+                    first_name=user_data.get('first_name') or rider_data.get('first_name') or '',
+                    last_name=user_data.get('last_name') or rider_data.get('last_name') or '',
+                    status=User.UserStatus.PENDING,
+                )
 
-            dob_raw = rider_data.get('date_of_birth')
-            logger.info(f"📅 Raw date_of_birth: {dob_raw} (type: {type(dob_raw).__name__})")
-            dob = None
-            
-            try:
-                if isinstance(dob_raw, str):
-                    dob = parse_date(dob_raw)
-                    logger.info(f"📅 Parsed string date: {dob}")
-                elif isinstance(dob_raw, (int, float)):
-                    import datetime
-                    ts = int(dob_raw)
-                    if ts > 10_000_000_000:
-                        ts = ts / 1000
-                    dob = datetime.date.fromtimestamp(ts)
-                    logger.info(f"📅 Parsed timestamp date: {dob}")
-                elif hasattr(dob_raw, 'year'):
-                    dob = dob_raw
-                    logger.info(f"📅 Date object received: {dob}")
-            except Exception as e:
-                logger.error(f"❌ Date parsing failed: {str(e)}")
+                dob_raw = rider_data.get('date_of_birth')
+                logger.info(f"📅 Raw date_of_birth: {dob_raw} (type: {type(dob_raw).__name__})")
                 dob = None
 
-            if dob is None:
-                logger.error(f"❌ Date of birth is None after parsing. Raw value was: {dob_raw}")
-                return JsonResponse({'success': False, 'error': f'Invalid or missing rider.date_of_birth. Received: {dob_raw}'}, status=400)
-
-            if not rider_data.get('gender'):
-                return JsonResponse({'success': False, 'error': 'Missing rider.gender'}, status=400)
-            if not rider_data.get('vehicle_type'):
-                return JsonResponse({'success': False, 'error': 'Missing rider.vehicle_type'}, status=400)
-
-            logger.info(f"🏍️ Creating Rider with date_of_birth: {dob} (type: {type(dob).__name__})")
-            rider = Rider.objects.create(
-                user=user,
-                first_name=rider_data.get('first_name') or user.first_name,
-                last_name=rider_data.get('last_name') or user.last_name,
-                middle_name=rider_data.get('middle_name') or None,
-                date_of_birth=dob,
-                gender=rider_data.get('gender'),
-                vehicle_type=rider_data.get('vehicle_type'),
-                vehicle_brand=rider_data.get('vehicle_brand') or None,
-                vehicle_model=rider_data.get('vehicle_model') or None,
-                plate_number=rider_data.get('plate_number') or None,
-                vehicle_color=rider_data.get('vehicle_color') or None,
-                drivers_license_uploaded=bool(rider_data.get('drivers_license_uploaded')),
-            )
-            logger.info(f"✅ Rider created successfully! ID: {rider.id}, DOB: {rider.date_of_birth}")
-
-            for doc in documents:
-                id_type_code = doc.get('id_type')
-                file_url = doc.get('file_url')
-                if not id_type_code or not file_url:
-                    continue
                 try:
-                    id_type = ValidID.objects.get(name=id_type_code)
-                except ValidID.DoesNotExist:
-                    if id_type_code == 'drivers_license':
-                        id_type = ValidID.objects.create(name='drivers_license', category='primary', description='Driver\'s License')
-                    else:
-                        continue
-                UserDocument.objects.create(
-                    user=user,
-                    id_type=id_type,
-                    file_url=file_url,
-                    document_file='',  # Empty for Cloudinary URLs (document_file is FileField, not for URLs)
-                    status=UserDocument.DocumentStatus.PENDING,
-                )
-                logger.info(f"✅ Created document: {id_type_code} ({file_url[:60]}...) for user {user.id}")
+                    if isinstance(dob_raw, str):
+                        dob = parse_date(dob_raw)
+                        logger.info(f"📅 Parsed string date: {dob}")
+                    elif isinstance(dob_raw, (int, float)):
+                        import datetime
+                        ts = int(dob_raw)
+                        if ts > 10_000_000_000:
+                            ts = ts / 1000
+                        dob = datetime.date.fromtimestamp(ts)
+                        logger.info(f"📅 Parsed timestamp date: {dob}")
+                    elif hasattr(dob_raw, 'year'):
+                        dob = dob_raw
+                        logger.info(f"📅 Date object received: {dob}")
+                except Exception as e:
+                    logger.error(f"❌ Date parsing failed: {str(e)}")
+                    dob = None
 
-        logger.info(f"✅ Rider registration complete! User ID: {user.id}, Rider ID: {rider.id}")
-        return JsonResponse({'success': True, 'user_id': user.id, 'rider_id': rider.id})
+                if dob is None:
+                    logger.error(f"❌ Date of birth is None after parsing. Raw value was: {dob_raw}")
+                    return None, None, {
+                        'success': False,
+                        'error': f'Invalid or missing rider.date_of_birth. Received: {dob_raw}'
+                    }
+
+                if not rider_data.get('gender'):
+                    return None, None, {
+                        'success': False,
+                        'error': 'Missing rider.gender'
+                    }
+                if not rider_data.get('vehicle_type'):
+                    return None, None, {
+                        'success': False,
+                        'error': 'Missing rider.vehicle_type'
+                    }
+
+                logger.info(f"🏍️ Creating Rider with date_of_birth: {dob} (type: {type(dob).__name__})")
+                rider = Rider.objects.create(
+                    user=user,
+                    first_name=rider_data.get('first_name') or user.first_name,
+                    last_name=rider_data.get('last_name') or user.last_name,
+                    middle_name=rider_data.get('middle_name') or None,
+                    date_of_birth=dob,
+                    gender=rider_data.get('gender'),
+                    vehicle_type=rider_data.get('vehicle_type'),
+                    vehicle_brand=rider_data.get('vehicle_brand') or None,
+                    vehicle_model=rider_data.get('vehicle_model') or None,
+                    plate_number=rider_data.get('plate_number') or None,
+                    vehicle_color=rider_data.get('vehicle_color') or None,
+                    drivers_license_uploaded=bool(rider_data.get('drivers_license_uploaded')),
+                )
+                logger.info(f"✅ Rider created successfully! ID: {rider.id}, DOB: {rider.date_of_birth}")
+
+                for doc in documents:
+                    id_type_code = doc.get('id_type')
+                    file_url = doc.get('file_url')
+                    if not id_type_code or not file_url:
+                        continue
+                    try:
+                        id_type = ValidID.objects.get(name=id_type_code)
+                    except ValidID.DoesNotExist:
+                        if id_type_code == 'drivers_license':
+                            id_type = ValidID.objects.create(name='drivers_license', category='primary', description="Driver's License")
+                        else:
+                            continue
+                    UserDocument.objects.create(
+                        user=user,
+                        id_type=id_type,
+                        file_url=file_url,
+                        document_file='',
+                        status=UserDocument.DocumentStatus.PENDING,
+                    )
+                    logger.info(f"✅ Created document: {id_type_code} ({file_url[:60]}...) for user {user.id}")
+
+                return user.id, rider.id, None
+
+        user_id, rider_id, error_payload = await create_rider()
+
+        if error_payload:
+            return JsonResponse(error_payload, status=400)
+
+        logger.info(f"✅ Rider registration complete! User ID: {user_id}, Rider ID: {rider_id}")
+        return JsonResponse({'success': True, 'user_id': user_id, 'rider_id': rider_id})
     except Exception as e:
         logger.error(f"❌ Rider registration failed: {str(e)}", exc_info=True)
         return JsonResponse({'success': False, 'error': 'Registration failed', 'message': str(e)}, status=500)
