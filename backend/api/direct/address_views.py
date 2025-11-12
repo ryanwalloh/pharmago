@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 @csrf_exempt
 @require_http_methods(["POST"])
-def create_or_update_address(request):
+async def create_or_update_address(request):
     """
     Create or update a customer address.
     
@@ -35,109 +35,103 @@ def create_or_update_address(request):
     try:
         payload = json.loads(request.body or '{}')
         logger.info(f"📍 Address creation/update payload: {payload}")
-        
-        # Import models inside the function to avoid Django app registry issues
+
         from api.locations.models import Address
         from api.users.models import Customer
-        
-        # Extract customer
+        from channels.db import database_sync_to_async
+
         customer_id = payload.get('customer_id')
         if not customer_id:
             return JsonResponse({
                 'success': False,
                 'error': 'Customer ID is required'
             }, status=400)
-        
-        try:
-            customer = Customer.objects.get(id=customer_id)
-        except Customer.DoesNotExist:
-            return JsonResponse({
-                'success': False,
-                'error': 'Customer not found'
-            }, status=404)
-        
-        # Extract required fields
-        label = payload.get('label', 'home')
-        street_address = payload.get('street_address')
-        barangay = payload.get('barangay')
-        latitude = payload.get('latitude')
-        longitude = payload.get('longitude')
-        
-        if not all([street_address, barangay, latitude, longitude]):
-            return JsonResponse({
-                'success': False,
-                'error': 'street_address, barangay, latitude, and longitude are required'
-            }, status=400)
-        
-        # Extract optional fields
-        building_name = payload.get('building_name', '')
-        floor_number = payload.get('floor_number', '')
-        unit_number = payload.get('unit_number', '')
-        landmark = payload.get('landmark', '')
-        city = payload.get('city', 'Iligan City')
-        province = payload.get('province', 'Lanao del Norte')
-        postal_code = payload.get('postal_code', '')
-        is_default = payload.get('is_default', True)
-        
-        with transaction.atomic():
-            # Check if address with this label already exists for this customer
+
+        @database_sync_to_async
+        def process_address():
             try:
-                address = Address.objects.get(customer=customer, label=label)
-                # Update existing address
-                address.street_address = street_address
-                address.barangay = barangay
-                address.building_name = building_name
-                address.floor_number = floor_number
-                address.unit_number = unit_number
-                address.landmark = landmark
-                address.city = city
-                address.province = province
-                address.postal_code = postal_code
-                address.latitude = latitude
-                address.longitude = longitude
-                
-                # If setting as default, unset other default addresses
-                if is_default and not address.is_default:
-                    Address.objects.filter(
+                customer = Customer.objects.get(id=customer_id)
+            except Customer.DoesNotExist:
+                return 404, {
+                    'success': False,
+                    'error': 'Customer not found'
+                }
+
+            label = payload.get('label', 'home')
+            street_address = payload.get('street_address')
+            barangay = payload.get('barangay')
+            latitude = payload.get('latitude')
+            longitude = payload.get('longitude')
+
+            if not all([street_address, barangay, latitude, longitude]):
+                return 400, {
+                    'success': False,
+                    'error': 'street_address, barangay, latitude, and longitude are required'
+                }
+
+            building_name = payload.get('building_name', '')
+            floor_number = payload.get('floor_number', '')
+            unit_number = payload.get('unit_number', '')
+            landmark = payload.get('landmark', '')
+            city = payload.get('city', 'Iligan City')
+            province = payload.get('province', 'Lanao del Norte')
+            postal_code = payload.get('postal_code', '')
+            is_default = payload.get('is_default', True)
+
+            with transaction.atomic():
+                try:
+                    address = Address.objects.get(customer=customer, label=label)
+
+                    address.street_address = street_address
+                    address.barangay = barangay
+                    address.building_name = building_name
+                    address.floor_number = floor_number
+                    address.unit_number = unit_number
+                    address.landmark = landmark
+                    address.city = city
+                    address.province = province
+                    address.postal_code = postal_code
+                    address.latitude = latitude
+                    address.longitude = longitude
+
+                    if is_default and not address.is_default:
+                        Address.objects.filter(
+                            customer=customer,
+                            is_default=True
+                        ).exclude(id=address.id).update(is_default=False)
+                        address.is_default = True
+
+                    address.save()
+                    logger.info(f"✅ Address updated successfully: ID {address.id}, Label: {label}")
+                    action = 'updated'
+
+                except Address.DoesNotExist:
+                    if is_default:
+                        Address.objects.filter(
+                            customer=customer,
+                            is_default=True
+                        ).update(is_default=False)
+
+                    address = Address.objects.create(
                         customer=customer,
-                        is_default=True
-                    ).exclude(id=address.id).update(is_default=False)
-                    address.is_default = True
-                
-                address.save()
-                logger.info(f"✅ Address updated successfully: ID {address.id}, Label: {label}")
-                action = 'updated'
-                
-            except Address.DoesNotExist:
-                # If setting as default, unset other default addresses
-                if is_default:
-                    Address.objects.filter(
-                        customer=customer,
-                        is_default=True
-                    ).update(is_default=False)
-                
-                # Create new address
-                address = Address.objects.create(
-                    customer=customer,
-                    label=label,
-                    street_address=street_address,
-                    barangay=barangay,
-                    building_name=building_name,
-                    floor_number=floor_number,
-                    unit_number=unit_number,
-                    landmark=landmark,
-                    city=city,
-                    province=province,
-                    postal_code=postal_code,
-                    latitude=latitude,
-                    longitude=longitude,
-                    is_default=is_default,
-                )
-                
-                logger.info(f"✅ Address created successfully: ID {address.id}, Label: {label}")
-                action = 'created'
-            
-            return JsonResponse({
+                        label=label,
+                        street_address=street_address,
+                        barangay=barangay,
+                        building_name=building_name,
+                        floor_number=floor_number,
+                        unit_number=unit_number,
+                        landmark=landmark,
+                        city=city,
+                        province=province,
+                        postal_code=postal_code,
+                        latitude=latitude,
+                        longitude=longitude,
+                        is_default=is_default,
+                    )
+                    logger.info(f"✅ Address created successfully: ID {address.id}, Label: {label}")
+                    action = 'created'
+
+            return 201, {
                 'success': True,
                 'message': f'Address {action} successfully',
                 'action': action,
@@ -159,8 +153,11 @@ def create_or_update_address(request):
                     'full_address': address.full_address,
                     'created_at': address.created_at.isoformat(),
                 }
-            }, status=201)
-            
+            }
+
+        status_code, payload_response = await process_address()
+        return JsonResponse(payload_response, status=status_code)
+
     except json.JSONDecodeError:
         return JsonResponse({
             'success': False,
@@ -177,54 +174,62 @@ def create_or_update_address(request):
 
 @csrf_exempt
 @require_http_methods(["GET"])
-def get_customer_addresses(request, customer_id):
+async def get_customer_addresses(request, customer_id):
     """
     Get all addresses for a customer.
     """
     try:
-        # Import models inside the function
         from api.locations.models import Address
         from api.users.models import Customer
-        
-        try:
-            customer = Customer.objects.get(id=customer_id)
-        except Customer.DoesNotExist:
-            return JsonResponse({
-                'success': False,
-                'error': 'Customer not found'
-            }, status=404)
-        
-        addresses = Address.objects.filter(customer=customer).order_by('-is_default', '-created_at')
-        
-        address_list = []
-        for address in addresses:
-            address_list.append({
-                'id': address.id,
-                'label': address.label,
-                'street_address': address.street_address,
-                'barangay': address.barangay,
-                'building_name': address.building_name,
-                'floor_number': address.floor_number,
-                'unit_number': address.unit_number,
-                'landmark': address.landmark,
-                'city': address.city,
-                'province': address.province,
-                'postal_code': address.postal_code,
-                'latitude': float(address.latitude) if address.latitude else None,
-                'longitude': float(address.longitude) if address.longitude else None,
-                'is_default': address.is_default,
-                'full_address': address.full_address,
-                'created_at': address.created_at.isoformat(),
-            })
-        
+        from channels.db import database_sync_to_async
+
+        @database_sync_to_async
+        def fetch_addresses():
+            try:
+                customer = Customer.objects.get(id=customer_id)
+            except Customer.DoesNotExist:
+                return None, {
+                    'success': False,
+                    'error': 'Customer not found'
+                }
+
+            addresses = Address.objects.filter(customer=customer).order_by('-is_default', '-created_at')
+            address_list = []
+            for address in addresses:
+                address_list.append({
+                    'id': address.id,
+                    'label': address.label,
+                    'street_address': address.street_address,
+                    'barangay': address.barangay,
+                    'building_name': address.building_name,
+                    'floor_number': address.floor_number,
+                    'unit_number': address.unit_number,
+                    'landmark': address.landmark,
+                    'city': address.city,
+                    'province': address.province,
+                    'postal_code': address.postal_code,
+                    'latitude': float(address.latitude) if address.latitude else None,
+                    'longitude': float(address.longitude) if address.longitude else None,
+                    'is_default': address.is_default,
+                    'full_address': address.full_address,
+                    'created_at': address.created_at.isoformat(),
+                })
+
+            return address_list, None
+
+        address_list, error_payload = await fetch_addresses()
+
+        if error_payload:
+            return JsonResponse(error_payload, status=404)
+
         logger.info(f"📋 Retrieved {len(address_list)} addresses for customer {customer_id}")
-        
+
         return JsonResponse({
             'success': True,
             'addresses': address_list,
             'count': len(address_list)
         }, status=200)
-        
+
     except Exception as e:
         logger.error(f"❌ Failed to get customer addresses: {str(e)}")
         return JsonResponse({

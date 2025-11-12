@@ -721,25 +721,23 @@ export default function ActiveDeliveryScreen() {
           }}
           title={deliveryData.pharmacy.name}
           description="Pickup Location"
-          anchor={{ x: 0.5, y: 1 }}
+          anchor={{ x: 0.5, y: 0.5 }}
           pinColor={pharmacyMarkerError ? '#F43332' : undefined}
           tracksViewChanges={!pharmacyMarkerLoaded}
         >
           {!pharmacyMarkerError && (
-            <View style={styles.markerWrapper}>
-              <View style={styles.markerContainer}>
-                <Image
-                  source={PharmacyMarkerAsset}
-                  style={styles.markerImage}
-                  resizeMode="contain"
-                  onLoad={() => setTimeout(() => setPharmacyMarkerLoaded(true), 0)}
-                  onLoadEnd={() => setTimeout(() => setPharmacyMarkerLoaded(true), 0)}
-                  onError={() => {
-                    setPharmacyMarkerError(true);
-                    setPharmacyMarkerLoaded(true);
-                  }}
-                />
-              </View>
+            <View style={styles.markerImageContainer}>
+              <Image
+                source={PharmacyMarkerAsset}
+                style={styles.mapMarkerImage}
+                resizeMode="contain"
+                onLoad={() => setTimeout(() => setPharmacyMarkerLoaded(true), 0)}
+                onLoadEnd={() => setTimeout(() => setPharmacyMarkerLoaded(true), 0)}
+                onError={() => {
+                  setPharmacyMarkerError(true);
+                  setPharmacyMarkerLoaded(true);
+                }}
+              />
             </View>
           )}
         </Marker>
@@ -756,56 +754,54 @@ export default function ActiveDeliveryScreen() {
             }}
             title={order.customer_name}
             description={order.delivery_address.street_address}
-            anchor={{ x: 0.5, y: 1 }}
+            anchor={{ x: 0.5, y: 0.5 }}
             opacity={order.is_delivered ? 0.5 : 1}
             pinColor={customerMarkerState[order.id]?.error ? '#F43332' : undefined}
             tracksViewChanges={!(customerMarkerState[order.id]?.loaded ?? false)}
           >
             {!customerMarkerState[order.id]?.error && (
-              <View style={styles.markerWrapper}>
-                <View style={styles.markerContainer}>
-                  <Image
-                    source={CustomerMarkerAsset}
-                    style={styles.markerImage}
-                    resizeMode="contain"
-                    onLoad={() =>
-                      setTimeout(() => {
-                        setCustomerMarkerState(prev => ({
-                          ...prev,
-                          [order.id]: {
-                            ...(prev[order.id] ?? { error: false }),
-                            loaded: true,
-                          },
-                        }));
-                      }, 0)
-                    }
-                    onLoadEnd={() =>
-                      setTimeout(() => {
-                        setCustomerMarkerState(prev => ({
-                          ...prev,
-                          [order.id]: {
-                            ...(prev[order.id] ?? { error: false }),
-                            loaded: true,
-                          },
-                        }));
-                      }, 0)
-                    }
-                    onError={() => {
+              <View style={styles.markerImageContainer}>
+                <Image
+                  source={CustomerMarkerAsset}
+                  style={styles.mapMarkerImage}
+                  resizeMode="contain"
+                  onLoad={() =>
+                    setTimeout(() => {
                       setCustomerMarkerState(prev => ({
                         ...prev,
                         [order.id]: {
+                          ...(prev[order.id] ?? { error: false }),
                           loaded: true,
-                          error: true,
                         },
                       }));
-                    }}
-                  />
-                  {deliveryData.is_batch && (
-                    <View style={styles.markerBadge}>
-                      <Text style={styles.markerBadgeText}>{index + 1}</Text>
-                    </View>
-                  )}
-                </View>
+                    }, 0)
+                  }
+                  onLoadEnd={() =>
+                    setTimeout(() => {
+                      setCustomerMarkerState(prev => ({
+                        ...prev,
+                        [order.id]: {
+                          ...(prev[order.id] ?? { error: false }),
+                          loaded: true,
+                        },
+                      }));
+                    }, 0)
+                  }
+                  onError={() => {
+                    setCustomerMarkerState(prev => ({
+                      ...prev,
+                      [order.id]: {
+                        loaded: true,
+                        error: true,
+                      },
+                    }));
+                  }}
+                />
+                {deliveryData.is_batch && (
+                  <View style={styles.markerBadge}>
+                    <Text style={styles.markerBadgeText}>{index + 1}</Text>
+                  </View>
+                )}
               </View>
             )}
           </Marker>
@@ -817,25 +813,23 @@ export default function ActiveDeliveryScreen() {
             coordinate={riderLocation}
             title="You"
             description="Your current location"
-            anchor={{ x: 0.5, y: 1 }}
+            anchor={{ x: 0.5, y: 0.5 }}
             pinColor={riderMarkerError ? '#F43332' : undefined}
             tracksViewChanges={!riderMarkerLoaded}
           >
             {!riderMarkerError && (
-              <View style={styles.markerWrapper}>
-                <View style={styles.markerContainer}>
-                  <Image
-                    source={RiderMarkerAsset}
-                    style={styles.markerImage}
-                    resizeMode="contain"
-                    onLoad={() => setTimeout(() => setRiderMarkerLoaded(true), 0)}
-                    onLoadEnd={() => setTimeout(() => setRiderMarkerLoaded(true), 0)}
-                    onError={() => {
-                      setRiderMarkerError(true);
-                      setRiderMarkerLoaded(true);
-                    }}
-                  />
-                </View>
+              <View style={styles.markerImageContainer}>
+                <Image
+                  source={RiderMarkerAsset}
+                  style={styles.mapMarkerImage}
+                  resizeMode="contain"
+                  onLoad={() => setTimeout(() => setRiderMarkerLoaded(true), 0)}
+                  onLoadEnd={() => setTimeout(() => setRiderMarkerLoaded(true), 0)}
+                  onError={() => {
+                    setRiderMarkerError(true);
+                    setRiderMarkerLoaded(true);
+                  }}
+                />
               </View>
             )}
           </Marker>
@@ -1086,19 +1080,16 @@ const getStyles = () => StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
   },
-  markerWrapper: {
+  markerImageContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  markerContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: 60,
-    height: 60,
-  },
-  markerImage: {
     width: 48,
     height: 48,
+    position: 'relative',
+  },
+  mapMarkerImage: {
+    width: 40,
+    height: 40,
     shadowColor: '#000',
     shadowOffset: {
       width: 0,

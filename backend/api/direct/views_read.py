@@ -659,7 +659,7 @@ async def direct_search_pharmacies(request):
 
 
 @csrf_exempt
-def direct_pharmacies_by_medicine(request):
+async def direct_pharmacies_by_medicine(request):
     """
     Direct endpoint to get all pharmacies that have a specific medicine in stock.
     Query parameters:
@@ -669,80 +669,83 @@ def direct_pharmacies_by_medicine(request):
     """
     try:
         from api.inventory.models import PharmacyInventory
-        
+        from channels.db import database_sync_to_async
+
         medicine_name = request.GET.get('medicine_name', '').strip()
         dosage = request.GET.get('dosage', '').strip()
         form = request.GET.get('form', '').strip()
-        
+
         if not medicine_name or not dosage or not form:
             return JsonResponse({
                 'success': False,
                 'error': 'medicine_name, dosage, and form are required'
             }, status=400)
-        
-        # Get all pharmacies that have this medicine
-        # Use icontains for name to be more flexible (handles partial matches)
-        # Use is_available instead of stock_quantity (stock managed by toggle)
-        inventory_items = PharmacyInventory.objects.filter(
-            name__icontains=medicine_name,
-            dosage__iexact=dosage,
-            form=form,
-            is_available=True,  # Only check availability toggle
-            pharmacy__status='approved'
-        ).select_related('pharmacy').order_by('price')
-        
-        # Log the query for debugging
+
+        @database_sync_to_async
+        def fetch_pharmacies():
+            inventory_items = list(
+                PharmacyInventory.objects.filter(
+                    name__icontains=medicine_name,
+                    dosage__iexact=dosage,
+                    form=form,
+                    is_available=True,
+                    pharmacy__status='approved'
+                ).select_related('pharmacy').order_by('price')
+            )
+
+            results = []
+            for item in inventory_items:
+                pharmacy = item.pharmacy
+                storefront_image_url = None
+                try:
+                    from api.users.models import UserDocument
+                    storefront_doc = UserDocument.objects.filter(
+                        user=pharmacy.user,
+                        id_type__name__icontains='storefront'
+                    ).first()
+
+                    if storefront_doc and storefront_doc.file_url:
+                        if 'cloudinary.com' in storefront_doc.file_url or storefront_doc.file_url.startswith('http'):
+                            storefront_image_url = storefront_doc.file_url
+                except Exception as doc_err:
+                    print(f"Error fetching storefront for pharmacy {pharmacy.id}: {doc_err}")
+
+                results.append({
+                    'inventory_id': item.id,
+                    'pharmacy_id': pharmacy.id,
+                    'pharmacy_name': pharmacy.pharmacy_name,
+                    'address': f"{pharmacy.street_address}, {pharmacy.barangay}",
+                    'barangay': pharmacy.barangay,
+                    'city': pharmacy.city,
+                    'province': pharmacy.province,
+                    'latitude': float(pharmacy.latitude) if pharmacy.latitude else None,
+                    'longitude': float(pharmacy.longitude) if pharmacy.longitude else None,
+                    'storefront_image_url': storefront_image_url,
+                    'phone': pharmacy.business_phone if pharmacy.business_phone else None,
+                    'price': float(item.price),
+                    'original_price': float(item.original_price) if item.original_price else float(item.price),
+                    'is_on_sale': item.is_on_sale,
+                    'discount_percentage': item.discount_percentage,
+                    'stock_quantity': item.stock_quantity,
+                    'prescription_required': item.prescription_required
+                })
+
+            return results
+
         print(f"🔍 Searching for medicine: name contains '{medicine_name}', dosage='{dosage}', form='{form}'")
-        print(f"✅ Found {inventory_items.count()} available inventory items")
-        
-        if not inventory_items.exists():
+
+        results = await fetch_pharmacies()
+
+        print(f"✅ Found {len(results)} available inventory items")
+
+        if not results:
             return JsonResponse({
                 'success': True,
                 'data': [],
                 'count': 0,
                 'message': 'No pharmacies found with this medicine in stock'
             })
-        
-        results = []
-        for item in inventory_items:
-            pharmacy = item.pharmacy
-            
-            # Get storefront image URL
-            storefront_image_url = None
-            try:
-                from api.users.models import UserDocument
-                storefront_doc = UserDocument.objects.filter(
-                    user=pharmacy.user,
-                    id_type__name__icontains='storefront'
-                ).first()
-                
-                if storefront_doc and storefront_doc.file_url:
-                    # Check if it's a Cloudinary URL
-                    if 'cloudinary.com' in storefront_doc.file_url or storefront_doc.file_url.startswith('http'):
-                        storefront_image_url = storefront_doc.file_url
-            except Exception as e:
-                print(f"Error fetching storefront for pharmacy {pharmacy.id}: {e}")
-            
-            results.append({
-                'inventory_id': item.id,
-                'pharmacy_id': pharmacy.id,
-                'pharmacy_name': pharmacy.pharmacy_name,
-                'address': f"{pharmacy.street_address}, {pharmacy.barangay}",
-                'barangay': pharmacy.barangay,
-                'city': pharmacy.city,
-                'province': pharmacy.province,
-                'latitude': float(pharmacy.latitude) if pharmacy.latitude else None,
-                'longitude': float(pharmacy.longitude) if pharmacy.longitude else None,
-                'storefront_image_url': storefront_image_url,
-                'phone': pharmacy.business_phone if pharmacy.business_phone else None,
-                'price': float(item.price),
-                'original_price': float(item.original_price) if item.original_price else float(item.price),
-                'is_on_sale': item.is_on_sale,
-                'discount_percentage': item.discount_percentage,
-                'stock_quantity': item.stock_quantity,
-                'prescription_required': item.prescription_required
-            })
-        
+
         return JsonResponse({
             'success': True,
             'data': results,
@@ -753,7 +756,7 @@ def direct_pharmacies_by_medicine(request):
                 'form': form
             }
         })
-        
+
     except Exception as e:
         print(f"ERROR in direct_pharmacies_by_medicine: {e}")
         return JsonResponse({
