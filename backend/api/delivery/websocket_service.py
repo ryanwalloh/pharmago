@@ -135,10 +135,55 @@ def broadcast_rider_location(order_id, latitude, longitude, heading=None, speed=
     location = {
         'latitude': float(latitude),
         'longitude': float(longitude),
-        'heading': float(heading) if heading else None,
-        'speed': float(speed) if speed else None,
+        'heading': float(heading) if heading is not None else None,
+        'speed': float(speed) if speed is not None else None,
     }
     OrderTrackingWebSocket.notify_rider_location(order_id, location)
+
+
+class RiderWebSocket:
+    """Service for sending WebSocket updates directly to rider clients."""
+    
+    @staticmethod
+    def notify_rider_location(rider_id, location):
+        """
+        Notify rider client of their latest location (mirrors backend state).
+        """
+        try:
+            channel_layer = get_channel_layer()
+            group_name = f'rider_location_{rider_id}'
+            
+            async_to_sync(channel_layer.group_send)(
+                group_name,
+                {
+                    'type': 'location_update',
+                    'rider_id': rider_id,
+                    'data': location,
+                }
+            )
+        except Exception as e:
+            logger.error(f"❌ Failed to send rider location via WebSocket: {str(e)}")
+
+
+def broadcast_rider_self_location(
+    rider_id,
+    latitude,
+    longitude,
+    heading=None,
+    speed=None,
+    accuracy=None,
+    updated_at=None,
+):
+    """Broadcast rider location update to the rider's own navigation channel."""
+    location = {
+        'latitude': float(latitude),
+        'longitude': float(longitude),
+        'heading': float(heading) if heading is not None else None,
+        'speed': float(speed) if speed is not None else None,
+        'accuracy': float(accuracy) if accuracy is not None else None,
+        'updated_at': updated_at,
+    }
+    RiderWebSocket.notify_rider_location(rider_id, location)
 
 
 # ✅ NEW: Pharmacy Order Notifications

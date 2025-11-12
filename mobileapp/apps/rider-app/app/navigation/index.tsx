@@ -18,6 +18,11 @@ import {
   RiderLocationConnectionStatus,
   RiderLocationUpdate,
 } from '../../services/riderLocationSocket';
+import {
+  createLocationTracker,
+  TrackerUpdatePayload,
+} from '../../services/locationTracker';
+import { sendRiderLocationUpdate } from '../../services/riderLocationUpdateService';
 
 const fallbackRegion: Region = {
   latitude: 14.5995,
@@ -103,6 +108,21 @@ export default function RiderNavigation() {
     []
   );
 
+  const applyOptimisticLocation = useCallback(
+    (coordinate: { latitude: number; longitude: number }, meta?: Partial<RiderLocationUpdate>) => {
+      setLocation((prev) => ({
+        latitude: coordinate.latitude,
+        longitude: coordinate.longitude,
+        heading: meta?.heading ?? prev?.heading,
+        speed: meta?.speed ?? prev?.speed,
+        accuracy: meta?.accuracy ?? prev?.accuracy,
+        updated_at: meta?.updated_at ?? prev?.updated_at ?? new Date().toISOString(),
+      }));
+      setLastUpdated(meta?.updated_at ?? new Date().toISOString());
+    },
+    []
+  );
+
   const handleStatusChange = useCallback(
     (nextStatus: RiderLocationConnectionStatus) => {
       setStatus(nextStatus);
@@ -116,6 +136,50 @@ export default function RiderNavigation() {
   const handleError = useCallback((error: Error) => {
     setErrorMessage(error.message);
   }, []);
+
+  const handleTrackerError = useCallback((error: Error) => {
+    console.error('❌ Location tracker error:', error);
+    setErrorMessage(error.message);
+  }, []);
+
+  const handleTrackerUpdate = useCallback(
+    async (payload: TrackerUpdatePayload) => {
+      if (!riderId) {
+        return;
+      }
+
+      const isoTimestamp = new Date(payload.location.timestamp).toISOString();
+      applyOptimisticLocation(
+        {
+          latitude: payload.coordinate.latitude,
+          longitude: payload.coordinate.longitude,
+        },
+        {
+          heading: payload.location.coords.heading ?? undefined,
+          speed: payload.location.coords.speed ?? undefined,
+          accuracy: payload.location.coords.accuracy ?? undefined,
+          updated_at: isoTimestamp,
+        }
+      );
+      setErrorMessage(null);
+
+      const result = await sendRiderLocationUpdate({
+        riderId,
+        coordinate: payload.coordinate,
+        locationTimestamp: payload.location.timestamp,
+        heading: payload.location.coords.heading ?? undefined,
+        speed: payload.location.coords.speed ?? undefined,
+        accuracy: payload.location.coords.accuracy ?? undefined,
+        reason: payload.reason,
+        distanceFromLast: payload.distanceFromLast,
+      });
+
+      if (!result.success) {
+        setErrorMessage(result.error ?? 'Unable to update location.');
+      }
+    },
+    [applyOptimisticLocation, riderId]
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -133,6 +197,31 @@ export default function RiderNavigation() {
         disconnect?.();
       };
     }, [handleLocationUpdate, handleStatusChange, handleError, riderId])
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!riderId) {
+        return;
+      }
+
+      const tracker = createLocationTracker({
+        onUpdate: handleTrackerUpdate,
+        onError: handleTrackerError,
+        requestPermissions: true,
+      });
+
+      tracker
+        .start()
+        .catch((error) => {
+          console.error('❌ Failed to start location tracker:', error);
+          setErrorMessage(error instanceof Error ? error.message : 'Failed to start location tracker');
+        });
+
+      return () => {
+        tracker.stop();
+      };
+    }, [handleTrackerError, handleTrackerUpdate, riderId])
   );
 
   const statusLabel = (() => {
