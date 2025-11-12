@@ -721,7 +721,7 @@ export default function ActiveDeliveryScreen() {
           }}
           title={deliveryData.pharmacy.name}
           description="Pickup Location"
-          anchor={{ x: 0.5, y: 0.5 }}
+          anchor={{ x: 0.5, y: 1 }}
           pinColor={pharmacyMarkerError ? '#F43332' : undefined}
           tracksViewChanges={!pharmacyMarkerLoaded}
         >
@@ -754,8 +754,7 @@ export default function ActiveDeliveryScreen() {
             }}
             title={order.customer_name}
             description={order.delivery_address.street_address}
-            anchor={{ x: 0.5, y: 0.5 }}
-            opacity={order.is_delivered ? 0.5 : 1}
+            anchor={{ x: 0.5, y: 1 }}
             pinColor={customerMarkerState[order.id]?.error ? '#F43332' : undefined}
             tracksViewChanges={!(customerMarkerState[order.id]?.loaded ?? false)}
           >
@@ -763,7 +762,10 @@ export default function ActiveDeliveryScreen() {
               <View style={styles.markerImageContainer}>
                 <Image
                   source={CustomerMarkerAsset}
-                  style={styles.mapMarkerImage}
+                  style={[
+                    styles.mapMarkerImage,
+                    order.is_delivered && styles.deliveredMarker,
+                  ]}
                   resizeMode="contain"
                   onLoad={() =>
                     setTimeout(() => {
@@ -813,7 +815,7 @@ export default function ActiveDeliveryScreen() {
             coordinate={riderLocation}
             title="You"
             description="Your current location"
-            anchor={{ x: 0.5, y: 0.5 }}
+            anchor={{ x: 0.5, y: 1 }}
             pinColor={riderMarkerError ? '#F43332' : undefined}
             tracksViewChanges={!riderMarkerLoaded}
           >
@@ -1083,13 +1085,13 @@ const getStyles = () => StyleSheet.create({
   markerImageContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    width: 48,
-    height: 48,
+    width: 60,
+    height: 60,
     position: 'relative',
   },
   mapMarkerImage: {
-    width: 40,
-    height: 40,
+    width: 48,
+    height: 48,
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
@@ -1098,6 +1100,9 @@ const getStyles = () => StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 8,
+  },
+  deliveredMarker: {
+    opacity: 0.55,
   },
   markerBadge: {
     position: 'absolute',
