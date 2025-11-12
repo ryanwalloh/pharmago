@@ -132,7 +132,10 @@ CHANNEL_LAYERS = {
         # Use in-memory channel layer for development
         # For production with multiple workers, use Redis:
         # 'BACKEND': 'channels_redis.core.RedisChannelLayer',
-        'BACKEND': 'channels.layers.InMemoryChannelLayer',
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {
+            "hosts": [os.getenv('REDIS_URL', 'redis://127.0.0.1:6379/1')],
+        },
     },
 }
 
