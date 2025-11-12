@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Image, Alert, ScrollView } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Image, Alert, ScrollView, ImageBackground } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
@@ -81,52 +81,66 @@ export default function RiderRegistration2() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>{"Driver's License"}</Text>
-      <Text style={styles.subtitle}>Step 3 of 3</Text>
+      <ImageBackground source={require('../assets/driverlicensebg.png')} style={styles.background} resizeMode="cover">
+        <View style={styles.overlay} />
+        <View style={styles.wrapper}>
+          <View style={styles.header}>
+            <Image source={require('../assets/pharmarider.png')} style={styles.brandLogo} resizeMode="contain" />
+          </View>
 
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 16 }}>
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>{"Upload Driver's License Image"}</Text>
-          {selectedImageUri ? (
-            <View style={styles.previewWrap}>
-              <Image source={{ uri: selectedImageUri }} style={styles.previewImg} />
-              <TouchableOpacity style={styles.changeBtn} onPress={() => setSelectedImageUri(null)}>
-                <Text style={styles.changeText}>Change Image</Text>
+          <View style={styles.sheet}>
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={styles.sheetContent}
+            >
+              <Text style={styles.title}>{"Verify your driver's license"}</Text>
+              <Text style={styles.subtitle}>Upload a clear photo of your license to help us finish your rider verification.</Text>
+
+              <View style={styles.card}>
+                <Text style={styles.cardTitle}>{"Upload Driver's License Image"}</Text>
+                {selectedImageUri ? (
+                  <View style={styles.previewWrap}>
+                    <Image source={{ uri: selectedImageUri }} style={styles.previewImg} />
+                    <TouchableOpacity style={styles.changeBtn} onPress={() => setSelectedImageUri(null)}>
+                      <Text style={styles.changeText}>Change Image</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <View style={styles.actionsRow}>
+                    <TouchableOpacity style={[styles.actionBtn, styles.cameraBtn]} onPress={takePhoto}>
+                      <Text style={styles.actionText}>Use Camera</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.actionBtn, styles.galleryBtn]} onPress={pickFromGallery}>
+                      <Text style={styles.actionText}>Choose File</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+                <Text style={styles.note}>Tips: Ensure the image is clear and readable. Avoid glare and blur.</Text>
+              </View>
+            </ScrollView>
+
+            <View style={styles.footerRow}>
+              <TouchableOpacity style={[styles.navBtn, styles.backBtn]} onPress={() => router.back()}>
+                <Text style={[styles.navText, styles.backText]}>Back</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.navBtn, styles.nextBtn]}
+                onPress={async () => {
+                  if (!selectedImageUri) {
+                    Alert.alert('Missing Image', "Please upload a photo of your driver's license.");
+                    return;
+                  }
+                  await savePartial({ drivers_license_local_uri: selectedImageUri, saved_at: Date.now() });
+                  router.push('/RiderRegistration4');
+                }}
+              >
+                <Text style={styles.navText}>Next</Text>
               </TouchableOpacity>
             </View>
-          ) : (
-            <View style={styles.actionsRow}>
-              <TouchableOpacity style={styles.actionBtn} onPress={takePhoto}>
-                <Text style={styles.actionText}>Use Camera</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.actionBtn} onPress={pickFromGallery}>
-                <Text style={styles.actionText}>Choose File</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-          <Text style={styles.note}>Tips: Ensure the image is clear and readable. Avoid glare and blur.</Text>
+          </View>
         </View>
-      </ScrollView>
-
-      <View style={styles.footerRow}>
-        <TouchableOpacity style={[styles.navBtn, styles.backBtn]} onPress={() => router.back()}>
-          <Text style={[styles.navText, styles.backText]}>Back</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.navBtn, styles.nextBtn]}
-          onPress={async () => {
-            if (!selectedImageUri) {
-              Alert.alert('Missing Image', "Please upload a photo of your driver's license.");
-              return;
-            }
-            // Only persist local URI and proceed to final step
-            await savePartial({ drivers_license_local_uri: selectedImageUri, saved_at: Date.now() });
-            router.push('/RiderRegistration4');
-          }}
-        >
-          <Text style={styles.navText}>Next</Text>
-        </TouchableOpacity>
-      </View>
+      </ImageBackground>
     </View>
   );
 }
@@ -134,51 +148,82 @@ export default function RiderRegistration2() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 20,
+    backgroundColor: '#000000',
+  },
+  background: {
+    flex: 1,
+  },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+  },
+  wrapper: {
+    flex: 1,
+    justifyContent: 'space-between',
+  },
+  header: {
+    paddingHorizontal: 24,
     paddingTop: 60,
-    paddingBottom: 16,
+    alignItems: 'flex-start',
+  },
+  brandLogo: {
+    width: 160,
+    height: 80,
+  },
+  sheet: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    paddingHorizontal: 24,
+    paddingTop: 32,
+    paddingBottom: 24,
+  },
+  sheetContent: {
+    paddingBottom: 24,
   },
   title: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: '700',
     color: '#222222',
-    textAlign: 'center',
+    textAlign: 'left',
   },
   subtitle: {
-    fontSize: 12,
+    fontSize: 14,
     color: '#666666',
-    textAlign: 'center',
-    marginTop: 4,
-    marginBottom: 16,
+    marginTop: 6,
+    marginBottom: 24,
   },
   card: {
     backgroundColor: '#FAFAFA',
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: 16,
+    padding: 18,
     borderWidth: 1,
-    borderColor: '#EEEEEE',
+    borderStyle: 'dashed',
+    borderColor: '#CCCCCC',
   },
   cardTitle: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '700',
     color: '#333333',
-    marginBottom: 12,
+    marginBottom: 16,
   },
   actionsRow: {
     flexDirection: 'row',
-    gap: 10,
+    marginTop: 4,
+    gap: 8,
   },
   actionBtn: {
     flex: 1,
-    backgroundColor: '#00BF63',
-    height: 44,
-    borderRadius: 10,
+    height: 48,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
   },
   actionText: {
-    color: '#FFFFFF',
+    color: '#00BF63',
     fontWeight: '700',
   },
   previewWrap: {
@@ -186,18 +231,18 @@ const styles = StyleSheet.create({
   },
   previewImg: {
     width: '100%',
-    height: 200,
-    borderRadius: 10,
+    height: 220,
+    borderRadius: 14,
     backgroundColor: '#EDEDED',
   },
   changeBtn: {
-    marginTop: 10,
+    marginTop: 12,
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: '#E0E0E0',
-    height: 40,
-    paddingHorizontal: 16,
-    borderRadius: 8,
+    height: 44,
+    paddingHorizontal: 20,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -206,19 +251,18 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   note: {
-    marginTop: 10,
-    fontSize: 12,
+    marginTop: 14,
+    fontSize: 13,
     color: '#666666',
   },
   footerRow: {
-    marginTop: 'auto',
+    marginTop: 24,
     flexDirection: 'row',
-    gap: 10,
   },
   navBtn: {
     flex: 1,
-    height: 44,
-    borderRadius: 10,
+    height: 48,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -226,6 +270,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: '#E0E0E0',
+    marginRight: 10,
   },
   nextBtn: {
     backgroundColor: '#00BF63',
@@ -238,6 +283,8 @@ const styles = StyleSheet.create({
   backText: {
     color: '#333333',
   },
+  cameraBtn: {},
+  galleryBtn: {},
 });
 
 
