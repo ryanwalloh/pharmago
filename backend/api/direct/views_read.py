@@ -41,46 +41,53 @@ async def get_cache_value(request):
 
 
 
-def direct_pharmacy_stats(request):
+@csrf_exempt
+async def direct_pharmacy_stats(request):
     """Direct pharmacy statistics endpoint that bypasses all authentication"""
     try:
         from api.users.models import Pharmacy
+        from channels.db import database_sync_to_async
 
-        total_pharmacies = Pharmacy.objects.filter(status='approved').count()
-        pending_approvals = Pharmacy.objects.filter(is_fully_verified=False).count()
-        active_pharmacies = Pharmacy.objects.filter(
-            is_fully_verified=True,
-            status='approved'
-        ).count()
-        suspended_pharmacies = Pharmacy.objects.filter(status='suspended').count()
+        @database_sync_to_async
+        def fetch_stats():
+            total_pharmacies = Pharmacy.objects.filter(status='approved').count()
+            pending_approvals = Pharmacy.objects.filter(is_fully_verified=False).count()
+            active_pharmacies = Pharmacy.objects.filter(
+                is_fully_verified=True,
+                status='approved'
+            ).count()
+            suspended_pharmacies = Pharmacy.objects.filter(status='suspended').count()
 
-        pending_pharmacies_data = []
-        pending_pharmacies = Pharmacy.objects.filter(is_fully_verified=False)
-        for pharmacy in pending_pharmacies:
-            pending_pharmacies_data.append({
-                'id': pharmacy.id,
-                'pharmacy_name': pharmacy.pharmacy_name,
-                'owner_first_name': pharmacy.owner_first_name,
-                'owner_last_name': pharmacy.owner_last_name,
-                'business_phone': pharmacy.business_phone,
-                'business_email': pharmacy.business_email,
-                'barangay': pharmacy.barangay,
-                'city': pharmacy.city,
-            })
+            pending_pharmacies_data = []
+            for pharmacy in Pharmacy.objects.filter(is_fully_verified=False):
+                pending_pharmacies_data.append({
+                    'id': pharmacy.id,
+                    'pharmacy_name': pharmacy.pharmacy_name,
+                    'owner_first_name': pharmacy.owner_first_name,
+                    'owner_last_name': pharmacy.owner_last_name,
+                    'business_phone': pharmacy.business_phone,
+                    'business_email': pharmacy.business_email,
+                    'barangay': pharmacy.barangay,
+                    'city': pharmacy.city,
+                })
+
+            return {
+                'totalPharmacies': total_pharmacies,
+                'pendingApprovals': pending_approvals,
+                'activePharmacies': active_pharmacies,
+                'suspendedPharmacies': suspended_pharmacies,
+                'pendingPharmaciesData': pending_pharmacies_data,
+            }
+
+        data = await fetch_stats()
 
         print("=== PENDING PHARMACIES DATA ===")
-        print(f"Found {len(pending_pharmacies_data)} pending pharmacies:")
-        for pharmacy in pending_pharmacies_data:
+        print(f"Found {len(data['pendingPharmaciesData'])} pending pharmacies:")
+        for pharmacy in data['pendingPharmaciesData']:
             print(f"- {pharmacy['pharmacy_name']} (Owner: {pharmacy['owner_first_name']} {pharmacy['owner_last_name']})")
         print("=== END PENDING PHARMACIES DATA ===")
 
-        return JsonResponse({
-            'totalPharmacies': total_pharmacies,
-            'pendingApprovals': pending_approvals,
-            'activePharmacies': active_pharmacies,
-            'suspendedPharmacies': suspended_pharmacies,
-            'pendingPharmaciesData': pending_pharmacies_data,
-        })
+        return JsonResponse(data)
     except Exception as e:
         print(f"ERROR in direct_pharmacy_stats: {e}")
         return JsonResponse({
@@ -93,79 +100,67 @@ def direct_pharmacy_stats(request):
         }, status=500)
 
 
-def direct_rider_stats(request):
+async def direct_rider_stats(request):
     """Direct rider statistics endpoint that bypasses all authentication"""
     try:
         from api.users.models import Rider
+        from channels.db import database_sync_to_async
 
-        # Counts
-        total_riders = Rider.objects.count()
-        pending_approvals = Rider.objects.filter(status=Rider.RiderStatus.PENDING).count()
-        active_riders = Rider.objects.filter(status=Rider.RiderStatus.APPROVED).count()
-        suspended_riders = Rider.objects.filter(status=Rider.RiderStatus.SUSPENDED).count()
+        @database_sync_to_async
+        def fetch_stats():
+            total_riders = Rider.objects.count()
+            pending_approvals = Rider.objects.filter(status=Rider.RiderStatus.PENDING).count()
+            active_riders = Rider.objects.filter(status=Rider.RiderStatus.APPROVED).count()
+            suspended_riders = Rider.objects.filter(status=Rider.RiderStatus.SUSPENDED).count()
 
-        pending_riders_data = []
-        for r in Rider.objects.filter(status=Rider.RiderStatus.PENDING).select_related('user').order_by('-created_at')[:500]:
-            pending_riders_data.append({
-                'id': r.id,
-                'first_name': r.first_name,
-                'last_name': r.last_name,
-                'email': getattr(r.user, 'email', None),
-                'phone_number': getattr(r.user, 'phone_number', None),
-                'vehicle_type': r.vehicle_type,
-                'plate_number': r.plate_number,
-            })
+            def serialize_riders(qs, limit):
+                results = []
+                for r in qs.select_related('user').order_by('-created_at')[:limit]:
+                    results.append({
+                        'id': r.id,
+                        'first_name': r.first_name,
+                        'last_name': r.last_name,
+                        'email': getattr(getattr(r, 'user', None), 'email', None),
+                        'phone_number': getattr(getattr(r, 'user', None), 'phone_number', None),
+                        'vehicle_type': r.vehicle_type,
+                        'plate_number': r.plate_number,
+                        'status': r.status,
+                    })
+                return results
 
-        # Active riders list (basic info)
-        active_riders_data = []
-        for r in Rider.objects.filter(status=Rider.RiderStatus.APPROVED).select_related('user').order_by('-created_at')[:1000]:
-            active_riders_data.append({
-                'id': r.id,
-                'first_name': r.first_name,
-                'last_name': r.last_name,
-                'email': getattr(r.user, 'email', None),
-                'phone_number': getattr(r.user, 'phone_number', None),
-                'vehicle_type': r.vehicle_type,
-                'plate_number': r.plate_number,
-            })
+            pending_riders_data = serialize_riders(
+                Rider.objects.filter(status=Rider.RiderStatus.PENDING),
+                500
+            )
 
-        # Suspended riders list (basic info)
-        suspended_riders_data = []
-        for r in Rider.objects.filter(status=Rider.RiderStatus.SUSPENDED).select_related('user').order_by('-created_at')[:1000]:
-            suspended_riders_data.append({
-                'id': r.id,
-                'first_name': r.first_name,
-                'last_name': r.last_name,
-                'email': getattr(r.user, 'email', None),
-                'phone_number': getattr(r.user, 'phone_number', None),
-                'vehicle_type': r.vehicle_type,
-                'plate_number': r.plate_number,
-            })
+            active_riders_data = serialize_riders(
+                Rider.objects.filter(status=Rider.RiderStatus.APPROVED),
+                1000
+            )
 
-        # All riders list (basic info)
-        all_riders_data = []
-        for r in Rider.objects.select_related('user').order_by('-created_at')[:1000]:
-            all_riders_data.append({
-                'id': r.id,
-                'first_name': r.first_name,
-                'last_name': r.last_name,
-                'email': getattr(r.user, 'email', None),
-                'phone_number': getattr(r.user, 'phone_number', None),
-                'status': r.status,
-                'vehicle_type': r.vehicle_type,
-                'plate_number': r.plate_number,
-            })
+            suspended_riders_data = serialize_riders(
+                Rider.objects.filter(status=Rider.RiderStatus.SUSPENDED),
+                1000
+            )
 
-        return JsonResponse({
-            'totalRiders': total_riders,
-            'pendingApprovals': pending_approvals,
-            'activeRiders': active_riders,
-            'suspendedRiders': suspended_riders,
-            'pendingRidersData': pending_riders_data,
-            'activeRidersData': active_riders_data,
-            'suspendedRidersData': suspended_riders_data,
-            'allRidersData': all_riders_data,
-        })
+            all_riders_data = serialize_riders(
+                Rider.objects.all(),
+                1000
+            )
+
+            return {
+                'totalRiders': total_riders,
+                'pendingApprovals': pending_approvals,
+                'activeRiders': active_riders,
+                'suspendedRiders': suspended_riders,
+                'pendingRidersData': pending_riders_data,
+                'activeRidersData': active_riders_data,
+                'suspendedRidersData': suspended_riders_data,
+                'allRidersData': all_riders_data,
+            }
+
+        data = await fetch_stats()
+        return JsonResponse(data)
     except Exception as e:
         print(f"ERROR in direct_rider_stats: {e}")
         return JsonResponse({
