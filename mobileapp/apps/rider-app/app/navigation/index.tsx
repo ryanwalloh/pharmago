@@ -1,10 +1,11 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
   Platform,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE, Region } from 'react-native-maps';
@@ -38,10 +39,8 @@ export default function RiderNavigation() {
     useState<RiderLocationConnectionStatus>('idle');
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [initialRegion, setInitialRegion] = useState<Region>(fallbackRegion);
-
-  const mapRef = useRef<MapView>(null);
-  const hasInitialCameraUpdate = useRef(false);
+  const [mapRegion, setMapRegion] = useState<Region>(fallbackRegion);
+  const [isFollowing, setIsFollowing] = useState(true);
 
   const googleMapsApiKey =
     Constants.expoConfig?.extra?.googleMapsApiKey ??
@@ -67,6 +66,31 @@ export default function RiderNavigation() {
     loadSession();
   }, []);
 
+  const updateMapRegion = useCallback((latitude: number, longitude: number, options?: { force?: boolean }) => {
+    setMapRegion((prev) => {
+      const shouldUpdate = options?.force || isFollowing;
+      if (!shouldUpdate) {
+        return prev;
+      }
+
+      const next: Region = {
+        latitude,
+        longitude,
+        latitudeDelta: 0.01,
+        longitudeDelta: 0.01,
+      };
+
+      if (
+        Math.abs(next.latitude - prev.latitude) < 0.000001 &&
+        Math.abs(next.longitude - prev.longitude) < 0.000001
+      ) {
+        return prev;
+      }
+
+      return next;
+    });
+  }, [isFollowing]);
+
   const handleLocationUpdate = useCallback(
     (update: RiderLocationUpdate) => {
       setLocation(update);
@@ -76,36 +100,9 @@ export default function RiderNavigation() {
         setLastUpdated(new Date().toISOString());
       }
 
-      if (!hasInitialCameraUpdate.current) {
-        hasInitialCameraUpdate.current = true;
-        setInitialRegion({
-          latitude: update.latitude,
-          longitude: update.longitude,
-          latitudeDelta: 0.01,
-          longitudeDelta: 0.01,
-        });
-      }
-
-      if (mapRef.current) {
-        mapRef.current.animateCamera(
-          {
-            center: {
-              latitude: update.latitude,
-              longitude: update.longitude,
-            },
-            heading: Number.isFinite(update.heading ?? NaN)
-              ? Number(update.heading)
-              : undefined,
-            pitch: 0,
-            zoom: 16,
-          },
-          {
-            duration: 750,
-          }
-        );
-      }
+      updateMapRegion(update.latitude, update.longitude);
     },
-    []
+    [updateMapRegion]
   );
 
   const applyOptimisticLocation = useCallback(
@@ -119,8 +116,9 @@ export default function RiderNavigation() {
         updated_at: meta?.updated_at ?? prev?.updated_at ?? new Date().toISOString(),
       }));
       setLastUpdated(meta?.updated_at ?? new Date().toISOString());
+      updateMapRegion(coordinate.latitude, coordinate.longitude);
     },
-    []
+    [updateMapRegion]
   );
 
   const handleStatusChange = useCallback(
@@ -239,13 +237,30 @@ export default function RiderNavigation() {
     }
   })();
 
+  const toggleFollow = useCallback(() => {
+    setIsFollowing((prev) => {
+      const next = !prev;
+      if (next && location) {
+        updateMapRegion(location.latitude, location.longitude, { force: true });
+      }
+      return next;
+    });
+  }, [location, updateMapRegion]);
+
+  const followLabel = isFollowing ? 'Following' : 'Follow';
+
   return (
     <View style={styles.container}>
       <MapView
-        ref={mapRef}
         provider={PROVIDER_GOOGLE}
         style={styles.map}
-        initialRegion={initialRegion}
+        region={mapRegion}
+        onRegionChangeComplete={(region, details?: { isGesture?: boolean }) => {
+          setMapRegion(region);
+          if (details?.isGesture) {
+            setIsFollowing(false);
+          }
+        }}
         showsUserLocation={false}
         showsMyLocationButton={false}
         showsCompass={false}
@@ -271,8 +286,20 @@ export default function RiderNavigation() {
       </MapView>
 
       <View style={styles.statusContainer}>
-        <View style={styles.statusBadge}>
-          <Text style={styles.statusText}>{statusLabel}</Text>
+        <View style={styles.statusHeader}>
+          <View style={styles.statusBadge}>
+            <Text style={styles.statusText}>{statusLabel}</Text>
+          </View>
+          <TouchableOpacity
+            style={[styles.followButton, isFollowing && styles.followButtonActive]}
+            onPress={toggleFollow}
+            accessibilityRole="button"
+            accessibilityState={{ selected: isFollowing }}
+          >
+            <Text style={[styles.followButtonText, isFollowing && styles.followButtonTextActive]}>
+              {followLabel}
+            </Text>
+          </TouchableOpacity>
         </View>
         {lastUpdated && (
           <Text style={styles.timestamp}>
@@ -330,10 +357,37 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 6,
   },
+  statusHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+    gap: 12,
+  },
   statusText: {
     color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '600',
+  },
+  followButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.6)',
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+  },
+  followButtonActive: {
+    backgroundColor: '#00BF63',
+    borderColor: '#00BF63',
+  },
+  followButtonText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  followButtonTextActive: {
+    color: '#0B2D1C',
   },
   timestamp: {
     color: '#FFFFFF',
