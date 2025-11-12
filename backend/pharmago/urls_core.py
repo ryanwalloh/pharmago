@@ -2,7 +2,7 @@
 Lean URL configuration for pharmago project (post-refactor).
 """
 from django.contrib import admin
-from django.urls import path, include
+from django.urls import path, include, re_path
 from django.http import HttpResponseRedirect
 from django.conf import settings
 from django.conf.urls.static import static
@@ -18,7 +18,7 @@ def redirect_magic_link(request, token):
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('health/', views.health),
+    re_path(r'^health/?$', views.health),
     path('api/ping/', views.ping),
     path('api/', include(('api.direct.urls', 'direct'), namespace='direct')),
     path('api/', include(('api.files.urls', 'files'), namespace='files')),
