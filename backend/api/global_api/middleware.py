@@ -91,7 +91,18 @@ class SystemHealthMiddleware(MiddlewareMixin):
     def process_request(self, request):
         """Perform periodic system health checks"""
         try:
-            if getattr(request, 'path', '').lstrip('/').startswith('health'):
+            path = getattr(request, 'path', '')
+            normalized_path = path.lstrip('/')
+            
+            # Skip lightweight / high-frequency endpoints to avoid blocking them
+            skip_prefixes = (
+                'health',
+                'ws/',
+                'api/rider/update-location/',
+                'api/rider/order-count',
+                'api/rider/dispatch/',
+            )
+            if normalized_path.startswith(skip_prefixes):
                 return None
         except Exception:
             pass
