@@ -150,6 +150,91 @@ class DispatchConsumer(AsyncWebsocketConsumer):
             logger.error(f"❌ Error sending offer update: {str(e)}", exc_info=True)
 
 
+class RiderLocationConsumer(AsyncWebsocketConsumer):
+    """
+    WebSocket consumer for streaming rider's own location updates to the rider app.
+    """
+    
+    async def connect(self):
+        try:
+            self.rider_id = self.scope['url_route']['kwargs']['rider_id']
+            self.room_group_name = f'rider_location_{self.rider_id}'
+            
+            await self.channel_layer.group_add(
+                self.room_group_name,
+                self.channel_name
+            )
+            
+            await self.accept()
+            
+            logger.info(f"✅ Rider {self.rider_id} connected to location WebSocket")
+            
+            await self.send(text_data=json.dumps({
+                'type': 'connection_established',
+                'rider_id': self.rider_id,
+                'message': 'Connected to rider location stream'
+            }))
+            
+            last_location = await self.get_last_known_location()
+            if last_location:
+                await self.send(text_data=json.dumps({
+                    'type': 'location_update',
+                    'rider_id': self.rider_id,
+                    'data': last_location,
+                }))
+        
+        except Exception as e:
+            logger.error(f"❌ Error in rider location WebSocket connect: {str(e)}", exc_info=True)
+            await self.close()
+    
+    async def disconnect(self, close_code):
+        try:
+            await self.channel_layer.group_discard(
+                self.room_group_name,
+                self.channel_name
+            )
+            
+            logger.info(f"🔌 Rider {self.rider_id} disconnected from location WebSocket (code: {close_code})")
+        
+        except Exception as e:
+            logger.error(f"❌ Error in rider location WebSocket disconnect: {str(e)}", exc_info=True)
+    
+    async def receive(self, text_data):
+        # Riders currently do not send messages over this socket.
+        logger.debug(f"📨 Received message on rider location socket (ignored): {text_data}")
+    
+    async def location_update(self, event):
+        """
+        Forward location updates sent from backend services to the rider client.
+        """
+        try:
+            await self.send(text_data=json.dumps({
+                'type': 'location_update',
+                'rider_id': self.rider_id,
+                'data': event.get('data') or event.get('location'),
+            }))
+        except Exception as e:
+            logger.error(f"❌ Error forwarding rider location update: {str(e)}", exc_info=True)
+    
+    @database_sync_to_async
+    def get_last_known_location(self):
+        from api.users.models import Rider
+        
+        try:
+            rider = Rider.objects.get(id=self.rider_id)
+        except Rider.DoesNotExist:
+            return None
+        
+        if rider.current_latitude is None or rider.current_longitude is None:
+            return None
+        
+        return {
+            'latitude': float(rider.current_latitude),
+            'longitude': float(rider.current_longitude),
+            'updated_at': rider.last_seen_at.isoformat() if rider.last_seen_at else None,
+        }
+
+
 class OrderTrackingConsumer(AsyncWebsocketConsumer):
     """
     WebSocket consumer for customer order tracking.

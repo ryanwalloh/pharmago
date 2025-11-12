@@ -8,6 +8,10 @@ from django.utils import timezone
 from api.orders.models import Order
 from api.users.models import User, Rider
 from api.users.jwt_views import token_manager
+from api.delivery.websocket_service import (
+    broadcast_rider_location,
+    broadcast_rider_self_location,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -332,7 +336,7 @@ def update_rider_status(request):
 
 
 @csrf_exempt
-def update_rider_location(request):
+async def update_rider_location(request):
     """
     Update rider's current location.
     Called periodically (every 30s) when rider is online.
@@ -346,26 +350,27 @@ def update_rider_location(request):
     """
     if request.method != 'POST':
         return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
-    
+
     try:
         import json
-        
+        from channels.db import database_sync_to_async
+
         data = json.loads(request.body)
         rider_id = data.get('rider_id')
         latitude = data.get('latitude')
         longitude = data.get('longitude')
-        
+
         if not rider_id or latitude is None or longitude is None:
             return JsonResponse({
                 'success': False,
                 'error': 'Missing rider_id, latitude, or longitude'
             }, status=400)
-        
+
         # Validate coordinates
         try:
             lat = float(latitude)
             lng = float(longitude)
-            
+
             if not (-90 <= lat <= 90) or not (-180 <= lng <= 180):
                 return JsonResponse({
                     'success': False,
@@ -376,60 +381,76 @@ def update_rider_location(request):
                 'success': False,
                 'error': 'Invalid coordinate format'
             }, status=400)
-        
-        # Get rider
-        try:
-            rider = Rider.objects.get(id=rider_id)
-        except Rider.DoesNotExist:
-            return JsonResponse({
-                'success': False,
-                'error': 'Rider not found'
-            }, status=404)
-        
-        # Update location
-        rider.update_location(lat, lng)
-        
-        logger.debug(f"📍 Updated location for {rider.full_name}: ({lat:.6f}, {lng:.6f})")
-        
-        # Broadcast location to customers tracking orders assigned to this rider
-        try:
+
+        @database_sync_to_async
+        def update_location_and_fetch_assignments():
             from api.delivery.models import OrderRiderAssignment
-            from api.delivery.websocket_service import broadcast_rider_location
-            
-            # Get all active assignments for this rider
-            active_assignments = OrderRiderAssignment.objects.filter(
-                assignment__rider=rider,
-                assignment__status__in=['picked_up', 'delivering'],
-                delivered_at__isnull=True
-            ).select_related('order')
-            
-            # Broadcast location to each order's tracking channel
-            for order_assignment in active_assignments:
+
+            try:
+                rider_obj = Rider.objects.get(id=rider_id)
+            except Rider.DoesNotExist:
+                return None, None, None, {
+                    'success': False,
+                    'error': 'Rider not found'
+                }
+
+            rider_obj.update_location(lat, lng)
+            last_seen = rider_obj.last_seen_at.isoformat() if rider_obj.last_seen_at else timezone.now().isoformat()
+
+            active_assignments = list(
+                OrderRiderAssignment.objects.filter(
+                    assignment__rider=rider_obj,
+                    assignment__status__in=['picked_up', 'delivering'],
+                    delivered_at__isnull=True
+                ).select_related('order')
+            )
+
+            order_ids = [oa.order.id for oa in active_assignments if oa.order]
+
+            rider_payload = {
+                'id': rider_obj.id,
+                'latitude': float(rider_obj.current_latitude) if rider_obj.current_latitude is not None else lat,
+                'longitude': float(rider_obj.current_longitude) if rider_obj.current_longitude is not None else lng,
+                'last_seen_at': last_seen,
+                'full_name': rider_obj.full_name,
+            }
+
+            return rider_payload, order_ids, rider_obj, None
+
+        rider_payload, order_ids, rider_obj, error_payload = await update_location_and_fetch_assignments()
+
+        if error_payload:
+            return JsonResponse(error_payload, status=404)
+
+        logger.debug(f"📍 Updated location for {rider_payload['full_name']}: ({lat:.6f}, {lng:.6f})")
+
+        try:
+            for order_id in order_ids:
                 broadcast_rider_location(
-                    order_id=order_assignment.order.id,
+                    order_id=order_id,
                     latitude=lat,
                     longitude=lng,
                     heading=data.get('heading'),
                     speed=data.get('speed')
                 )
-            
-            if active_assignments.exists():
-                logger.debug(f"📡 Broadcasted rider location to {active_assignments.count()} order(s)")
-                
+
+            if order_ids:
+                logger.debug(f"📡 Broadcasted rider location to {len(order_ids)} order(s)")
+
         except Exception as e:
             logger.warning(f"Failed to broadcast rider location: {str(e)}")
-        
+
         return JsonResponse({
             'success': True,
             'message': 'Location updated',
             'rider': {
-                'id': rider.id,
-                'latitude': float(rider.current_latitude),
-                'longitude': float(rider.current_longitude),
-                'last_seen_at': rider.last_seen_at.isoformat()
+                'id': rider_payload['id'],
+                'latitude': rider_payload['latitude'],
+                'longitude': rider_payload['longitude'],
+                'last_seen_at': rider_payload['last_seen_at']
             }
         }, status=200)
-        
+
     except Exception as e:
         logger.error(f"❌ Error updating rider location: {str(e)}", exc_info=True)
         return JsonResponse({
