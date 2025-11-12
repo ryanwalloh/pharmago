@@ -544,8 +544,11 @@ export default function RiderNavigation() {
             />
           </Marker>
         ))}
-        {showDispatchCard && currentDispatchOffer && (
-          <View style={styles.dispatchCardWrapper} pointerEvents="box-none">
+      </MapView>
+
+      {showDispatchCard && currentDispatchOffer && (
+        <View style={styles.dispatchCardWrapper} pointerEvents="box-none">
+          <View pointerEvents="auto">
             <DispatchOfferCard
               offer={currentDispatchOffer}
               onAccept={handleAcceptOffer}
@@ -559,8 +562,8 @@ export default function RiderNavigation() {
               }}
             />
           </View>
-        )}
-      </MapView>
+        </View>
+      )}
 
       <View style={styles.statusContainer}>
         <View style={styles.statusHeader}>
