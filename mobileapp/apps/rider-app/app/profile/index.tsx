@@ -340,11 +340,11 @@ export default function RiderProfile() {
 
         <TouchableOpacity style={styles.navItem} onPress={() => {}}>
           <Image 
-            source={require('../../assets/wallet.png')} 
+            source={require('../../assets/navigation.png')} 
             style={styles.navIcon}
             resizeMode="contain"
           />
-          <Text style={styles.navLabel}>Wallet</Text>
+          <Text style={styles.navLabel}>Navigation</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.navItem} onPress={() => {}}>
