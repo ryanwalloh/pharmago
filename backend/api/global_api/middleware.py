@@ -22,6 +22,12 @@ class ApiUsageTrackingMiddleware(MiddlewareMixin):
     def process_response(self, request, response):
         """Record API usage after response is generated"""
         try:
+            # Skip noisy health checks
+            if getattr(request, 'path', '').lstrip('/').startswith('health'):
+                return response
+        except Exception:
+            pass
+        try:
             # Calculate response time
             if hasattr(request, 'start_time'):
                 response_time = (time.time() - request.start_time) * 1000  # Convert to milliseconds
@@ -84,6 +90,11 @@ class SystemHealthMiddleware(MiddlewareMixin):
     
     def process_request(self, request):
         """Perform periodic system health checks"""
+        try:
+            if getattr(request, 'path', '').lstrip('/').startswith('health'):
+                return None
+        except Exception:
+            pass
         current_time = time.time()
         
         # Only perform health checks periodically
