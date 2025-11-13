@@ -35,6 +35,7 @@ urlpatterns = [
     path('accept-cart-order/<int:order_id>/', ops.accept_cart_order),
     path('mark-order-ready/<int:order_id>/', ops.mark_order_ready),
     path('mark-order-archived/<int:order_id>/', ops.mark_order_archived),
+    path('pharmacy-sales-report/<int:pharmacy_id>/', ops.direct_pharmacy_sales_report),
     # Mobile app direct endpoints
     path('create-prescription-order/', views.direct_prescription_order_creation),
     path('create-cart-order/', cart_order_views.create_cart_order),
