@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 const PharmacyDashboard = () => {
@@ -140,6 +140,7 @@ const PharmacyDashboard = () => {
     ready: []
   });
   const [ordersLoading, setOrdersLoading] = useState(true);
+  const [orderHistory, setOrderHistory] = useState([]);
 
   const parseCurrency = (value) => {
     const numeric = Number(value ?? 0);
@@ -168,6 +169,30 @@ const PharmacyDashboard = () => {
     return 'Pricing approved';
   };
 
+  const filteredHistoryOrders = useMemo(() => {
+    if (!searchQuery.trim()) {
+      return orderHistory;
+    }
+    const term = searchQuery.trim().toLowerCase();
+    return orderHistory.filter(order => {
+      const orderNumber = String(order?.orderNumber || order?.order_number || order?.id || '').toLowerCase();
+      const customerName = String(order?.customerName || '').toLowerCase();
+      const paymentMethod = String(order?.payment_method || order?.paymentMethod || '').toLowerCase();
+      return (
+        orderNumber.includes(term) ||
+        customerName.includes(term) ||
+        paymentMethod.includes(term)
+      );
+    });
+  }, [orderHistory, searchQuery]);
+
+  const historyRevenue = useMemo(() => {
+    return filteredHistoryOrders.reduce((sum, order) => {
+      const total = order?.totalAmount ?? order?.total_amount ?? order?.total ?? 0;
+      return sum + parseCurrency(total);
+    }, 0);
+  }, [filteredHistoryOrders]);
+
   // WebSocket connection for real-time updates
   const pharmacyOrdersWebSocket = useRef(null); // Main pharmacy orders WebSocket
 
@@ -177,7 +202,8 @@ const PharmacyDashboard = () => {
     totalProducts: 0, // Will be updated from inventory data
     pendingOrders: orders.pending.length,
     preparingOrders: orders.preparing.length,
-    readyOrders: orders.ready.length
+    readyOrders: orders.ready.length,
+    deliveredOrders: 0
   });
 
   // Function to fetch orders from API
@@ -197,17 +223,38 @@ const PharmacyDashboard = () => {
           const preparingOrders = Array.isArray(data.orders?.preparing) ? data.orders.preparing : [];
           const readyOrders = Array.isArray(data.orders?.ready) ? data.orders.ready : [];
           
+          const deliveredOrdersRaw = Array.isArray(data.orders?.delivered) ? data.orders.delivered : [];
+          const deliveredOrdersFallback = deliveredOrdersRaw.length
+            ? deliveredOrdersRaw
+            : Object.values(data.orders || {}).reduce((acc, bucket) => {
+                if (Array.isArray(bucket)) {
+                  bucket.forEach(item => {
+                    const status = String(item?.order_status || item?.status || '').toLowerCase();
+                    if (status === 'delivered') {
+                      acc.push(item);
+                    }
+                  });
+                }
+                return acc;
+              }, []);
+
+          const deliveredOrders = deliveredOrdersFallback
+            .filter(Boolean)
+            .filter(item => String(item?.order_status || item?.status || '').toLowerCase() === 'delivered');
+
           setOrders({
             pending: pendingOrders,
             preparing: preparingOrders,
             ready: readyOrders
           });
+          setOrderHistory(deliveredOrders);
           setStats(prev => ({
             ...prev,
             totalOrders: data.totalOrders || 0,
             pendingOrders: data.pendingOrders || 0,
             preparingOrders: data.preparingOrders || 0,
-            readyOrders: data.readyOrders || 0
+            readyOrders: data.readyOrders || 0,
+            deliveredOrders: data.deliveredOrders ?? deliveredOrders.length
           }));
           console.log(`✅ Loaded ${data.totalOrders} orders from database`);
           
@@ -1530,9 +1577,17 @@ const PharmacyDashboard = () => {
   // View switching handlers
   const handleViewSwitch = (view) => {
     setActiveView(view);
-    // Clear search when switching views
-    setSearchQuery('');
-    setFilteredInventoryData(inventoryData);
+    if (view === 'menu') {
+      setSearchQuery('');
+      setFilteredInventoryData(inventoryData);
+    } else if (view === 'orders') {
+      setSearchQuery('');
+    } else if (view === 'history') {
+      setSearchQuery('');
+      if (pharmacyInfo?.id) {
+        fetchOrders(pharmacyInfo.id);
+      }
+    }
     
     if (view === 'menu') {
       fetchPharmacyInventory();
@@ -1723,6 +1778,23 @@ const PharmacyDashboard = () => {
     return `${hours}:${minutesStr} ${ampm}`;
   };
 
+  const formatDateTime = (isoString) => {
+    if (!isoString) {
+      return '—';
+    }
+    const date = new Date(isoString);
+    if (Number.isNaN(date.getTime())) {
+      return '—';
+    }
+    return date.toLocaleString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit'
+    });
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center">
@@ -1811,6 +1883,11 @@ const PharmacyDashboard = () => {
             {filteredInventoryData.totalItems} result{filteredInventoryData.totalItems !== 1 ? 's' : ''} found
           </div>
         )}
+        {activeView === 'history' && searchQuery && (
+          <div className="text-sm text-gray-600 bg-gray-100 px-3 py-1 rounded-full">
+            {filteredHistoryOrders.length} delivered order{filteredHistoryOrders.length !== 1 ? 's' : ''} found
+          </div>
+        )}
 
         <div className="flex items-center space-x-4 lg:space-x-12">
           <div className="flex items-center">
@@ -1866,10 +1943,18 @@ const PharmacyDashboard = () => {
                   <p className="text-gray-300">{stats.totalProducts} Products</p>
                 </div>
               </div>
-              <div className="flex items-center p-3 flex-1 lg:flex-none">
+              <div
+                className={`flex items-center p-3 rounded-2xl flex-1 lg:flex-none cursor-pointer transition-colors ${
+                  activeView === 'history'
+                    ? 'bg-purple-600'
+                    : 'bg-gray-700 hover:bg-gray-600'
+                }`}
+                onClick={() => handleViewSwitch('history')}
+              >
                 <img className="w-8 h-8 lg:w-10 lg:h-10 mr-2 lg:mr-3 rounded-full" src="/images/clock.svg" alt="History" />
                 <div className="text-white text-xs lg:text-sm">
                   <h3 className="font-medium">Order History</h3>
+                  <p className="text-gray-300">{stats.deliveredOrders} Delivered</p>
                 </div>
               </div>
             </div>
@@ -2052,6 +2137,112 @@ const PharmacyDashboard = () => {
                       </div>
                     ))
                   )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Order History View */}
+          {activeView === 'history' && (
+            <div className="space-y-6">
+              <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-6">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-800 mb-2">Order History</h2>
+                  <p className="text-gray-600">Review all delivered orders for this pharmacy</p>
+                </div>
+                <div className="flex items-center space-x-6 mt-4 lg:mt-0">
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-[#2c786c]">{orderHistory.length}</div>
+                    <div className="text-sm text-gray-600">Delivered Orders</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-purple-600">
+                      ₱{historyRevenue.toFixed(2)}
+                    </div>
+                    <div className="text-sm text-gray-600">
+                      {searchQuery ? 'Revenue (filtered)' : 'Total Revenue'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {ordersLoading ? (
+                <div className="bg-white rounded-2xl p-8 flex flex-col items-center justify-center space-y-3">
+                  <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#2c786c]"></div>
+                  <p className="text-gray-600">Loading delivered orders...</p>
+                </div>
+              ) : filteredHistoryOrders.length === 0 ? (
+                <div className="bg-white rounded-2xl p-10 flex flex-col items-center text-center space-y-4">
+                  <svg className="w-16 h-16 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v2h6v-2m-7-5h8m-9-5h10m-5-4v20" />
+                  </svg>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-800 mb-1">No delivered orders yet</h3>
+                    <p className="text-sm text-gray-600">
+                      {searchQuery
+                        ? `No delivered orders match "${searchQuery}". Try a different search term.`
+                        : 'Completed orders will appear here once they are delivered.'}
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {filteredHistoryOrders.map(order => {
+                    const amountDisplay = formatOrderAmountDisplay(order);
+                    const subtitleDisplay = formatOrderSubtitle(order, order.payment_method || order.paymentMethod || 'Paid');
+                    const deliveredTimestamp =
+                      order.deliveredAt ||
+                      order.delivered_at ||
+                      order.completed_at ||
+                      order.updated_at ||
+                      order.createdAt ||
+                      order.created_at;
+                    const deliveredDateDisplay = formatDateTime(deliveredTimestamp);
+
+                    return (
+                      <div
+                        key={`history-${order.id}`}
+                        className="flex flex-col lg:flex-row justify-between items-start lg:items-center bg-white rounded-2xl p-4 lg:p-3 lg:px-20 space-y-3 lg:space-y-0"
+                      >
+                        <div className="text-center lg:text-left">
+                          <div className="flex items-center justify-center lg:justify-start space-x-2">
+                            <h3 className="text-base lg:text-lg font-medium">Order #{order.id}</h3>
+                            <span className="text-xs px-2 py-1 rounded-full bg-green-100 text-green-700 font-semibold uppercase tracking-wide">
+                              Delivered
+                            </span>
+                          </div>
+                          <p className="text-gray-600 text-xs lg:text-sm mt-1">{deliveredDateDisplay}</p>
+                        </div>
+                        <div className="flex items-center">
+                          <img className="w-6 h-6 lg:w-8 lg:h-8 mr-2 lg:mr-3" src="/images/human.png" alt="Customer" />
+                          <div className="text-left">
+                            <h3 className="text-sm lg:text-lg font-medium">{order.customerName || 'Customer'}</h3>
+                            <p className="text-gray-600 text-xs lg:text-sm">
+                              {order.payment_method || order.paymentMethod || 'Paid on Delivery'}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="text-center">
+                          <h3 className="text-sm lg:text-lg font-medium">
+                            {order.items?.length || 0} item{(order.items?.length || 0) !== 1 ? 's' : ''}
+                          </h3>
+                          <p className="text-gray-600 text-xs lg:text-sm">Prescription {order.isPrescriptionOrder ? 'Yes' : 'No'}</p>
+                        </div>
+                        <div className="text-center">
+                          <h3 className="text-sm lg:text-lg font-medium">{amountDisplay}</h3>
+                          <p className="text-gray-600 text-xs lg:text-sm">{subtitleDisplay}</p>
+                        </div>
+                        <div className="text-center w-full lg:w-auto">
+                          <button
+                            onClick={() => handleViewOrder(order)}
+                            className="w-full lg:w-auto bg-purple-600 text-white px-6 lg:px-10 py-2 lg:py-3 rounded-2xl text-sm lg:text-lg cursor-pointer hover:bg-purple-700 transition-colors"
+                          >
+                            View Details
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
