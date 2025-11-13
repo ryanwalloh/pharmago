@@ -4,11 +4,14 @@
 # Note: Nixpacks automatically detects Python and requirements.txt
 # We only override the build phase (collectstatic) and start phase (migrations + daphne)
 
+[phases.setup]
+aptPkgs = ["redis-tools"]
+
 [phases.build]
 cmds = [
     "python manage.py collectstatic --noinput --clear"
 ]
 
 [start]
-cmd = "python manage.py migrate --noinput && daphne -b 0.0.0.0 -p $PORT --application-close-timeout 30 --ping-interval 20 --ping-timeout 10 pharmago.asgi:application"
+cmd = "bash ./scripts/start_server.sh"
 
