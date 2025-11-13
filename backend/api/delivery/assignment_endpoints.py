@@ -7,7 +7,7 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from django.utils import timezone
-from django.db import transaction
+from django.db import transaction, models
 from channels.db import database_sync_to_async
 from api.delivery.models import RiderAssignment, OrderRiderAssignment
 from api.orders.models import Order
@@ -141,6 +141,161 @@ async def get_assignment_details(request, assignment_id):
             'success': False,
             'error': 'Failed to retrieve assignment details'
         }, status=500)
+
+
+@csrf_exempt
+@require_http_methods(["GET"])
+async def get_rider_assignment_history(request):
+    """
+    Return completed assignments for a rider with per-order delivery details.
+    Supports basic pagination via limit/offset query params.
+    """
+    rider_id = request.GET.get('rider_id')
+    limit_param = request.GET.get('limit')
+    offset_param = request.GET.get('offset')
+
+    if not rider_id:
+        return JsonResponse(
+            {
+                'success': False,
+                'error': 'rider_id query parameter is required',
+            },
+            status=400,
+        )
+
+    try:
+        rider_id_int = int(rider_id)
+    except (TypeError, ValueError):
+        return JsonResponse(
+            {
+                'success': False,
+                'error': 'rider_id must be an integer',
+            },
+            status=400,
+        )
+
+    try:
+        limit = max(1, min(int(limit_param), 100)) if limit_param is not None else 20
+    except (TypeError, ValueError):
+        limit = 20
+
+    try:
+        offset = max(0, int(offset_param)) if offset_param is not None else 0
+    except (TypeError, ValueError):
+        offset = 0
+
+    @database_sync_to_async
+    def fetch_history():
+        try:
+            assignments_qs = (
+                RiderAssignment.objects.filter(
+                    rider_id=rider_id_int,
+                    status=RiderAssignment.AssignmentStatus.COMPLETED,
+                )
+                .select_related('rider')
+                .prefetch_related(
+                    models.Prefetch(
+                        'order_assignments',
+                        queryset=OrderRiderAssignment.objects.select_related(
+                            'order',
+                            'order__customer',
+                            'order__customer__user',
+                            'order__delivery_address',
+                        ).order_by('delivery_sequence'),
+                    )
+                )
+                .order_by('-completed_at', '-updated_at', '-created_at')
+            )
+
+            total_count = assignments_qs.count()
+            assignments = assignments_qs[offset: offset + limit]
+
+            history_entries = []
+            for assignment in assignments:
+                order_payload = []
+                for order_assignment in assignment.order_assignments.all():
+                    order_obj = order_assignment.order
+                    delivery_addr = getattr(order_obj, 'delivery_address', None)
+                    order_payload.append(
+                        {
+                            'order_id': order_obj.id,
+                            'order_number': order_obj.order_number,
+                            'order_status': order_obj.order_status,
+                            'delivery_fee': float(order_obj.delivery_fee)
+                            if order_obj.delivery_fee
+                            else 0.0,
+                            'picked_up_at': order_assignment.picked_up_at.isoformat()
+                            if order_assignment.picked_up_at
+                            else None,
+                            'delivered_at': order_assignment.delivered_at.isoformat()
+                            if order_assignment.delivered_at
+                            else None,
+                            'pickup_sequence': order_assignment.pickup_sequence,
+                            'delivery_sequence': order_assignment.delivery_sequence,
+                            'delivery_address': {
+                                'street_address': getattr(delivery_addr, 'street_address', ''),
+                                'barangay': getattr(delivery_addr, 'barangay', ''),
+                                'city': getattr(delivery_addr, 'city', ''),
+                                'full_address': getattr(delivery_addr, 'full_address', ''),
+                            },
+                            'customer': {
+                                'name': getattr(order_obj.customer, 'full_name', 'Unknown'),
+                                'phone': getattr(
+                                    getattr(order_obj.customer, 'user', None),
+                                    'phone_number',
+                                    None,
+                                ),
+                            },
+                            'proof_of_delivery_url': order_assignment.proof_of_delivery_url,
+                        }
+                    )
+
+                history_entries.append(
+                    {
+                        'assignment_id': assignment.assignment_id,
+                        'assignment_db_id': assignment.id,
+                        'completed_at': assignment.completed_at.isoformat()
+                        if assignment.completed_at
+                        else assignment.updated_at.isoformat()
+                        if assignment.updated_at
+                        else None,
+                        'started_delivery_at': assignment.started_delivery_at.isoformat()
+                        if assignment.started_delivery_at
+                        else None,
+                        'batch_size': assignment.batch_size,
+                        'assignment_type': assignment.assignment_type,
+                        'rider_earnings': float(assignment.rider_earnings)
+                        if assignment.rider_earnings
+                        else 0.0,
+                        'total_delivery_fee': float(assignment.total_delivery_fee)
+                        if assignment.total_delivery_fee
+                        else 0.0,
+                        'notes': assignment.notes,
+                        'orders': order_payload,
+                    }
+                )
+
+            return 200, {
+                'success': True,
+                'count': len(history_entries),
+                'total_count': total_count,
+                'offset': offset,
+                'limit': limit,
+                'assignments': history_entries,
+            }
+
+        except Exception as exc:
+            logger.error(
+                f"❌ Error fetching rider assignment history for rider {rider_id_int}: {exc}",
+                exc_info=True,
+            )
+            return 500, {
+                'success': False,
+                'error': 'Failed to load rider assignment history',
+            }
+
+    status_code, payload = await fetch_history()
+    return JsonResponse(payload, status=status_code)
 
 
 @csrf_exempt
