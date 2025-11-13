@@ -3,6 +3,7 @@ import json
 from django.utils.deprecation import MiddlewareMixin
 from django.contrib.auth.models import AnonymousUser
 from .models import ApiUsage
+from .utils import telemetry_writes_enabled
 
 
 class ApiUsageTrackingMiddleware(MiddlewareMixin):
@@ -27,6 +28,9 @@ class ApiUsageTrackingMiddleware(MiddlewareMixin):
                 return response
         except Exception:
             pass
+
+        if not telemetry_writes_enabled():
+            return response
         try:
             # Calculate response time
             if hasattr(request, 'start_time'):
@@ -109,7 +113,7 @@ class SystemHealthMiddleware(MiddlewareMixin):
         current_time = time.time()
         
         # Only perform health checks periodically
-        if current_time - self.last_health_check > self.health_check_interval:
+        if telemetry_writes_enabled() and current_time - self.last_health_check > self.health_check_interval:
             try:
                 from .signals import perform_system_health_checks
                 perform_system_health_checks()

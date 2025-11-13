@@ -22,6 +22,7 @@ from openpyxl import Workbook, load_workbook
 
 from api.core.permissions import IsOwnerOrReadOnly
 from .models import SystemHealth, ApiUsage, GlobalSearchLog, BulkOperationLog
+from .utils import telemetry_writes_enabled
 from .serializers import (
     SystemHealthSerializer, SystemHealthCreateSerializer, SystemHealthUpdateSerializer,
     SystemHealthListSerializer, SystemHealthDetailSerializer,
@@ -106,13 +107,14 @@ class SystemHealthViewSet(viewsets.ModelViewSet):
             ('overall', overall_status, 'Overall system health')
         ]
         
-        for component, status_val, message in components:
-            SystemHealth.objects.create(
-                component=component,
-                status=status_val,
-                message=message,
-                response_time=db_response_time if component == 'database' else None
-            )
+        if telemetry_writes_enabled():
+            for component, status_val, message in components:
+                SystemHealth.objects.create(
+                    component=component,
+                    status=status_val,
+                    message=message,
+                    response_time=db_response_time if component == 'database' else None
+                )
         
         return Response({
             'overall_status': overall_status,
