@@ -29,6 +29,7 @@ urlpatterns = [
     
     # Manual Order Acceptance (from available orders list)
     path('rider/manual-accept-orders/', delivery_rider_endpoints.manual_accept_orders),
+    path('rider/assignment-history/', assignment_endpoints.get_rider_assignment_history),
     
     # Assignment Details Endpoint
     path('assignment/<int:assignment_id>/', assignment_endpoints.get_assignment_details),

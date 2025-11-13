@@ -598,6 +598,22 @@ class ApiService {
     });
   }
 
+  async getRiderAssignmentHistory(
+    riderId: number,
+    options?: { limit?: number; offset?: number }
+  ): Promise<ApiResponse<any>> {
+    const params: string[] = [`rider_id=${encodeURIComponent(String(riderId))}`];
+    if (options?.limit !== undefined) {
+      params.push(`limit=${encodeURIComponent(String(options.limit))}`);
+    }
+    if (options?.offset !== undefined) {
+      params.push(`offset=${encodeURIComponent(String(options.offset))}`);
+    }
+
+    const queryString = params.length ? `?${params.join('&')}` : '';
+    return this.makeDirectRequest(`/rider/assignment-history/${queryString}`);
+  }
+
   // Manual order acceptance (rider accepts from available orders list)
   async acceptManualOrders(riderId: number, orderIds: number[]): Promise<ApiResponse<any>> {
     console.log('📦 Manually accepting orders:', { riderId, orderIds });
