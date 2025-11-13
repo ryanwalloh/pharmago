@@ -191,8 +191,8 @@ async def accept_dispatch_offer(request):
         if status_code == 200:
             logger.info(f"✅ Rider {rider_id} accepted offer {offer_id}")
             try:
-                from api.delivery.websocket_service import broadcast_rider_order_count_update
-                broadcast_rider_order_count_update()
+                from api.delivery.websocket_service import broadcast_rider_order_count_update_async
+                await broadcast_rider_order_count_update_async()
                 logger.info(f"📡 Broadcasted order count update to riders (offer {offer_id} accepted)")
             except Exception as e:
                 logger.warning(f"Failed to broadcast order count update: {str(e)}")
@@ -633,40 +633,65 @@ async def manual_accept_orders(request):
             try:
                 rider = Rider.objects.get(id=rider_id)
             except Rider.DoesNotExist:
-                return {'error': JsonResponse({
-                    'success': False,
-                    'error': 'Rider not found'
-                }, status=404)}
+                return (
+                    {
+                        'error': JsonResponse({
+                            'success': False,
+                            'error': 'Rider not found'
+                        }, status=404)
+                    },
+                    False,
+                )
 
             if rider.status != Rider.RiderStatus.APPROVED:
-                return {'error': JsonResponse({
-                    'success': False,
-                    'error': 'Rider is not approved'
-                }, status=403)}
+                return (
+                    {
+                        'error': JsonResponse({
+                            'success': False,
+                            'error': 'Rider is not approved'
+                        }, status=403)
+                    },
+                    False,
+                )
 
             orders = Order.objects.filter(id__in=order_ids).select_related('delivery_address')
 
             if orders.count() != len(order_ids):
-                return {'error': JsonResponse({
-                    'success': False,
-                    'error': 'Some orders not found'
-                }, status=404)}
+                return (
+                    {
+                        'error': JsonResponse({
+                            'success': False,
+                            'error': 'Some orders not found'
+                        }, status=404)
+                    },
+                    False,
+                )
 
             for order in orders:
                 if order.is_assigned_to_rider():
-                    return {'error': JsonResponse({
-                        'success': False,
-                        'error': f'Order {order.order_number} is already assigned to another rider'
-                    }, status=400)}
+                    return (
+                        {
+                            'error': JsonResponse({
+                                'success': False,
+                                'error': f'Order {order.order_number} is already assigned to another rider'
+                            }, status=400)
+                        },
+                        False,
+                    )
                 if order.order_status not in [
                     Order.OrderStatus.ACCEPTED,
                     Order.OrderStatus.PREPARING,
                     Order.OrderStatus.READY_FOR_PICKUP
                 ]:
-                    return {'error': JsonResponse({
-                        'success': False,
-                        'error': f'Order {order.order_number} is not available for pickup (status: {order.order_status})'
-                    }, status=400)}
+                    return (
+                        {
+                            'error': JsonResponse({
+                                'success': False,
+                                'error': f'Order {order.order_number} is not available for pickup (status: {order.order_status})'
+                            }, status=400)
+                        },
+                        False,
+                    )
 
             from decimal import Decimal
 
@@ -699,25 +724,29 @@ async def manual_accept_orders(request):
 
                 logger.info(f"✅ Rider {rider_id} manually accepted {len(orders)} order(s) - Assignment: {assignment_id}")
 
-                try:
-                    from api.delivery.websocket_service import broadcast_rider_order_count_update
-                    broadcast_rider_order_count_update()
-                    logger.info(f"📡 Broadcasted order count update (manual acceptance)")
-                except Exception as e:
-                    logger.warning(f"Failed to broadcast order count update: {str(e)}")
+                return (
+                    {
+                        'success': True,
+                        'assignment_id': assignment.id,
+                        'assignment_number': assignment_id,
+                        'orders_count': len(orders),
+                        'total_earnings': float(rider_earnings),
+                        'is_batch': is_batch
+                    },
+                    True,
+                )
 
-                return {
-                    'success': True,
-                    'assignment_id': assignment.id,
-                    'assignment_number': assignment_id,
-                    'orders_count': len(orders),
-                    'total_earnings': float(rider_earnings),
-                    'is_batch': is_batch
-                }
-
-        result = await process_manual_acceptance()
+        result, should_broadcast = await process_manual_acceptance()
         if 'error' in result:
             return result['error']
+
+        if should_broadcast:
+            try:
+                from api.delivery.websocket_service import broadcast_rider_order_count_update_async
+                await broadcast_rider_order_count_update_async()
+                logger.info("📡 Broadcasted order count update (manual acceptance)")
+            except Exception as e:
+                logger.warning(f"Failed to broadcast order count update: {str(e)}")
 
         return JsonResponse(result, status=200)
 
