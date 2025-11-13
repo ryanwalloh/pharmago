@@ -2,9 +2,11 @@
 WebSocket notification service for order tracking.
 Broadcasts updates to customers when order status changes or rider location updates.
 """
+import asyncio
 import logging
-from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
+from channels.db import database_sync_to_async
+from channels.layers import get_channel_layer
 
 logger = logging.getLogger(__name__)
 
@@ -220,6 +222,30 @@ class RiderOrderCountWebSocket:
     """Service for broadcasting available order count updates to all riders."""
     
     @staticmethod
+    def _calculate_current_count_sync():
+        from api.orders.models import Order
+
+        available_orders = Order.objects.filter(
+            order_status__in=[
+                Order.OrderStatus.ACCEPTED,
+                Order.OrderStatus.PREPARING,
+                Order.OrderStatus.READY_FOR_PICKUP,
+            ]
+        )
+
+        unassigned_orders = [order for order in available_orders if not order.is_assigned_to_rider()]
+        count = len(unassigned_orders)
+        logger.debug(f"📦 Calculated available orders count (sync): {count}")
+        return count
+
+    @staticmethod
+    async def _calculate_current_count_async():
+        return await database_sync_to_async(
+            RiderOrderCountWebSocket._calculate_current_count_sync,
+            thread_sensitive=True,
+        )()
+
+    @staticmethod
     def broadcast_order_count(count):
         """
         Broadcast updated order count to all connected riders.
@@ -229,64 +255,69 @@ class RiderOrderCountWebSocket:
             count: Current count of available orders
         """
         try:
-            channel_layer = get_channel_layer()
-            group_name = 'rider_order_count'
-            
-            async_to_sync(channel_layer.group_send)(
-                group_name,
-                {
-                    'type': 'order_count_update',
-                    'count': count,
-                }
-            )
-            
+            async_to_sync(RiderOrderCountWebSocket.broadcast_order_count_async)(count)
             logger.info(f"📡 Broadcasted order count update to all riders: {count}")
             
         except Exception as e:
             logger.error(f"❌ Failed to broadcast order count: {str(e)}")
-    
+
+    @staticmethod
+    async def broadcast_order_count_async(count):
+        try:
+            channel_layer = get_channel_layer()
+            group_name = 'rider_order_count'
+            await channel_layer.group_send(
+                group_name,
+                {
+                    'type': 'order_count_update',
+                    'count': count,
+                },
+            )
+            logger.info(f"📡 Broadcasted order count update to all riders (async): {count}")
+        except Exception as e:
+            logger.error(f"❌ Failed to broadcast order count (async): {str(e)}")
+
     @staticmethod
     def get_current_count():
         """
-        Calculate current available order count.
-        Same logic as the polling endpoint.
+        Calculate current available order count (synchronous variant).
         """
         try:
-            from api.orders.models import Order
-            
-            # Get orders that are accepted, preparing, or ready for pickup - but not assigned to a rider
-            available_orders = Order.objects.filter(
-                order_status__in=[
-                    Order.OrderStatus.ACCEPTED,
-                    Order.OrderStatus.PREPARING,
-                    Order.OrderStatus.READY_FOR_PICKUP
-                ]
-            )
-            
-            # Filter out orders that already have rider assignments
-            unassigned_orders = [order for order in available_orders if not order.is_assigned_to_rider()]
-            
-            count = len(unassigned_orders)
-            
-            logger.debug(f"📦 Calculated available orders count: {count}")
-            
-            return count
-            
+            return RiderOrderCountWebSocket._calculate_current_count_sync()
         except Exception as e:
             logger.error(f"❌ Error calculating order count: {str(e)}", exc_info=True)
+            return 0
+
+    @staticmethod
+    async def get_current_count_async():
+        """
+        Calculate current available order count (async-safe variant).
+        """
+        try:
+            return await RiderOrderCountWebSocket._calculate_current_count_async()
+        except Exception as e:
+            logger.error(f"❌ Error calculating order count (async): {str(e)}", exc_info=True)
             return 0
     
     @staticmethod
     def broadcast_current_count():
         """
-        Calculate and broadcast current order count.
+        Calculate and broadcast current order count (synchronous variant).
         Convenience method that combines get_current_count() and broadcast_order_count().
         """
         count = RiderOrderCountWebSocket.get_current_count()
         RiderOrderCountWebSocket.broadcast_order_count(count)
         return count
 
-
+    @staticmethod
+    async def broadcast_current_count_async():
+        """
+        Calculate and broadcast current order count (async-safe variant).
+        """
+        count = await RiderOrderCountWebSocket.get_current_count_async()
+        await RiderOrderCountWebSocket.broadcast_order_count_async(count)
+        return count
+    
 # Convenience function for quick access
 def broadcast_rider_order_count_update():
     """
@@ -294,3 +325,10 @@ def broadcast_rider_order_count_update():
     Call this whenever orders change status that affects availability.
     """
     return RiderOrderCountWebSocket.broadcast_current_count()
+
+
+async def broadcast_rider_order_count_update_async():
+    """
+    Async-safe variant of broadcast_rider_order_count_update.
+    """
+    return await RiderOrderCountWebSocket.broadcast_current_count_async()
