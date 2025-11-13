@@ -106,6 +106,12 @@ const DispatchOfferCard: React.FC<DispatchOfferCardProps> = ({
 
   const actionButtonBase = variant === 'compact' ? styles.compactAction : styles.fullAction;
 
+  const singleOrder = !offer.is_batch && offer.order ? offer.order : null;
+  const pickupName = singleOrder?.pharmacy?.name || 'Unknown Pharmacy';
+  const pickupAddress = singleOrder?.pharmacy?.address || '';
+  const customerName = singleOrder?.customer_name || 'Customer';
+  const customerAddress = singleOrder?.delivery_address || '';
+
   return (
     <View style={wrapperStyles}>
       <View style={styles.header}>
@@ -135,43 +141,55 @@ const DispatchOfferCard: React.FC<DispatchOfferCardProps> = ({
       </View>
 
       <View style={styles.detailsSection}>
-        {!offer.is_batch && offer.order ? (
+        {singleOrder ? (
           <>
             <View style={styles.detailRow}>
-              <Ionicons name="document-text" size={18} color="#666" />
-              <Text style={styles.detailLabel}>Order #</Text>
-              <Text style={styles.detailValue}>{offer.order.order_number}</Text>
+              <Ionicons name="document-text" size={18} color="#666" style={styles.detailIcon} />
+              <View style={styles.detailContent}>
+                <Text style={styles.detailLabel}>Order #</Text>
+                <Text style={styles.detailValue}>{singleOrder.order_number}</Text>
+              </View>
             </View>
             <View style={styles.detailRow}>
-              <Ionicons name="storefront" size={18} color="#00BF63" />
-              <Text style={styles.detailLabel}>Pickup</Text>
-              <Text style={styles.detailValue} numberOfLines={1}>
-                {offer.order.pharmacy.name}
-              </Text>
+              <Ionicons name="storefront" size={18} color="#00BF63" style={styles.detailIcon} />
+              <View style={styles.detailContent}>
+                <Text style={styles.detailLabel}>Pickup</Text>
+                <Text style={styles.detailValue}>{pickupName}</Text>
+                {pickupAddress ? (
+                  <Text style={styles.detailSubValue}>{pickupAddress}</Text>
+                ) : null}
+              </View>
             </View>
             <View style={styles.detailRow}>
-              <Ionicons name="location" size={18} color="#FF6B35" />
-              <Text style={styles.detailLabel}>Deliver to</Text>
-              <Text style={styles.detailValue} numberOfLines={1}>
-                {offer.order.customer_name}
-              </Text>
+              <Ionicons name="location" size={18} color="#FF6B35" style={styles.detailIcon} />
+              <View style={styles.detailContent}>
+                <Text style={styles.detailLabel}>Deliver to</Text>
+                <Text style={styles.detailValue}>{customerName}</Text>
+                {customerAddress ? (
+                  <Text style={styles.detailSubValue}>{customerAddress}</Text>
+                ) : null}
+              </View>
             </View>
             {offer.pickup_distance_km !== null && (
               <View style={styles.detailRow}>
-                <Ionicons name="navigate" size={18} color="#666" />
-                <Text style={styles.detailLabel}>Distance</Text>
-                <Text style={styles.detailValue}>
-                  {offer.pickup_distance_km.toFixed(1)} km away
-                </Text>
+                <Ionicons name="navigate" size={18} color="#666" style={styles.detailIcon} />
+                <View style={styles.detailContent}>
+                  <Text style={styles.detailLabel}>Pickup Distance</Text>
+                  <Text style={styles.detailValue}>
+                    {offer.pickup_distance_km.toFixed(1)} km away
+                  </Text>
+                </View>
               </View>
             )}
           </>
         ) : (
           <>
             <View style={styles.detailRow}>
-              <Ionicons name="layers" size={18} color="#00BF63" />
-              <Text style={styles.detailLabel}>Orders</Text>
-              <Text style={styles.detailValue}>{offer.orders_count} orders</Text>
+              <Ionicons name="layers" size={18} color="#00BF63" style={styles.detailIcon} />
+              <View style={styles.detailContent}>
+                <Text style={styles.detailLabel}>Orders in batch</Text>
+                <Text style={styles.detailValue}>{offer.orders_count} orders</Text>
+              </View>
             </View>
             <TouchableOpacity
               style={styles.viewDetailsButton}
@@ -188,16 +206,30 @@ const DispatchOfferCard: React.FC<DispatchOfferCardProps> = ({
             </TouchableOpacity>
             {showDetails && offer.orders && (
               <View style={styles.batchList}>
-                {offer.orders.map((order, index) => (
-                  <View key={index} style={styles.batchItem}>
-                    <Text style={styles.batchTitle}>
-                      {index + 1}. {order.order_number}
-                    </Text>
-                    <Text style={styles.batchDetail}>📦 {order.pharmacy_name}</Text>
-                    <Text style={styles.batchDetail}>📍 {order.customer_name}</Text>
-                    <Text style={styles.batchEarnings}>₱{order.earnings.toFixed(2)}</Text>
-                  </View>
-                ))}
+                {offer.orders.map((order, index) => {
+                  const pharmacyName = order.pharmacy?.name ?? order.pharmacy_name ?? 'Unknown Pharmacy';
+                  const pharmacyAddress =
+                    order.pharmacy?.address ?? order.pharmacy_address ?? '';
+                  const deliveryAddress = order.delivery_address ?? '';
+                  const customerLabel = order.customer_name || 'Customer';
+
+                  return (
+                    <View key={index} style={styles.batchItem}>
+                      <Text style={styles.batchTitle}>
+                        {index + 1}. {order.order_number}
+                      </Text>
+                      <Text style={styles.batchDetailLine}>🏥 {pharmacyName}</Text>
+                      {pharmacyAddress ? (
+                        <Text style={styles.batchDetailSub}>{pharmacyAddress}</Text>
+                      ) : null}
+                      <Text style={styles.batchDetailLine}>👤 {customerLabel}</Text>
+                      {deliveryAddress ? (
+                        <Text style={styles.batchDetailSub}>{deliveryAddress}</Text>
+                      ) : null}
+                      <Text style={styles.batchEarnings}>₱{order.earnings.toFixed(2)}</Text>
+                    </View>
+                  );
+                })}
               </View>
             )}
           </>
@@ -329,27 +361,38 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E0E0E0',
     borderRadius: 12,
-    padding: 8,
+    padding: 12,
     marginBottom: 16,
     backgroundColor: '#FDFDFD',
   },
   detailRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginBottom: 12,
   },
-  detailLabel: {
-    marginLeft: 8,
-    fontSize: 13,
-    color: '#666666',
+  detailIcon: {
+    marginTop: 2,
+    marginRight: 10,
+  },
+  detailContent: {
     flex: 1,
   },
+  detailLabel: {
+    fontSize: 12,
+    color: '#666666',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
   detailValue: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '600',
     color: '#1A1A1A',
-    flex: 1,
-    textAlign: 'right',
+    marginTop: 4,
+  },
+  detailSubValue: {
+    fontSize: 12,
+    color: '#4B5563',
+    marginTop: 2,
   },
   viewDetailsButton: {
     flexDirection: 'row',
@@ -380,9 +423,14 @@ const styles = StyleSheet.create({
     color: '#1A1A1A',
     marginBottom: 4,
   },
-  batchDetail: {
+  batchDetailLine: {
     fontSize: 12,
     color: '#666666',
+  },
+  batchDetailSub: {
+    fontSize: 12,
+    color: '#4B5563',
+    marginTop: 2,
   },
   batchEarnings: {
     fontSize: 13,

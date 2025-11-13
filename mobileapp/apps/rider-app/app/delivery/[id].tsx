@@ -690,13 +690,15 @@ export default function ActiveDeliveryScreen() {
           // Store earnings data
           setDeliveredOrderEarnings(responseData.order_earnings || 0);
           setTotalEarnings(responseData.total_earnings || 0);
-          setAllDelivered(responseData.all_delivered || false);
+          const delivered = Boolean(responseData.all_delivered);
+          setAllDelivered(delivered);
           
           // Refresh delivery data
           await fetchDeliveryData();
           
-          // Show success modal
-          setShowSuccessModal(true);
+          if (delivered) {
+            setShowSuccessModal(true);
+          }
         } else {
           Alert.alert('Error', (response as any).error || 'Failed to mark as delivered');
         }
@@ -778,21 +780,16 @@ export default function ActiveDeliveryScreen() {
             description={order.delivery_address.street_address}
             anchor={{ x: 0.5, y: 1 }}
           >
-                <View style={styles.markerImageContainer}>
-                  <Image
-                    source={require('../../assets/CustomerCustomMarker.png')}
-                    style={[
-                      styles.markerImage,
-                      order.is_delivered && styles.deliveredMarker,
-                    ]}
-                    resizeMode="contain"
-                  />
-                  {deliveryData.is_batch && (
-                    <View style={styles.markerBadge}>
-                      <Text style={styles.markerBadgeText}>{index + 1}</Text>
-                    </View>
-                  )}
-                </View>
+            <View style={styles.markerImageContainer}>
+              <Image
+                source={require('../../assets/CustomerCustomMarker.png')}
+                style={[
+                  styles.markerImage,
+                  order.is_delivered && styles.deliveredMarker,
+                ]}
+                resizeMode="contain"
+              />
+            </View>
           </Marker>
         ))}
 
@@ -1071,22 +1068,6 @@ const getStyles = () => StyleSheet.create({
   },
   deliveredMarker: {
     opacity: 0.55,
-  },
-  markerBadge: {
-    position: 'absolute',
-    top: -6,
-    right: -6,
-    backgroundColor: '#00BF63',
-    borderRadius: 12,
-    width: 22,
-    height: 22,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  markerBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '700',
   },
   bottomSheet: {
     flex: 1,
