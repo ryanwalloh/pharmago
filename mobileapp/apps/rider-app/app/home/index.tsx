@@ -1,9 +1,9 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  ScrollView, 
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
   TouchableOpacity,
   Image,
   ImageBackground,
@@ -11,6 +11,7 @@ import {
   Alert
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useFonts } from 'expo-font';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { apiService } from '../../../customer-app/services/api';
 import { dispatchService, DispatchOffer } from '../../../customer-app/services/dispatchService';
@@ -33,12 +34,89 @@ interface RiderUser {
   role: string;
 }
 
+interface RecentTransaction {
+  id: string;
+  type: string;
+  time: string;
+  amount: number;
+}
+
+const RECENT_TRANSACTIONS_CACHE_TTL_MINUTES = 5;
+const getRecentTransactionsCacheKey = (riderId: number) =>
+  `rider_recent_transactions_${riderId}`;
+
+const formatTransactionTime = (timestamp: string | null) => {
+  if (!timestamp) {
+    return 'Completion time unavailable';
+  }
+
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) {
+    return 'Completion time unavailable';
+  }
+
+  const now = new Date();
+  const isToday = date.toDateString() === now.toDateString();
+
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  const isYesterday = date.toDateString() === yesterday.toDateString();
+
+  const timeString = date.toLocaleTimeString(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+
+  if (isToday) {
+    return `Today, ${timeString}`;
+  }
+
+  if (isYesterday) {
+    return `Yesterday, ${timeString}`;
+  }
+
+  return date.toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+};
+
+const mapAssignmentToTransaction = (assignment: any): RecentTransaction => {
+  const orders = Array.isArray(assignment.orders) ? assignment.orders : [];
+  const ordersCount = orders.length;
+  const isBatch = String(assignment.assignment_type || '').toLowerCase() === 'batch';
+
+  let typeLabel = 'Delivery completed';
+  if (isBatch && ordersCount > 1) {
+    typeLabel = `${ordersCount} batch deliveries`;
+  } else if (ordersCount > 1) {
+    typeLabel = `${ordersCount} deliveries completed`;
+  } else if (ordersCount === 1) {
+    const orderNumber = orders[0]?.order_number;
+    typeLabel = orderNumber ? `Delivered ${orderNumber}` : 'Single delivery completed';
+  }
+
+  return {
+    id: String(assignment.assignment_db_id ?? assignment.assignment_id ?? Math.random()),
+    type: typeLabel,
+    time: formatTransactionTime(assignment.completed_at),
+    amount: typeof assignment.rider_earnings === 'number'
+      ? assignment.rider_earnings
+      : Number(assignment.rider_earnings || 0),
+  };
+};
+
 export default function RiderHome() {
   const router = useRouter();
+  const [fontsLoaded] = useFonts({
+    'Nexa-ExtraLight': require('../../assets/fonts/Nexa-ExtraLight.ttf'),
+    'Nexa-Heavy': require('../../assets/fonts/Nexa-Heavy.ttf'),
+  });
   const [user, setUser] = useState<RiderUser | null>(null);
   const [riderProfile, setRiderProfile] = useState<any>(null);
   const [isOnline, setIsOnline] = useState(true);
-  const [totalEarnings, setTotalEarnings] = useState(1247.50);
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [stats, setStats] = useState({
     totalDeliveries: 342,
@@ -46,6 +124,17 @@ export default function RiderHome() {
   });
   const [availableOrdersCount, setAvailableOrdersCount] = useState(0);
   const [orderCountConnected, setOrderCountConnected] = useState(false);
+  const [weatherLoading, setWeatherLoading] = useState(true);
+  const [weatherError, setWeatherError] = useState<string | null>(null);
+  const [weatherInfo, setWeatherInfo] = useState<{
+    temperature: number;
+    description: string;
+    friendlyMessage: string;
+    precipitationChance: number | null;
+  } | null>(null);
+  const [recentTransactions, setRecentTransactions] = useState<RecentTransaction[]>([]);
+  const [recentTransactionsLoading, setRecentTransactionsLoading] = useState<boolean>(false);
+  const [recentTransactionsError, setRecentTransactionsError] = useState<string | null>(null);
 
   // Dispatch Offer Modal State
   const [currentDispatchOffer, setCurrentDispatchOffer] = useState<DispatchOffer | null>(null);
@@ -53,13 +142,6 @@ export default function RiderHome() {
   const [acceptingOffer, setAcceptingOffer] = useState(false);
   const [rejectingOffer, setRejectingOffer] = useState(false);
   
-  // Mock data
-  const recentTransactions = [
-    { id: 1, type: '5 batch deliveries', time: 'Today, 1:23pm', amount: 120.90 },
-    { id: 2, type: '3 batch deliveries', time: 'Today, 10:15am', amount: 85.50 },
-    { id: 3, type: '7 batch deliveries', time: 'Yesterday, 4:32pm', amount: 156.20 },
-  ];
-
   const loadRiderData = async () => {
     try {
       // Try to load complete session first
@@ -76,7 +158,6 @@ export default function RiderHome() {
             totalDeliveries: session.stats.total_deliveries || 342,
             rating: session.stats.rating || 4.8,
           });
-          setTotalEarnings(session.stats.total_earnings || 1247.50);
         }
         
         console.log('✅ Session loaded:', {
@@ -107,7 +188,6 @@ export default function RiderHome() {
           totalDeliveries: parsedStats.total_deliveries || 342,
           rating: parsedStats.rating || 4.8,
         });
-        setTotalEarnings(parsedStats.total_earnings || 1247.50);
       }
     } catch (error) {
       console.error('Failed to load rider data:', error);
@@ -356,6 +436,256 @@ export default function RiderHome() {
   // Capitalize first letter of rider's name
   const capitalizedRiderName = riderFirstName.charAt(0).toUpperCase() + riderFirstName.slice(1).toLowerCase();
 
+  const getWeatherDescription = (code: number) => {
+    const descriptions: Record<number, string> = {
+      0: 'Clear sky',
+      1: 'Mostly clear',
+      2: 'Partly cloudy',
+      3: 'Overcast',
+      45: 'Foggy',
+      48: 'Rime fog',
+      51: 'Light drizzle',
+      53: 'Moderate drizzle',
+      55: 'Dense drizzle',
+      56: 'Freezing drizzle',
+      57: 'Freezing drizzle',
+      61: 'Light rain',
+      63: 'Moderate rain',
+      65: 'Heavy rain',
+      66: 'Freezing rain',
+      67: 'Freezing rain',
+      71: 'Light snow',
+      73: 'Moderate snow',
+      75: 'Heavy snow',
+      77: 'Snow grains',
+      80: 'Light showers',
+      81: 'Moderate showers',
+      82: 'Heavy showers',
+      85: 'Snow showers',
+      86: 'Snow showers',
+      95: 'Thunderstorm',
+      96: 'Thunderstorm & hail',
+      99: 'Severe thunderstorm'
+    };
+
+    return descriptions[code] || 'Weather unavailable';
+  };
+
+  const getFriendlyWeatherMessage = (code: number, precipitationChance: number | null, temperature: number) => {
+    if (precipitationChance !== null) {
+      if (precipitationChance >= 70) {
+        return `${precipitationChance}% chance of rain, bring your raincoat!`;
+      }
+      if (precipitationChance >= 40) {
+        return `${precipitationChance}% chance of showers, stay alert on the road.`;
+      }
+    }
+
+    if (temperature >= 34) {
+      return 'It\'s a hot day, stay hydrated between trips!';
+    }
+    if (temperature <= 24) {
+      return 'Cool breeze today, perfect for smooth deliveries.';
+    }
+
+    const codeGroups: Record<string, number[]> = {
+      thunderstorms: [95, 96, 99],
+      heavyRain: [65, 67, 82],
+      lightRain: [61, 63, 80, 81],
+      drizzleFog: [45, 48, 51, 53, 55, 56, 57],
+      snow: [71, 73, 75, 77, 85, 86],
+      clear: [0, 1],
+      clouds: [2, 3]
+    };
+
+    if (codeGroups.thunderstorms.includes(code)) {
+      return 'Stormy skies ahead, plan safe routes and take it slow.';
+    }
+    if (codeGroups.heavyRain.includes(code)) {
+      return 'Heavy rain incoming, double-check your gear.';
+    }
+    if (codeGroups.lightRain.includes(code)) {
+      return 'Light rain outside, keep deliveries covered.';
+    }
+    if (codeGroups.drizzleFog.includes(code)) {
+      return 'Foggy vibes, keep your lights on and ride safe.';
+    }
+    if (codeGroups.snow.includes(code)) {
+      return 'Cold and slippery. Maintain extra caution out there.';
+    }
+    if (codeGroups.clear.includes(code)) {
+      return 'Bright day for deliveries, enjoy the ride!';
+    }
+    if (codeGroups.clouds.includes(code)) {
+      return 'Good day for deliveries, keep the momentum going!';
+    }
+
+    return 'Weather looks manageable, deliveries are good to go!';
+  };
+
+  const fetchRecentTransactions = useCallback(async (riderId: number) => {
+    try {
+      setRecentTransactionsLoading(true);
+      setRecentTransactionsError(null);
+
+      const response = await apiService.getRiderAssignmentHistory(riderId, {
+        limit: 5,
+        offset: 0,
+      });
+
+      if (response.success && response.data) {
+        const assignments = Array.isArray(response.data.assignments)
+          ? response.data.assignments
+          : [];
+        const mapped = assignments.slice(0, 5).map(mapAssignmentToTransaction);
+        setRecentTransactions(mapped);
+
+        try {
+          await AsyncStorage.setItem(
+            getRecentTransactionsCacheKey(riderId),
+            JSON.stringify({
+              timestamp: Date.now(),
+              entries: mapped,
+            })
+          );
+        } catch (cacheError) {
+          console.warn('⚠️ Failed to write recent transactions cache', cacheError);
+        }
+      } else {
+        setRecentTransactions([]);
+        setRecentTransactionsError(response.error || response.message || 'Unable to load recent deliveries.');
+      }
+    } catch (error) {
+      console.error('❌ Failed to load recent transactions:', error);
+      setRecentTransactions([]);
+      setRecentTransactionsError(
+        error instanceof Error ? error.message : 'Unable to load recent deliveries.'
+      );
+    } finally {
+      setRecentTransactionsLoading(false);
+    }
+  }, []);
+
+  const hydrateRecentTransactionsFromCache = useCallback(
+    async (riderId: number): Promise<boolean> => {
+      try {
+        const cacheKey = getRecentTransactionsCacheKey(riderId);
+        const cachedRaw = await AsyncStorage.getItem(cacheKey);
+        if (!cachedRaw) {
+          return false;
+        }
+
+        const cached = JSON.parse(cachedRaw);
+        if (!cached || !Array.isArray(cached.entries) || !cached.timestamp) {
+          return false;
+        }
+
+        const cacheAgeMinutes = (Date.now() - Number(cached.timestamp)) / (1000 * 60);
+        setRecentTransactions(cached.entries as RecentTransaction[]);
+        setRecentTransactionsError(null);
+        setRecentTransactionsLoading(false);
+
+        return cacheAgeMinutes <= RECENT_TRANSACTIONS_CACHE_TTL_MINUTES;
+      } catch (error) {
+        console.warn('⚠️ Failed to hydrate recent transactions cache', error);
+        return false;
+      }
+    },
+    []
+  );
+
+  useEffect(() => {
+    const fetchWeather = async () => {
+      try {
+        setWeatherLoading(true);
+        setWeatherError(null);
+
+        const response = await fetch(
+          'https://api.open-meteo.com/v1/forecast?latitude=8.2325853&longitude=124.2680082&current_weather=true&hourly=precipitation_probability,weather_code&forecast_days=1&timezone=auto'
+        );
+
+        if (!response.ok) {
+          throw new Error(`Weather request failed with status ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        if (!data?.current_weather) {
+          throw new Error('Weather data missing from response');
+        }
+
+        const currentWeather = data.current_weather;
+        const weatherCode: number = currentWeather.weathercode;
+        const temperature: number = currentWeather.temperature;
+
+        let precipitationChance: number | null = null;
+
+        if (data.hourly?.time && data.hourly.precipitation_probability) {
+          const currentTimeIndex = data.hourly.time.indexOf(currentWeather.time);
+          if (currentTimeIndex !== -1) {
+            const chance = data.hourly.precipitation_probability[currentTimeIndex];
+            if (typeof chance === 'number') {
+              precipitationChance = chance;
+            }
+          }
+        }
+
+        const description = getWeatherDescription(weatherCode);
+        const friendlyMessage = getFriendlyWeatherMessage(weatherCode, precipitationChance, temperature);
+
+        setWeatherInfo({
+          temperature,
+          description,
+          friendlyMessage,
+          precipitationChance
+        });
+      } catch (error) {
+        console.error('❌ Failed to fetch weather:', error);
+        setWeatherInfo(null);
+        setWeatherError('Weather currently unavailable. Please try again later.');
+      } finally {
+        setWeatherLoading(false);
+      }
+    };
+
+    fetchWeather();
+  }, []);
+
+  useEffect(() => {
+    const riderId = riderProfile?.id;
+    if (!riderId) {
+      return;
+    }
+
+    let isCancelled = false;
+
+    const loadRecentTransactions = async () => {
+      setRecentTransactionsLoading(true);
+      const cacheFresh = await hydrateRecentTransactionsFromCache(Number(riderId));
+      if (isCancelled) {
+        return;
+      }
+      if (!cacheFresh) {
+        fetchRecentTransactions(Number(riderId));
+      }
+    };
+
+    loadRecentTransactions();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [riderProfile?.id, fetchRecentTransactions, hydrateRecentTransactionsFromCache]);
+
+  if (!fontsLoaded) {
+    return (
+      <View style={styles.loadingContainer}>
+        <StatusBar barStyle="light-content" backgroundColor="#00BF63" />
+        <Text style={styles.loadingText}>Loading experience...</Text>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#00BF63" />
@@ -375,11 +705,25 @@ export default function RiderHome() {
           {/* Partner Name */}
           <Text style={styles.partnerTitle}>Partner {capitalizedRiderName}</Text>
           
-          {/* Your Earnings Label */}
-          <Text style={styles.earningsLabel}>YOUR EARNINGS</Text>
-          
-          {/* Total Earnings */}
-          <Text style={styles.earningsAmount}>₱{totalEarnings.toFixed(2)}</Text>
+          <View style={styles.weatherContainer}>
+            <Text style={styles.weatherCity}>Iligan City</Text>
+            {weatherLoading && (
+              <Text style={styles.weatherLoading}>Checking today&apos;s weather...</Text>
+            )}
+            {!weatherLoading && weatherInfo && (
+              <>
+                <Text style={styles.weatherTemperature}>{Math.round(weatherInfo.temperature)}°C</Text>
+                <Text style={styles.weatherDescription}>{weatherInfo.description}</Text>
+                <Text style={styles.weatherMessage}>{weatherInfo.friendlyMessage}</Text>
+              </>
+            )}
+            {!weatherLoading && weatherError && (
+              <>
+                <Text style={styles.weatherFallbackTitle}>Weather currently unavailable</Text>
+                <Text style={styles.weatherMessage}>{weatherError}</Text>
+              </>
+            )}
+          </View>
         </View>
       </ImageBackground>
 
@@ -433,25 +777,33 @@ export default function RiderHome() {
         <View style={styles.transactionsContainer}>
           <Text style={styles.transactionsTitle}>Recent Transactions</Text>
           
-          {recentTransactions.map((transaction, index) => (
-            <View key={transaction.id}>
-              <View style={styles.transactionItem}>
-                <View style={styles.transactionLeft}>
-                  <Image 
-                    source={require('../../assets/down.png')} 
-                    style={styles.transactionIcon}
-                    resizeMode="contain"
-                  />
-                  <View style={styles.transactionInfo}>
-                    <Text style={styles.transactionType}>{transaction.type}</Text>
-                    <Text style={styles.transactionTime}>{transaction.time}</Text>
+          {recentTransactionsLoading ? (
+            <Text style={styles.transactionPlaceholder}>Loading recent deliveries...</Text>
+          ) : recentTransactionsError ? (
+            <Text style={styles.transactionError}>{recentTransactionsError}</Text>
+          ) : recentTransactions.length === 0 ? (
+            <Text style={styles.transactionPlaceholder}>No completed deliveries yet.</Text>
+          ) : (
+            recentTransactions.map((transaction, index) => (
+              <View key={transaction.id}>
+                <View style={styles.transactionItem}>
+                  <View style={styles.transactionLeft}>
+                    <Image 
+                      source={require('../../assets/down.png')} 
+                      style={styles.transactionIcon}
+                      resizeMode="contain"
+                    />
+                    <View style={styles.transactionInfo}>
+                      <Text style={styles.transactionType}>{transaction.type}</Text>
+                      <Text style={styles.transactionTime}>{transaction.time}</Text>
+                    </View>
                   </View>
+                  <Text style={styles.transactionAmount}>+₱{transaction.amount.toFixed(2)}</Text>
                 </View>
-                <Text style={styles.transactionAmount}>+₱{transaction.amount.toFixed(2)}</Text>
+                {index < recentTransactions.length - 1 && <View style={styles.separator} />}
               </View>
-              {index < recentTransactions.length - 1 && <View style={styles.separator} />}
-            </View>
-          ))}
+            ))
+          )}
         </View>
 
         {/* Bottom Padding for Navigation */}
@@ -494,32 +846,72 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 20,
     marginBottom: 16,
-    bottom: 60,
+    bottom: 30,
   },
   pharmagoText: {
     fontSize: 12,
     color: '#FFFFFF',
     fontWeight: '600',
+    fontFamily: 'Nexa-Heavy',
   },
   partnerTitle: {
     fontSize: 20,
     fontWeight: '700',
     color: '#FFFFFF',
     marginBottom: 8,
-    bottom: 70,
+    bottom: 40,
+    fontFamily: 'Nexa-Heavy',
   },
-  earningsLabel: {
+  weatherContainer: {
+    backgroundColor: 'rgba(255, 255, 255, 0.18)',
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    maxWidth: 240,
+    bottom: 0,
+  },
+  weatherCity: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    letterSpacing: 0.4,
+    marginBottom: 0,
+    textTransform: 'uppercase',
+    fontFamily: 'Nexa-Heavy',
+  },
+  weatherLoading: {
     fontSize: 12,
     color: '#FFFFFF',
-    opacity: 0.8,
-    marginBottom: 4,
-    bottom: 30,
+    opacity: 0.9,
   },
-  earningsAmount: {
-    fontSize: 32,
+  weatherTemperature: {
+    fontSize: 34,
     fontWeight: '700',
     color: '#FFFFFF',
-    bottom: 40,
+    fontFamily: 'Nexa-Heavy',
+  },
+  weatherDescription: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    marginTop: 0,
+    textTransform: 'capitalize',
+    fontFamily: 'Nexa-Heavy',
+  },
+  weatherMessage: {
+    fontSize: 12,
+    color: '#FFFFFF',
+    opacity: 0.9,
+    marginTop: 2,
+    lineHeight: 16,
+    fontFamily: 'Nexa-ExtraLight',
+  },
+  weatherFallbackTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    marginTop: 2,
+    fontFamily: 'Nexa-Heavy',
   },
   scrollView: {
     flex: 1,
@@ -540,10 +932,12 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#222222',
     marginBottom: 0,
+    fontFamily: 'Nexa-Heavy',
   },
   statusSubtitle: {
     fontSize: 13,
     color: '#999999',
+    fontFamily: 'Nexa-ExtraLight',
   },
   toggleButton: {
     padding: 4,
@@ -595,11 +989,13 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     color: '#222222',
+    fontFamily: 'Nexa-Heavy',
   },
   viewDetailsLink: {
     fontSize: 12,
     color: '#00BF63',
     fontWeight: '500',
+    fontFamily: 'Nexa-Heavy',
   },
   liveBadge: {
     backgroundColor: '#FF4444',
@@ -616,6 +1012,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#FFFFFF',
     letterSpacing: 0.5,
+    fontFamily: 'Nexa-Heavy',
   },
   transactionsContainer: {
     backgroundColor: '#FFFFFF',
@@ -628,6 +1025,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#999999',
     marginBottom: 16,
+    fontFamily: 'Nexa-Heavy',
   },
   transactionItem: {
     flexDirection: 'row',
@@ -654,20 +1052,47 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#222222',
     marginBottom: 4,
+    fontFamily: 'Nexa-Heavy',
   },
   transactionTime: {
     fontSize: 12,
     color: '#999999',
+    fontFamily: 'Nexa-ExtraLight',
   },
   transactionAmount: {
     fontSize: 16,
     fontWeight: '700',
     color: '#00BF63',
+    fontFamily: 'Nexa-Heavy',
+  },
+  transactionPlaceholder: {
+    fontSize: 14,
+    color: '#999999',
+    paddingVertical: 8,
+    textAlign: 'center',
+    fontFamily: 'Nexa-ExtraLight',
+  },
+  transactionError: {
+    fontSize: 14,
+    color: '#FF5252',
+    paddingVertical: 8,
+    textAlign: 'center',
+    fontFamily: 'Nexa-Heavy',
   },
   separator: {
     height: 1,
     backgroundColor: '#F0F0F0',
     width: '90%',
     left: 44,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F5F5F5',
+  },
+  loadingText: {
+    fontSize: 14,
+    color: '#777777',
   },
 });

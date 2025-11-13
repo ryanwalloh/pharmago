@@ -159,14 +159,22 @@ class RiderLocationSocket {
       );
     }
 
-    const apiBase = process.env.EXPO_PUBLIC_API_BASE;
-    if (apiBase) {
-      const wsProtocol = apiBase.startsWith('https') ? 'wss' : 'ws';
-      const host = apiBase.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
-      return `${wsProtocol}://${host}/ws/rider/location/${riderId}/`;
-    }
+    const base =
+      (process.env.EXPO_PUBLIC_API_BASE && process.env.EXPO_PUBLIC_API_BASE.trim()) ||
+      'https://pharmago-backend-production.up.railway.app';
 
-    return `ws://localhost:8000/ws/rider/location/${riderId}/`;
+    try {
+      const parsed = new URL(base);
+      const wsProtocol = parsed.protocol === 'https:' ? 'wss:' : 'ws:';
+      return `${wsProtocol}//${parsed.host}/ws/rider/location/${riderId}/`;
+    } catch (error) {
+      console.warn('⚠️ Unable to parse API base for rider location WebSocket, using fallback hostname', {
+        base,
+        error,
+      });
+      const host = base.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+      return `wss://${host}/ws/rider/location/${riderId}/`;
+    }
   }
 
   private updateStatus(status: RiderLocationConnectionStatus) {
