@@ -38,6 +38,7 @@ DEBUG = os.getenv('DEBUG', 'True').lower() == 'true'
 # Dev performance toggles (safe defaults for development only)
 ENABLE_API_USAGE_MW = os.getenv('ENABLE_API_USAGE_MW', '0') == '1'
 ENABLE_SYSTEM_HEALTH_MW = os.getenv('ENABLE_SYSTEM_HEALTH_MW', '0') == '1'
+DISABLE_TELEMETRY_WRITES = os.getenv('DISABLE_TELEMETRY_WRITES', '0') == '1'
 DISABLE_THROTTLE = os.getenv('DISABLE_THROTTLE', '1') == '1'
 LIGHT_LOGGING = os.getenv('LIGHT_LOGGING', '1') == '1'
 DISABLE_FILE_LOG = os.getenv('DISABLE_FILE_LOG', '1') == '1'
