@@ -1,15 +1,8 @@
 import React from 'react';
-import {
-  View,
-  TouchableOpacity,
-  Image,
-  Text,
-  StyleSheet,
-  Alert,
-} from 'react-native';
+import { View, TouchableOpacity, Image, Text, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 
-type BottomNavKey = 'home' | 'navigation' | 'chat' | 'profile';
+type BottomNavKey = 'home' | 'navigation' | 'history' | 'profile';
 
 interface BottomNavProps {
   active: BottomNavKey;
@@ -24,9 +17,9 @@ const navConfig = {
     label: 'Navigation',
     icon: require('../assets/navigation.png'),
   },
-  chat: {
-    label: 'Chat',
-    icon: require('../assets/chat.png'),
+  history: {
+    label: 'History',
+    icon: require('../assets/history.png'),
   },
   profile: {
     label: 'Profile',
@@ -49,8 +42,8 @@ export default function BottomNav({ active }: BottomNavProps) {
       case 'navigation':
         router.push('/navigation/' as any);
         break;
-      case 'chat':
-        Alert.alert('Coming Soon', 'Chat will be available in a future update.');
+      case 'history':
+        router.push('/history/' as any);
         break;
       case 'profile':
         router.push('/profile/' as any);

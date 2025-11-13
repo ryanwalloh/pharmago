@@ -136,7 +136,6 @@ export default function RiderNavigation() {
   const [showDispatchCard, setShowDispatchCard] = useState(false);
   const [acceptingOffer, setAcceptingOffer] = useState(false);
   const [rejectingOffer, setRejectingOffer] = useState(false);
-  const [isRiderOnline, setIsRiderOnline] = useState(false);
 
   const googleMapsApiKey =
     Constants.expoConfig?.extra?.googleMapsApiKey ??
@@ -203,10 +202,6 @@ export default function RiderNavigation() {
           if (session?.rider?.id) {
             setRiderId(Number(session.rider.id));
           }
-          const activityStatus = session?.rider?.activity_status;
-          if (activityStatus) {
-            setIsRiderOnline(activityStatus === 'online');
-          }
         }
       } catch (error) {
         console.error('❌ Failed to load rider session:', error);
@@ -237,6 +232,11 @@ export default function RiderNavigation() {
       }
       return prev;
     });
+  }, []);
+
+  const handleOfferExpired = useCallback(() => {
+    setShowDispatchCard(false);
+    setCurrentDispatchOffer(null);
   }, []);
 
   const handleAcceptOffer = useCallback(async () => {
@@ -446,9 +446,10 @@ export default function RiderNavigation() {
 
   useFocusEffect(
     useCallback(() => {
-      if (!riderId || !isRiderOnline) {
+      if (!riderId) {
         return;
       }
+
       dispatchService.connectToDispatchChannel(
         riderId,
         handleDispatchOffer,
@@ -458,7 +459,7 @@ export default function RiderNavigation() {
       return () => {
         dispatchService.disconnect();
       };
-    }, [riderId, isRiderOnline, handleDispatchOffer, handleOfferCancelled])
+    }, [riderId, handleDispatchOffer, handleOfferCancelled])
   );
 
   const statusLabel = (() => {
@@ -556,10 +557,7 @@ export default function RiderNavigation() {
               accepting={acceptingOffer}
               rejecting={rejectingOffer}
               variant="compact"
-              onExpired={() => {
-                setShowDispatchCard(false);
-                setCurrentDispatchOffer(null);
-              }}
+              onExpired={handleOfferExpired}
             />
           </View>
         </View>
