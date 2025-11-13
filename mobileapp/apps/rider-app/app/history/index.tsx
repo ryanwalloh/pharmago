@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, Image, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useFonts } from 'expo-font';
 import { useFocusEffect } from 'expo-router';
 
 import BottomNav from '../../components/BottomNav';
@@ -56,8 +57,15 @@ const formatCurrency = (value: number) => {
   return `₱${value.toFixed(2)}`;
 };
 
+const CACHE_KEY = 'rider_history_cache';
+const CACHE_TTL_MINUTES = 5;
+
 const HistoryScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
+  const [fontsLoaded] = useFonts({
+    'Nexa-ExtraLight': require('../../assets/fonts/Nexa-ExtraLight.ttf'),
+    'Nexa-Heavy': require('../../assets/fonts/Nexa-Heavy.ttf'),
+  });
   const [riderId, setRiderId] = useState<number | null>(null);
   const [assignments, setAssignments] = useState<AssignmentHistory[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -70,6 +78,29 @@ const HistoryScreen: React.FC = () => {
     const payload = Array.isArray(data.assignments) ? data.assignments : [];
     return payload as AssignmentHistory[];
   };
+
+  const hydrateFromCache = useCallback(async (): Promise<boolean> => {
+    try {
+      const cachedRaw = await AsyncStorage.getItem(CACHE_KEY);
+      if (!cachedRaw) return false;
+
+      const cached = JSON.parse(cachedRaw);
+      if (!cached || !cached.data || !cached.timestamp) return false;
+
+      const cacheAgeMinutes =
+        (Date.now() - Number(cached.timestamp)) / (1000 * 60);
+
+      if (Array.isArray(cached.data)) {
+        setAssignments(cached.data as AssignmentHistory[]);
+        setLoading(false);
+      }
+
+      return cacheAgeMinutes <= CACHE_TTL_MINUTES;
+    } catch (error) {
+      console.warn('⚠️ Failed to hydrate history cache', error);
+      return false;
+    }
+  }, []);
 
   const fetchHistory = useCallback(
     async (options?: { silent?: boolean }) => {
@@ -93,7 +124,20 @@ const HistoryScreen: React.FC = () => {
         });
 
         if (response.success && response.data) {
-          setAssignments(parseAssignments(response.data));
+          const parsedAssignments = parseAssignments(response.data);
+          setAssignments(parsedAssignments);
+
+          try {
+            await AsyncStorage.setItem(
+              CACHE_KEY,
+              JSON.stringify({
+                data: parsedAssignments,
+                timestamp: Date.now(),
+              })
+            );
+          } catch (cacheError) {
+            console.warn('⚠️ Failed to write history cache', cacheError);
+          }
         } else {
           setError(response.error || response.message || 'Unable to load history.');
         }
@@ -138,10 +182,23 @@ const HistoryScreen: React.FC = () => {
   }, [loadSession]);
 
   useEffect(() => {
-    if (riderId) {
-      fetchHistory();
-    }
-  }, [riderId, fetchHistory]);
+    let isMounted = true;
+
+    const bootstrap = async () => {
+      if (!riderId || !isMounted) return;
+
+      const cacheFresh = await hydrateFromCache();
+      if (!cacheFresh) {
+        fetchHistory();
+      }
+    };
+
+    bootstrap();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [riderId, fetchHistory, hydrateFromCache]);
 
   useFocusEffect(
     useCallback(() => {
@@ -320,7 +377,7 @@ const renderHeader = () => (
         styles.headerBanner,
         {
           marginTop: -insets.top,
-          paddingTop: insets.top + 66,
+          paddingTop: insets.top + 6,
         },
       ]}
     >
@@ -352,9 +409,21 @@ const renderHeader = () => (
   </View>
 );
 
+  if (!fontsLoaded) {
+    return (
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
+        <View style={[styles.container, styles.centerContent]}>
+          <ActivityIndicator size="large" color="#00BF63" />
+          <Text style={styles.loadingText}>Loading experience...</Text>
+          <BottomNav active="history" />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   if (isInitialLoading) {
     return (
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
         <View style={[styles.container, styles.centerContent]}>
           <ActivityIndicator size="large" color="#00BF63" />
           <Text style={styles.loadingText}>Fetching recent deliveries...</Text>
@@ -365,7 +434,7 @@ const renderHeader = () => (
   }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
       <View style={styles.container}>
         <FlatList
           data={assignments}
@@ -401,45 +470,51 @@ const styles = StyleSheet.create({
   },
   headerBanner: {
     backgroundColor: '#00BF63',
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
+    borderBottomLeftRadius: 44,
+    borderBottomRightRadius: 44,
     paddingTop: 0,
     paddingBottom: 24,
     paddingHorizontal: 24,
+    marginHorizontal: -20,
     marginBottom: 24,
   },
   headerBannerText: {
     fontSize: 22,
     fontWeight: '700',
     color: '#FFFFFF',
+    fontFamily: 'Nexa-Heavy',
   },
   centerContent: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 40,
+    paddingVertical: 80,
   },
   loadingText: {
     marginTop: 12,
     fontSize: 15,
     color: '#666',
+    fontFamily: 'Nexa-ExtraLight',
   },
   errorText: {
     fontSize: 16,
     color: '#D93025',
     textAlign: 'center',
     marginBottom: 8,
+    fontFamily: 'Nexa-Heavy',
   },
   emptyTitle: {
     fontSize: 18,
     fontWeight: '600',
     color: '#333',
     marginBottom: 6,
+    fontFamily: 'Nexa-Heavy',
   },
   hintText: {
     fontSize: 14,
     color: '#777',
     textAlign: 'center',
+    fontFamily: 'Nexa-ExtraLight',
   },
   listContent: {
     paddingHorizontal: 20,
@@ -470,15 +545,18 @@ const styles = StyleSheet.create({
     fontSize: 12,
     textTransform: 'uppercase',
     letterSpacing: 0.8,
+    fontFamily: 'Nexa-Heavy',
   },
   summaryValue: {
     marginTop: 6,
     fontSize: 28,
     fontWeight: '700',
+    fontFamily: 'Nexa-Heavy',
   },
   summaryMeta: {
     marginTop: 4,
     fontSize: 13,
+    fontFamily: 'Nexa-ExtraLight',
   },
   summaryLabelPrimary: {
     color: '#047857',
@@ -499,10 +577,12 @@ const styles = StyleSheet.create({
     color: '#1D4ED8',
   },
   sectionHeading: {
-    marginTop: 8,
+    marginTop: 28,
+    marginBottom: 8,
     fontSize: 18,
     fontWeight: '600',
     color: '#1F2937',
+    fontFamily: 'Nexa-Heavy',
   },
   assignmentCard: {
     backgroundColor: '#FFFFFF',
@@ -522,11 +602,13 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     color: '#1C1C1E',
+    fontFamily: 'Nexa-Heavy',
   },
   assignmentMeta: {
     marginTop: 4,
     fontSize: 13,
     color: '#6B7280',
+    fontFamily: 'Nexa-ExtraLight',
   },
   expandIndicator: {
     fontSize: 14,
@@ -536,6 +618,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 999,
     backgroundColor: '#ECFDF5',
+    fontFamily: 'Nexa-Heavy',
   },
   assignmentSummaryRow: {
     flexDirection: 'row',
@@ -552,12 +635,14 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     textTransform: 'uppercase',
     letterSpacing: 0.6,
+    fontFamily: 'Nexa-ExtraLight',
   },
   summaryItemValue: {
     marginTop: 4,
     fontSize: 16,
     fontWeight: '600',
     color: '#1C1C1E',
+    fontFamily: 'Nexa-Heavy',
   },
   notesSection: {
     backgroundColor: '#F3F4F6',
@@ -571,10 +656,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#4B5563',
     marginBottom: 4,
+    fontFamily: 'Nexa-Heavy',
   },
   notesContent: {
     fontSize: 14,
     color: '#1F2937',
+    fontFamily: 'Nexa-ExtraLight',
   },
   orderList: {
     borderTopWidth: StyleSheet.hairlineWidth,
@@ -598,12 +685,14 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#111827',
+    fontFamily: 'Nexa-Heavy',
   },
   orderStatus: {
     fontSize: 13,
     fontWeight: '600',
     color: '#059669',
     textTransform: 'capitalize',
+    fontFamily: 'Nexa-Heavy',
   },
   orderRow: {
     flexDirection: 'row',
@@ -613,11 +702,13 @@ const styles = StyleSheet.create({
     width: 90,
     fontSize: 13,
     color: '#6B7280',
+    fontFamily: 'Nexa-ExtraLight',
   },
   orderValue: {
     flex: 1,
     fontSize: 13,
     color: '#111827',
+    fontFamily: 'Nexa-ExtraLight',
   },
   orderAddress: {
     lineHeight: 18,

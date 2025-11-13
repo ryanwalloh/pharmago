@@ -368,7 +368,11 @@ export default function RiderNavigation() {
         return;
       }
 
-      const isoTimestamp = new Date(payload.location.timestamp).toISOString();
+      const timestampValue = Number(payload.location.timestamp);
+      const isoTimestamp =
+        Number.isFinite(timestampValue) && timestampValue > 0
+          ? new Date(timestampValue).toISOString()
+          : new Date().toISOString();
       applyOptimisticLocation(
         {
           latitude: payload.coordinate.latitude,

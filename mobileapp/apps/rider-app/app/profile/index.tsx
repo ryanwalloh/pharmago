@@ -1,17 +1,20 @@
-import React, { useEffect, useState } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  ScrollView, 
+import React, { useCallback, useEffect, useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
   TouchableOpacity,
-  Image,
   StatusBar,
-  Alert
+  Alert,
+  RefreshControl,
+  ActivityIndicator,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useFonts } from 'expo-font';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import BottomNav from '../../components/BottomNav';
 
 interface RiderUser {
   id: number;
@@ -24,76 +27,50 @@ interface RiderUser {
 
 export default function RiderProfile() {
   const router = useRouter();
+  const [fontsLoaded] = useFonts({
+    'Nexa-ExtraLight': require('../../assets/fonts/Nexa-ExtraLight.ttf'),
+    'Nexa-Heavy': require('../../assets/fonts/Nexa-Heavy.ttf'),
+  });
   const [user, setUser] = useState<RiderUser | null>(null);
   const [riderProfile, setRiderProfile] = useState<any>(null);
-  const [riderStats, setRiderStats] = useState({
-    rating: 4.8,
-    totalDeliveries: 342,
-    successRate: 98,
-    joinedDate: 'January 2024',
-  });
+  const [refreshing, setRefreshing] = useState<boolean>(false);
 
-  useEffect(() => {
-    loadRiderData();
-  }, []);
-
-  const loadRiderData = async () => {
+  const loadInitialSession = useCallback(async () => {
     try {
-      // Try to load complete session first
       const sessionData = await AsyncStorage.getItem('rider_session');
       if (sessionData) {
         const session = JSON.parse(sessionData);
-        console.log('📦 Loading rider profile from session:', session);
-        
         setUser(session.user);
         setRiderProfile(session.rider);
-        
-        if (session.stats) {
-          setRiderStats({
-            rating: session.stats.rating || 4.8,
-            totalDeliveries: session.stats.total_deliveries || 342,
-            successRate: session.stats.success_rate || 98,
-            joinedDate: session.rider?.verified_at 
-              ? new Date(session.rider.verified_at).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
-              : 'January 2024',
-          });
-        }
-        
-        console.log('✅ Rider profile loaded:', {
-          name: `${session.rider?.first_name} ${session.rider?.last_name}`,
-          vehicle: session.rider?.vehicle_type,
-          rating: session.stats?.rating,
-        });
-        
         return;
       }
-      
-      // Fallback to individual storage items
-      const cachedUser = await AsyncStorage.getItem('rider_user');
-      const cachedProfile = await AsyncStorage.getItem('rider_profile');
-      const cachedStats = await AsyncStorage.getItem('rider_stats');
-      
-      if (cachedUser) {
-        setUser(JSON.parse(cachedUser));
-      }
-      
-      if (cachedProfile) {
-        setRiderProfile(JSON.parse(cachedProfile));
-      }
-      
-      if (cachedStats) {
-        const parsedStats = JSON.parse(cachedStats);
-        setRiderStats({
-          rating: parsedStats.rating || 4.8,
-          totalDeliveries: parsedStats.total_deliveries || 342,
-          successRate: parsedStats.success_rate || 98,
-          joinedDate: 'January 2024',
-        });
+
+      const [cachedUserRaw, cachedProfileRaw] = await Promise.all([
+        AsyncStorage.getItem('rider_user'),
+        AsyncStorage.getItem('rider_profile'),
+      ]);
+
+      const cachedUser = cachedUserRaw ? JSON.parse(cachedUserRaw) : null;
+      const cachedProfile = cachedProfileRaw ? JSON.parse(cachedProfileRaw) : null;
+
+      if (cachedUser || cachedProfile) {
+        if (cachedUser) setUser(cachedUser);
+        if (cachedProfile) setRiderProfile(cachedProfile);
       }
     } catch (error) {
       console.error('Failed to load rider data:', error);
     }
-  };
+  }, []);
+
+
+  useEffect(() => {
+    loadInitialSession();
+  }, [loadInitialSession]);
+
+  const handleRefresh = useCallback(() => {
+    setRefreshing(true);
+    setTimeout(() => setRefreshing(false), 600);
+  }, []);
 
   const handleLogout = () => {
     Alert.alert(
@@ -113,7 +90,6 @@ export default function RiderProfile() {
               await AsyncStorage.removeItem('rider_session');
               await AsyncStorage.removeItem('rider_user');
               await AsyncStorage.removeItem('rider_profile');
-              await AsyncStorage.removeItem('rider_stats');
               await AsyncStorage.removeItem('auth_token');
               console.log('✅ Session cleared');
               router.replace('/login');
@@ -134,6 +110,26 @@ export default function RiderProfile() {
     : user?.email?.split('@')[0] || 'Rider';
 
   const profileInitial = riderName.charAt(0).toUpperCase();
+  const totalDeliveriesDisplay = riderProfile?.total_deliveries ?? 0;
+  const successRateDisplay = '0%';
+  const ratingBadgeText = '0 Rating';
+  const ratingStatDisplay = '⭐ 0.0';
+  const joinedDateLabel = riderProfile?.verified_at
+    ? `Partner since ${new Date(riderProfile.verified_at).toLocaleDateString(undefined, {
+        month: 'long',
+        year: 'numeric',
+      })}`
+    : null;
+
+  if (!fontsLoaded) {
+    return (
+      <View style={styles.loadingContainer}>
+        <StatusBar barStyle='light-content' backgroundColor='#00BF63' />
+        <ActivityIndicator size="large" color="#00BF63" />
+        <Text style={styles.loadingText}>Loading experience...</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -151,7 +147,17 @@ export default function RiderProfile() {
         <View style={styles.placeholder} />
       </View>
 
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.scrollView}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor="#00BF63"
+          />
+        }
+      >
         {/* Profile Card */}
         <View style={styles.profileCard}>
           <View style={styles.avatarContainer}>
@@ -170,27 +176,31 @@ export default function RiderProfile() {
           {/* Rating Badge */}
           <View style={styles.ratingBadge}>
             <Ionicons name="star" size={16} color="#FFA500" />
-            <Text style={styles.ratingText}>{riderStats.rating} Rating</Text>
+            <Text style={styles.ratingText}>{ratingBadgeText}</Text>
           </View>
         </View>
 
         {/* Stats Grid */}
         <View style={styles.statsGrid}>
           <View style={styles.statItem}>
-            <Text style={styles.statValue}>{riderStats.totalDeliveries}</Text>
+            <Text style={styles.statValue}>{totalDeliveriesDisplay}</Text>
             <Text style={styles.statLabel}>Deliveries</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
-            <Text style={styles.statValue}>{riderStats.successRate}%</Text>
+            <Text style={styles.statValue}>{successRateDisplay}</Text>
             <Text style={styles.statLabel}>Success Rate</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
-            <Text style={styles.statValue}>⭐ {riderStats.rating}</Text>
+            <Text style={styles.statValue}>{ratingStatDisplay}</Text>
             <Text style={styles.statLabel}>Rating</Text>
           </View>
         </View>
+
+        {joinedDateLabel ? (
+          <Text style={styles.joinedDateText}>{joinedDateLabel}</Text>
+        ) : null}
 
         {/* Account Section */}
         <View style={styles.section}>
@@ -327,44 +337,7 @@ export default function RiderProfile() {
         <View style={{ height: 100 }} />
       </ScrollView>
 
-      {/* Bottom Navigation */}
-      <View style={styles.bottomNav}>
-        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/home/' as any)}>
-          <Image 
-            source={require('../../assets/home.png')} 
-            style={styles.navIcon}
-            resizeMode="contain"
-          />
-          <Text style={styles.navLabel}>Home</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.navItem} onPress={() => {}}>
-          <Image 
-            source={require('../../assets/navigation.png')} 
-            style={styles.navIcon}
-            resizeMode="contain"
-          />
-          <Text style={styles.navLabel}>Navigation</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.navItem} onPress={() => {}}>
-          <Image 
-            source={require('../../assets/chat.png')} 
-            style={styles.navIcon}
-            resizeMode="contain"
-          />
-          <Text style={styles.navLabel}>Chat</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.navItem} onPress={() => {}}>
-          <Image 
-            source={require('../../assets/profile.png')} 
-            style={styles.navIcon}
-            resizeMode="contain"
-          />
-          <Text style={[styles.navLabel, styles.navLabelActive]}>Profile</Text>
-        </TouchableOpacity>
-      </View>
+      <BottomNav active="profile" />
     </View>
   );
 }
@@ -373,6 +346,18 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F5F5F5',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F5F5F5',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: '#666666',
+    fontFamily: 'Nexa-ExtraLight',
   },
   header: {
     backgroundColor: '#00BF63',
@@ -395,6 +380,7 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '700',
     color: '#FFFFFF',
+    fontFamily: 'Nexa-Heavy',
   },
   placeholder: {
     width: 40,
@@ -409,11 +395,6 @@ const styles = StyleSheet.create({
     padding: 24,
     borderRadius: 16,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
   },
   avatarContainer: {
     position: 'relative',
@@ -428,16 +409,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 4,
     borderColor: '#FFFFFF',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
   },
   avatarText: {
     fontSize: 36,
     fontWeight: '700',
     color: '#FFFFFF',
+    fontFamily: 'Nexa-Heavy',
   },
   editAvatarButton: {
     position: 'absolute',
@@ -457,16 +434,19 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#222222',
     marginBottom: 6,
+    fontFamily: 'Nexa-Heavy',
   },
   profileEmail: {
     fontSize: 14,
     color: '#666666',
     marginBottom: 4,
+    fontFamily: 'Nexa-ExtraLight',
   },
   profilePhone: {
     fontSize: 14,
     color: '#666666',
     marginBottom: 12,
+    fontFamily: 'Nexa-ExtraLight',
   },
   ratingBadge: {
     flexDirection: 'row',
@@ -481,6 +461,33 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#FF9800',
     marginLeft: 4,
+    fontFamily: 'Nexa-Heavy',
+  },
+  statusBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginHorizontal: 16,
+    marginTop: 12,
+    backgroundColor: '#E8F5E9',
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+  },
+  statusBannerText: {
+    fontSize: 13,
+    color: '#2E7D32',
+    fontWeight: '500',
+    marginLeft: 8,
+    fontFamily: 'Nexa-Heavy',
+  },
+  errorText: {
+    marginHorizontal: 16,
+    marginTop: 12,
+    fontSize: 13,
+    color: '#D32F2F',
+    fontWeight: '500',
+    fontFamily: 'Nexa-Heavy',
   },
   statsGrid: {
     backgroundColor: '#FFFFFF',
@@ -491,11 +498,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-around',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
   },
   statItem: {
     alignItems: 'center',
@@ -505,15 +507,25 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#00BF63',
     marginBottom: 4,
+    textAlign: 'center',
+    fontFamily: 'Nexa-Heavy',
   },
   statLabel: {
     fontSize: 12,
     color: '#666666',
+    fontFamily: 'Nexa-ExtraLight',
   },
   statDivider: {
     width: 1,
     height: 40,
     backgroundColor: '#F0F0F0',
+  },
+  joinedDateText: {
+    marginTop: 12,
+    textAlign: 'center',
+    fontSize: 13,
+    color: '#666666',
+    fontFamily: 'Nexa-ExtraLight',
   },
   section: {
     marginTop: 24,
@@ -525,6 +537,7 @@ const styles = StyleSheet.create({
     color: '#222222',
     marginBottom: 12,
     paddingLeft: 4,
+    fontFamily: 'Nexa-Heavy',
   },
   menuItem: {
     backgroundColor: '#FFFFFF',
@@ -534,11 +547,6 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 12,
     marginBottom: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
   },
   menuLeft: {
     flexDirection: 'row',
@@ -557,6 +565,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#333333',
     fontWeight: '500',
+    fontFamily: 'Nexa-Heavy',
   },
   verifiedBadge: {
     flexDirection: 'row',
@@ -572,6 +581,7 @@ const styles = StyleSheet.create({
     color: '#4CAF50',
     fontWeight: '600',
     marginLeft: 4,
+    fontFamily: 'Nexa-Heavy',
   },
   languageBadge: {
     backgroundColor: '#F5F5F5',
@@ -584,6 +594,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#666666',
     fontWeight: '500',
+    fontFamily: 'Nexa-Heavy',
   },
   logoutButton: {
     backgroundColor: '#FFEBEE',
@@ -602,48 +613,15 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#F44336',
     marginLeft: 8,
+    fontFamily: 'Nexa-Heavy',
   },
   versionText: {
     textAlign: 'center',
     fontSize: 12,
     color: '#999999',
     marginTop: 16,
-  },
-  bottomNav: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: '#FFFFFF',
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingVertical: 12,
-    paddingBottom: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#F0F0F0',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 8,
-  },
-  navItem: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  navIcon: {
-    width: 24,
-    height: 24,
-    marginBottom: 4,
-  },
-  navLabel: {
-    fontSize: 11,
-    color: '#999999',
-    fontWeight: '500',
-  },
-  navLabelActive: {
-    color: '#00BF63',
-    fontWeight: '600',
+    fontFamily: 'Nexa-ExtraLight',
   },
 });
+
 

@@ -147,21 +147,26 @@ class OrderCountService {
    * Get WebSocket URL for order count channel
    */
   private getWebSocketUrl(): string {
-    // Check for environment variable
     if (process.env.EXPO_PUBLIC_WS_ORDER_COUNT_URL) {
       return process.env.EXPO_PUBLIC_WS_ORDER_COUNT_URL;
     }
 
-    // Derive from API base URL
-    const envBase = process.env.EXPO_PUBLIC_API_BASE;
-    if (envBase) {
-      const wsProtocol = envBase.startsWith('https') ? 'wss' : 'ws';
-      const host = envBase.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
-      return `${wsProtocol}://${host}/ws/rider/order-count/`;
-    }
+    const base =
+      (process.env.EXPO_PUBLIC_API_BASE && process.env.EXPO_PUBLIC_API_BASE.trim()) ||
+      'https://pharmago-backend-production.up.railway.app';
 
-    // Fallback to localhost
-    return `ws://localhost:8000/ws/rider/order-count/`;
+    try {
+      const parsed = new URL(base);
+      const wsProtocol = parsed.protocol === 'https:' ? 'wss:' : 'ws:';
+      return `${wsProtocol}//${parsed.host}/ws/rider/order-count/`;
+    } catch (error) {
+      console.warn('⚠️ Unable to parse API base for order count WebSocket, using fallback hostname', {
+        base,
+        error,
+      });
+      const host = base.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+      return `wss://${host}/ws/rider/order-count/`;
+    }
   }
 
   /**

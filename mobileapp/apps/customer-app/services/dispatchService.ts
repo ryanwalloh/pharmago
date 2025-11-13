@@ -25,14 +25,14 @@ export interface DispatchOffer {
     delivery_fee: number;
     earnings: number;
   };
-  orders?: Array<{
+  orders?: {
     order_number: string;
     customer_name: string;
     pharmacy_name: string;
     pharmacy_address: string;
     delivery_address: string;
     earnings: number;
-  }>;
+  }[];
 }
 
 class DispatchService {
@@ -136,21 +136,26 @@ class DispatchService {
    * Get WebSocket URL for rider dispatch channel
    */
   private getWebSocketUrl(riderId: number): string {
-    // Check for environment variable
     if (process.env.EXPO_PUBLIC_WS_DISPATCH_URL) {
       return process.env.EXPO_PUBLIC_WS_DISPATCH_URL.replace('{rider_id}', String(riderId));
     }
 
-    // Derive from API base URL
-    const envBase = process.env.EXPO_PUBLIC_API_BASE;
-    if (envBase) {
-      const wsProtocol = envBase.startsWith('https') ? 'wss' : 'ws';
-      const host = envBase.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
-      return `${wsProtocol}://${host}/ws/rider/dispatch/${riderId}/`;
-    }
+    const base =
+      (process.env.EXPO_PUBLIC_API_BASE && process.env.EXPO_PUBLIC_API_BASE.trim()) ||
+      'https://pharmago-backend-production.up.railway.app';
 
-    // Fallback to localhost
-    return `ws://localhost:8000/ws/rider/dispatch/${riderId}/`;
+    try {
+      const parsed = new URL(base);
+      const wsProtocol = parsed.protocol === 'https:' ? 'wss:' : 'ws:';
+      return `${wsProtocol}//${parsed.host}/ws/rider/dispatch/${riderId}/`;
+    } catch (error) {
+      console.warn('⚠️ Unable to parse API base for dispatch WebSocket, using fallback hostname', {
+        base,
+        error,
+      });
+      const host = base.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+      return `wss://${host}/ws/rider/dispatch/${riderId}/`;
+    }
   }
 
   /**
