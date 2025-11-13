@@ -118,6 +118,16 @@ const customMapStyle = [
   }
 ];
 
+const resolveMapsModule = (module: any) => {
+  const base = module?.default ?? module;
+  return {
+    MapView: base?.MapView ?? base,
+    Marker: module?.Marker ?? base?.Marker,
+    Polyline: module?.Polyline ?? base?.Polyline,
+    PROVIDER_GOOGLE: module?.PROVIDER_GOOGLE ?? base?.PROVIDER_GOOGLE,
+  };
+};
+
 interface DeliveryOrder {
   id: number;
   order_number: string;
@@ -157,27 +167,49 @@ export default function ActiveDeliveryScreen() {
 
   // ✅ Lazy-load MapView components - CRITICAL: wrap in try-catch and delay
   const [MapComponents, setMapComponents] = React.useState<any>(null);
+  const [mapLoadError, setMapLoadError] = React.useState<string | null>(null);
   
   React.useEffect(() => {
-    const timer = setTimeout(() => {
-      (async () => {
-        try {
-          const maps = await import('react-native-maps');
-          setMapComponents({
-            MapView: maps.default,
-            Marker: maps.Marker,
-            Polyline: maps.Polyline,
-            PROVIDER_GOOGLE: maps.PROVIDER_GOOGLE,
-          });
-          console.log('✅ Maps loaded successfully in rider app');
-        } catch (error) {
-          console.error('❌ Failed to load react-native-maps in rider app:', error);
+    if (MapComponents?.MapView) {
+      return;
+    }
+
+    let isMounted = true;
+
+    const loadMaps = async () => {
+      try {
+        const mapsModule = await import('react-native-maps');
+        if (!isMounted) {
+          return;
         }
-      })();
-    }, 500);
+        const maps = resolveMapsModule(mapsModule);
+        if (!maps.MapView) {
+          throw new Error('MapView component missing from module');
+        }
+        setMapComponents(maps);
+        setMapLoadError(null);
+        console.log('✅ Maps loaded successfully in rider app');
+      } catch (error) {
+        console.error('❌ Failed to load react-native-maps in rider app:', error);
+        if (isMounted) {
+          const message =
+            error instanceof Error
+              ? error.message
+              : 'Unable to load map. Please check your installation.';
+          setMapLoadError(message);
+        }
+      }
+    };
+
+    const timer = setTimeout(() => {
+      void loadMaps();
+    }, 200);
     
-    return () => clearTimeout(timer);
-  }, []);
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
+  }, [MapComponents]);
   
   // Destructure after loading (with fallbacks)
   const MapView = MapComponents?.MapView;
@@ -764,7 +796,9 @@ export default function ActiveDeliveryScreen() {
       {!MapView && (
         <View style={[styles.map, { backgroundColor: '#E0E0E0', justifyContent: 'center', alignItems: 'center' }]}>
           <ActivityIndicator size="large" color="#00BF63" />
-          <Text style={{ marginTop: 12, color: '#666666' }}>Loading map...</Text>
+          <Text style={{ marginTop: 12, color: '#666666' }}>
+            {mapLoadError ?? 'Loading map...'}
+          </Text>
         </View>
       )}
 
