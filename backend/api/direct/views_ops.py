@@ -478,15 +478,18 @@ async def direct_pharmacy_orders(request, pharmacy_id):
             pending = [serialize(o) for o in qs.filter(order_status='pending').exclude(Q(notes__contains='[PHARMACY_ARCHIVED]'))[:200]]
             preparing = [serialize(o) for o in qs.filter(order_status__in=['preparing', 'accepted']).exclude(Q(notes__contains='[PHARMACY_ARCHIVED]'))[:200]]
             ready = [serialize(o) for o in qs.filter(order_status='ready_for_pickup').exclude(Q(notes__contains='[PHARMACY_ARCHIVED]'))[:200]]
+            delivered = [serialize(o) for o in qs.filter(order_status='delivered').exclude(Q(notes__contains='[PHARMACY_ARCHIVED]'))[:200]]
 
             return {
                 'pending': pending,
                 'preparing': preparing,
                 'ready': ready,
+                'delivered': delivered,
                 'totalOrders': qs.count(),
                 'pendingOrders': len(pending),
                 'preparingOrders': len(preparing),
                 'readyOrders': len(ready),
+                'deliveredOrders': len(delivered),
             }
 
         result = await fetch_orders()
@@ -501,7 +504,7 @@ async def direct_pharmacy_orders(request, pharmacy_id):
             except Exception:
                 return url
 
-        for bucket in ('pending', 'preparing', 'ready'):
+        for bucket in ('pending', 'preparing', 'ready', 'delivered'):
             for order in result[bucket]:
                 order['prescriptionImageUrl'] = absolutize(order.get('prescriptionImageUrl'))
                 order['seniorCitizenIdImage'] = absolutize(order.get('seniorCitizenIdImage'))
@@ -512,11 +515,13 @@ async def direct_pharmacy_orders(request, pharmacy_id):
                 'pending': result['pending'],
                 'preparing': result['preparing'],
                 'ready': result['ready'],
+                'delivered': result['delivered'],
             },
             'totalOrders': result['totalOrders'],
             'pendingOrders': result['pendingOrders'],
             'preparingOrders': result['preparingOrders'],
             'readyOrders': result['readyOrders'],
+            'deliveredOrders': result['deliveredOrders'],
         })
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
