@@ -255,7 +255,7 @@ const PharmacyDashboard = () => {
           const deliveredOrders = deliveredOrdersFallback
             .filter(Boolean)
             .filter(item => String(item?.order_status || item?.status || '').toLowerCase() === 'delivered');
-
+          
           setOrders({
             pending: pendingOrders,
             preparing: preparingOrders,
@@ -1622,8 +1622,8 @@ const PharmacyDashboard = () => {
   const handleViewSwitch = (view) => {
     setActiveView(view);
     if (view === 'menu') {
-      setSearchQuery('');
-      setFilteredInventoryData(inventoryData);
+    setSearchQuery('');
+    setFilteredInventoryData(inventoryData);
     } else if (view === 'orders') {
       setSearchQuery('');
     } else if (view === 'history') {
