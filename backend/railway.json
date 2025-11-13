@@ -5,7 +5,7 @@
     "buildCommand": "pip install -r requirements.txt"
   },
   "deploy": {
-    "startCommand": "daphne -b 0.0.0.0 -p $PORT --application-close-timeout 30 --ping-interval 20 --ping-timeout 10 pharmago.asgi:application",
+    "startCommand": "bash ./scripts/start_server.sh",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10
   }
