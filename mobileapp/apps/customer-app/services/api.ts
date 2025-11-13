@@ -118,7 +118,8 @@ class ApiService {
   public async makeRequest<T>(
     endpoint: string,
     options: RequestInit = {},
-    suppressAuthLog: boolean = false
+    suppressAuthLog: boolean = false,
+    timeoutMs: number = 15000
   ): Promise<ApiResponse<T>> {
     try {
       const url = `${this.getBaseURL()}${endpoint}`;
@@ -146,7 +147,7 @@ class ApiService {
           ...options.headers,
         },
         ...options,
-      }, 15000); // 15 second timeout
+      }, timeoutMs);
 
       console.log('📡 API Response Status:', {
         status: response.status,
@@ -234,7 +235,8 @@ class ApiService {
   // Make request against direct, auth-bypassing endpoints (per docs)
   public async makeDirectRequest<T>(
     endpoint: string,
-    options: RequestInit = {}
+    options: RequestInit = {},
+    timeoutMs: number = 15000
   ): Promise<ApiResponse<T>> {
     try {
       const url = `${this.getDirectBaseUrl()}${endpoint}`;
@@ -253,7 +255,7 @@ class ApiService {
           ...options.headers,
         },
         ...options,
-      }, 15000); // 15 second timeout
+      }, timeoutMs);
 
       console.log('📡 API Direct Response Status:', {
         status: response.status,

@@ -25,6 +25,7 @@ import { Ionicons } from '@expo/vector-icons';
 // ✅ MapView will be lazy-loaded inside component to avoid import-time native module crash
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
+import Constants from 'expo-constants';
 import { apiService } from '../../../customer-app/services/api';
 import { uploadProofOfDelivery } from '../../../customer-app/services/cloudinaryService';
 
@@ -179,11 +180,20 @@ export default function ActiveDeliveryScreen() {
     const loadMaps = async () => {
       try {
         if (typeof globalThis.location === 'undefined') {
+          const fallbackHost =
+            Constants.expoConfig?.hostUri ??
+            (Constants.manifest as any)?.debuggerHost ??
+            '127.0.0.1:8081';
+          const baseUrl = fallbackHost.includes('://')
+            ? fallbackHost
+            : `http://${fallbackHost}`;
+          const parsed = new URL(baseUrl);
+          const origin = `${parsed.protocol}//${parsed.host}`;
           (globalThis as any).location = {
-            href: 'app://-/',
-            origin: 'app://-',
-            protocol: 'app:',
-            host: '',
+            href: `${origin}/`,
+            origin,
+            protocol: parsed.protocol,
+            host: parsed.host,
           };
         }
 
@@ -596,7 +606,8 @@ export default function ActiveDeliveryScreen() {
                 `/assignment/${id}/mark-picked-up/`,
                 {
                   method: 'POST',
-                }
+                },
+                30000
               );
 
               console.log('📦 Mark picked up response:', response);
@@ -667,7 +678,8 @@ export default function ActiveDeliveryScreen() {
             body: JSON.stringify({
               proof_of_delivery_url: uploadResult.url,
             }),
-          }
+          },
+          45000
         );
 
         console.log('📦 Mark delivered response:', response);
