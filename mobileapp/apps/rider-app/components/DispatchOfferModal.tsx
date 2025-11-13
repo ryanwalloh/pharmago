@@ -9,7 +9,6 @@ import {
   View,
   Text,
   Modal,
-  TouchableOpacity,
   StyleSheet,
   Dimensions,
   Animated,
@@ -91,7 +90,7 @@ export default function DispatchOfferModal({
         ])
       ).start();
     }
-  }, [timeRemaining]);
+  }, [timeRemaining, pulseAnim]);
 
   useEffect(() => {
     if (visible) {
@@ -110,13 +109,35 @@ export default function DispatchOfferModal({
         useNativeDriver: true,
       }).start();
     }
-  }, [visible]);
+  }, [visible, slideAnim]);
 
   if (!offer) return null;
 
   const isBatch = offer.is_batch;
   const ordersCount = offer.orders_count;
-  const earnings = offer.total_earnings;
+
+  const primaryOrder = !isBatch
+    ? offer.order
+    : offer.orders && offer.orders.length > 0
+      ? offer.orders[0]
+      : null;
+
+  const summaryPickupName =
+    primaryOrder?.pharmacy?.name ??
+    (primaryOrder as any)?.pharmacy_name ??
+    'Unknown Pharmacy';
+  const summaryPickupAddress =
+    primaryOrder?.pharmacy?.address ??
+    (primaryOrder as any)?.pharmacy_address ??
+    '';
+  const summaryCustomerName =
+    !isBatch && offer.order
+      ? offer.order.customer_name
+      : primaryOrder?.customer_name ?? 'Customer';
+  const summaryDeliveryAddress =
+    !isBatch && offer.order
+      ? offer.order.delivery_address
+      : primaryOrder?.delivery_address ?? '';
 
   return (
     <Modal
@@ -132,6 +153,33 @@ export default function DispatchOfferModal({
           { transform: [{ translateY: slideAnim }] },
         ]}
       >
+        <View style={styles.summaryContainer}>
+          {!isBatch && primaryOrder ? (
+            <>
+              <Text style={styles.summaryHeading}>Pickup</Text>
+              <Text style={styles.summaryValue}>{summaryPickupName}</Text>
+              {summaryPickupAddress ? (
+                <Text style={styles.summarySub}>{summaryPickupAddress}</Text>
+              ) : null}
+              <View style={styles.summaryDivider} />
+              <Text style={styles.summaryHeading}>Deliver To</Text>
+              <Text style={styles.summaryValue}>{summaryCustomerName}</Text>
+              {summaryDeliveryAddress ? (
+                <Text style={styles.summarySub}>{summaryDeliveryAddress}</Text>
+              ) : null}
+            </>
+          ) : (
+            <>
+              <Text style={styles.summaryHeading}>Batch Offer</Text>
+              <Text style={styles.summaryValue}>
+                {ordersCount} stop{ordersCount === 1 ? '' : 's'}
+              </Text>
+              <Text style={styles.summarySub}>
+                Addresses for each order are shown below.
+              </Text>
+            </>
+          )}
+        </View>
         <DispatchOfferCard
           offer={offer}
           onAccept={onAccept}
@@ -151,6 +199,36 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     paddingTop: 50,
     paddingHorizontal: 20,
+  },
+  summaryContainer: {
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 16,
+    padding: 16,
+    backgroundColor: '#F8FAFC',
+  },
+  summaryHeading: {
+    fontSize: 12,
+    color: '#64748B',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  summaryValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1E293B',
+    marginTop: 4,
+  },
+  summarySub: {
+    fontSize: 13,
+    color: '#475569',
+    marginTop: 2,
+  },
+  summaryDivider: {
+    height: 1,
+    backgroundColor: '#E2E8F0',
+    marginVertical: 12,
   },
   header: {
     flexDirection: 'row',
