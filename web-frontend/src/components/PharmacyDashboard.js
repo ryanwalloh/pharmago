@@ -47,7 +47,7 @@ const PharmacyDashboard = () => {
   const [successModalType, setSuccessModalType] = useState('custom'); // 'custom' or 'quick'
   
   // Menu/Inventory states
-  const [activeView, setActiveView] = useState('orders'); // 'orders' or 'menu'
+  const [activeView, setActiveView] = useState('orders'); // 'orders' | 'menu' | 'history' | 'reports'
   const [inventoryData, setInventoryData] = useState({
     categories: [],
     totalItems: 0,
@@ -141,6 +141,10 @@ const PharmacyDashboard = () => {
   });
   const [ordersLoading, setOrdersLoading] = useState(true);
   const [orderHistory, setOrderHistory] = useState([]);
+  const [salesReport, setSalesReport] = useState(null);
+  const [salesReportLoading, setSalesReportLoading] = useState(false);
+  const [salesReportError, setSalesReportError] = useState('');
+  const [salesReportFetchedAt, setSalesReportFetchedAt] = useState(null);
 
   const parseCurrency = (value) => {
     const numeric = Number(value ?? 0);
@@ -153,6 +157,16 @@ const PharmacyDashboard = () => {
     }
     const subtotal = parseCurrency(order?.subtotal ?? order?.totalAmount ?? order?.total_amount);
     return `₱${subtotal.toFixed(2)}`;
+  };
+
+  const formatCurrency = (value, options = {}) => {
+    const amount = parseCurrency(value);
+    return amount.toLocaleString('en-PH', {
+      style: 'currency',
+      currency: 'PHP',
+      minimumFractionDigits: options.minimumFractionDigits ?? 2,
+      maximumFractionDigits: options.maximumFractionDigits ?? 2
+    });
   };
 
   const formatOrderSubtitle = (order, fallback = '') => {
@@ -273,6 +287,36 @@ const PharmacyDashboard = () => {
       console.error('Unexpected error fetching orders', err);
     } finally {
       setOrdersLoading(false);
+    }
+  };
+
+  const fetchSalesReport = async (pharmacyId, { forceRefresh = false } = {}) => {
+    if (!pharmacyId) return;
+    if (!forceRefresh && salesReport && salesReportFetchedAt && (Date.now() - salesReportFetchedAt) < 5 * 60 * 1000) {
+      return;
+    }
+    try {
+      setSalesReportLoading(true);
+      setSalesReportError('');
+      const base = (process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
+      const response = await fetch(`${base}/api/pharmacy-sales-report/${pharmacyId}/`);
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Failed to fetch sales report', response.status, errorText);
+        throw new Error('Failed to load sales report');
+      }
+      const data = await response.json();
+      if (data.success) {
+        setSalesReport(data.report);
+        setSalesReportFetchedAt(Date.now());
+      } else {
+        throw new Error(data.error || 'Failed to load sales report');
+      }
+    } catch (error) {
+      console.error('Error fetching sales report:', error);
+      setSalesReportError(error.message || 'Failed to load sales report');
+    } finally {
+      setSalesReportLoading(false);
     }
   };
 
@@ -1587,6 +1631,11 @@ const PharmacyDashboard = () => {
       if (pharmacyInfo?.id) {
         fetchOrders(pharmacyInfo.id);
       }
+    } else if (view === 'reports') {
+      setSearchQuery('');
+      if (pharmacyInfo?.id) {
+        fetchSalesReport(pharmacyInfo.id);
+      }
     }
     
     if (view === 'menu') {
@@ -1795,6 +1844,56 @@ const PharmacyDashboard = () => {
     });
   };
 
+  const formatMonthLabel = (monthKey) => {
+    if (!monthKey || !monthKey.includes('-')) return monthKey || 'Unknown';
+    const [year, month] = monthKey.split('-');
+    const date = new Date(Number(year), Number(month) - 1);
+    return date.toLocaleDateString(undefined, {
+      month: 'short',
+      year: 'numeric'
+    });
+  };
+
+  const monthlyRevenueSeries = useMemo(() => {
+    return (salesReport?.monthly_sales || []).map(entry => ({
+      label: formatMonthLabel(entry.month),
+      revenue: parseCurrency(entry.revenue),
+      orders: entry.orders
+    }));
+  }, [salesReport]);
+
+  const topProducts = useMemo(() => {
+    return (salesReport?.top_products || []).map(entry => ({
+      ...entry,
+      revenueValue: parseCurrency(entry.revenue)
+    }));
+  }, [salesReport]);
+
+  const topCategories = useMemo(() => {
+    return (salesReport?.top_categories || []).map(entry => ({
+      ...entry,
+      revenueValue: parseCurrency(entry.revenue)
+    }));
+  }, [salesReport]);
+
+  const topCustomers = useMemo(() => salesReport?.top_customers || [], [salesReport]);
+
+  const recentOrders = useMemo(() => salesReport?.recent_orders || [], [salesReport]);
+
+  const generateLinePath = (data, width, height) => {
+    if (!data.length) return '';
+    const maxRevenue = Math.max(...data.map(item => item.revenue), 1);
+    const stepX = width / Math.max(data.length - 1, 1);
+    return data
+      .map((item, index) => {
+        const x = index * stepX;
+        const normalized = item.revenue / maxRevenue;
+        const y = height - normalized * height;
+        return `${index === 0 ? 'M' : 'L'}${x},${y}`;
+      })
+      .join(' ');
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center">
@@ -1894,10 +1993,16 @@ const PharmacyDashboard = () => {
             <img className="w-4 h-4 lg:w-5 lg:h-5 mr-2 lg:mr-5" src="/images/refresh.svg" alt="Refresh" />
             <h3 className="text-sm lg:text-lg hidden sm:block">Refresh</h3>
           </div>
-          <div className="flex items-center">
-            <img className="w-4 h-4 lg:w-5 lg:h-5 mr-2 lg:mr-5" src="/images/report.svg" alt="Report" />
-            <h3 className="text-sm lg:text-lg hidden sm:block">Report</h3>
-          </div>
+          <button
+            type="button"
+            onClick={() => handleViewSwitch('reports')}
+            className={`flex items-center px-3 py-2 rounded-full transition-colors ${
+              activeView === 'reports' ? 'bg-purple-600 text-white' : 'bg-transparent text-black hover:bg-white/60'
+            }`}
+          >
+            <img className="w-4 h-4 lg:w-5 lg:h-5 mr-2 lg:mr-3" src="/images/report.svg" alt="Report" />
+            <span className="text-sm lg:text-lg hidden sm:block">Report</span>
+          </button>
           <div className="flex items-center">
             <h3 className="text-sm lg:text-lg mr-2">Online</h3>
             <img 
@@ -2244,6 +2349,326 @@ const PharmacyDashboard = () => {
                     );
                   })}
                 </div>
+              )}
+            </div>
+          )}
+
+          {/* Sales Report View */}
+          {activeView === 'reports' && (
+            <div className="space-y-6">
+              <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-6">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-800 mb-2">Sales Performance Report</h2>
+                  <p className="text-gray-600">Comprehensive view of delivered orders and inventory performance</p>
+                </div>
+                <div className="flex items-center space-x-3 mt-4 lg:mt-0">
+                  {salesReportFetchedAt && (
+                    <span className="text-xs text-gray-500 bg-white px-3 py-1 rounded-full">
+                      Updated {formatDateTime(salesReportFetchedAt)}
+                    </span>
+                  )}
+                  <button
+                    onClick={() => pharmacyInfo?.id && fetchSalesReport(pharmacyInfo.id, { forceRefresh: true })}
+                    className="flex items-center bg-[#2c786c] text-white px-4 py-2 rounded-full text-sm hover:bg-[#1e5a52] transition-colors"
+                    disabled={salesReportLoading}
+                  >
+                    <img className="w-4 h-4 mr-2" src="/images/refresh.svg" alt="Refresh" />
+                    {salesReportLoading ? 'Refreshing...' : 'Refresh Report'}
+                  </button>
+                </div>
+              </div>
+
+              {salesReportLoading && !salesReport ? (
+                <div className="bg-white rounded-2xl p-10 flex flex-col items-center justify-center space-y-4">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#2c786c]"></div>
+                  <p className="text-gray-600">Generating latest sales insights...</p>
+                </div>
+              ) : salesReportError ? (
+                <div className="bg-red-50 border border-red-200 rounded-2xl p-6 flex items-start space-x-3">
+                  <svg className="w-6 h-6 text-red-500 mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M12 18.5a1.5 1.5 0 11-.001-3.001A1.5 1.5 0 0112 18.5z" />
+                  </svg>
+                  <div>
+                    <h3 className="text-sm font-semibold text-red-700 mb-1">Unable to load sales report</h3>
+                    <p className="text-sm text-red-600 mb-3">{salesReportError}</p>
+                    <button
+                      onClick={() => pharmacyInfo?.id && fetchSalesReport(pharmacyInfo.id, { forceRefresh: true })}
+                      className="text-sm font-semibold text-red-700 underline"
+                    >
+                      Try again
+                    </button>
+                  </div>
+                </div>
+              ) : !salesReport ? (
+                <div className="bg-white rounded-2xl p-10 flex flex-col items-center text-center space-y-4">
+                  <svg className="w-16 h-16 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v2h6v-2m-7-5h8m-9-5h10m-5-4v20" />
+                  </svg>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-800 mb-1">No sales data yet</h3>
+                    <p className="text-sm text-gray-600">
+                      Sales reports will appear here once delivered orders are recorded.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {/* Summary Cards */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+                      <p className="text-sm text-gray-500 mb-2">Total Revenue</p>
+                      <p className="text-2xl font-semibold text-[#2c786c]">
+                        {formatCurrency(salesReport.summary.total_revenue || 0)}
+                      </p>
+                      <p className="text-xs text-gray-400 mt-2">Delivered orders only</p>
+                    </div>
+                    <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+                      <p className="text-sm text-gray-500 mb-2">Average Order Value</p>
+                      <p className="text-2xl font-semibold text-purple-600">
+                        {formatCurrency(salesReport.summary.average_order_value || 0)}
+                      </p>
+                      <p className="text-xs text-gray-400 mt-2">{salesReport.summary.total_orders} delivered orders</p>
+                    </div>
+                    <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+                      <p className="text-sm text-gray-500 mb-2">Total Discounts</p>
+                      <p className="text-2xl font-semibold text-amber-600">
+                        {formatCurrency(salesReport.summary.total_discount || 0)}
+                      </p>
+                      <p className="text-xs text-gray-400 mt-2">Applied senior and promo discounts</p>
+                    </div>
+                    <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+                      <p className="text-sm text-gray-500 mb-2">Delivery & Service Fees</p>
+                      <p className="text-2xl font-semibold text-blue-600">
+                        {formatCurrency(salesReport.summary.total_delivery_fee || 0)}
+                      </p>
+                      <p className="text-xs text-gray-400 mt-2">Collected from customers</p>
+                    </div>
+                  </div>
+
+                  {/* Charts Row */}
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                    <div className="bg-white rounded-2xl p-6 col-span-1 lg:col-span-2 border border-gray-100">
+                      <div className="flex items-center justify-between mb-4">
+                        <div>
+                          <h3 className="text-lg font-semibold text-gray-800">Monthly Revenue Trend</h3>
+                          <p className="text-sm text-gray-500">Delivered revenue and order volume</p>
+                        </div>
+                        <span className="text-xs text-gray-400">
+                          {monthlyRevenueSeries.length} month{monthlyRevenueSeries.length !== 1 ? 's' : ''}
+                        </span>
+                      </div>
+                      {monthlyRevenueSeries.length === 0 ? (
+                        <div className="h-48 flex items-center justify-center text-sm text-gray-500 bg-gray-50 rounded-xl">
+                          Waiting for monthly sales data...
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          <div className="relative h-48 bg-gradient-to-b from-[#2c786c]/10 to-transparent rounded-xl border border-gray-100 p-4">
+                            <svg viewBox="0 0 600 200" preserveAspectRatio="none" className="absolute inset-0 w-full h-full">
+                              <defs>
+                                <linearGradient id="revenueGradient" x1="0" x2="0" y1="0" y2="1">
+                                  <stop offset="0%" stopColor="#2c786c" stopOpacity="0.35" />
+                                  <stop offset="100%" stopColor="#2c786c" stopOpacity="0" />
+                                </linearGradient>
+                              </defs>
+                              <path
+                                d={`${generateLinePath(monthlyRevenueSeries, 600, 180)} L600,200 L0,200 Z`}
+                                fill="url(#revenueGradient)"
+                                stroke="none"
+                              />
+                              <path
+                                d={generateLinePath(monthlyRevenueSeries, 600, 180)}
+                                fill="none"
+                                stroke="#2c786c"
+                                strokeWidth="3"
+                                strokeLinecap="round"
+                              />
+                              {monthlyRevenueSeries.map((point, index) => {
+                                const x = monthlyRevenueSeries.length === 1 ? 0 : (index / (monthlyRevenueSeries.length - 1)) * 600;
+                                const y = 180 - (point.revenue / Math.max(...monthlyRevenueSeries.map(p => p.revenue), 1)) * 180;
+                                return (
+                                  <circle key={point.label} cx={x} cy={y} r="4" fill="#2c786c" stroke="#ffffff" strokeWidth="2" />
+                                );
+                              })}
+                            </svg>
+                            <div className="absolute bottom-2 left-0 right-0 flex justify-between px-4 text-xs text-gray-500">
+                              {monthlyRevenueSeries.map(point => (
+                                <span key={`tick-${point.label}`} className="w-16 text-center truncate">
+                                  {point.label}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                            {monthlyRevenueSeries.slice(-4).map(point => (
+                              <div key={`summary-${point.label}`} className="bg-gray-50 rounded-xl p-3 border border-gray-100">
+                                <p className="text-xs text-gray-500">{point.label}</p>
+                                <p className="text-sm font-semibold text-[#2c786c] mt-1">
+                                  {formatCurrency(point.revenue)}
+                                </p>
+                                <p className="text-xs text-gray-400">{point.orders} orders</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="bg-white rounded-2xl p-6 border border-gray-100">
+                      <h3 className="text-lg font-semibold text-gray-800 mb-4">Top Customers</h3>
+                      {topCustomers.length === 0 ? (
+                        <p className="text-sm text-gray-500">Customers will appear as orders are completed.</p>
+                      ) : (
+                        <div className="space-y-3">
+                          {topCustomers.map((customer, index) => (
+                            <div key={`customer-${index}`} className="flex items-center justify-between bg-gray-50 rounded-xl p-3">
+                              <div>
+                                <p className="text-sm font-semibold text-gray-800">
+                                  {customer.first_name} {customer.last_name}
+                                </p>
+                                <p className="text-xs text-gray-500">{customer.orders} orders</p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-sm font-semibold text-[#2c786c]">
+                                  {formatCurrency(customer.total_spent)}
+                                </p>
+                                <p className="text-xs text-gray-400">Lifetime value</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Product & Category Performance */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <div className="bg-white rounded-2xl p-6 border border-gray-100">
+                      <h3 className="text-lg font-semibold text-gray-800 mb-4">Best Selling Products</h3>
+                      {topProducts.length === 0 ? (
+                        <p className="text-sm text-gray-500">Sales performance will appear once products are delivered.</p>
+                      ) : (
+                        <div className="space-y-3">
+                          {(() => {
+                            const maxRevenue = Math.max(...topProducts.map(p => p.revenueValue), 1);
+                            return topProducts.map((product, index) => (
+                              <div key={`product-${product.product}`} className="bg-gray-50 rounded-xl p-4 border border-gray-100">
+                                <div className="flex justify-between items-center mb-2">
+                                  <p className="text-sm font-semibold text-gray-800 truncate">
+                                    {index + 1}. {product.product}
+                                  </p>
+                                  <span className="text-xs text-gray-500">{product.quantity} units</span>
+                                </div>
+                                <div className="w-full bg-white rounded-full h-3 overflow-hidden border border-gray-200">
+                                  <div
+                                    className="h-3 rounded-full bg-gradient-to-r from-[#2c786c] to-[#3a9b8e]"
+                                    style={{ width: `${(product.revenueValue / maxRevenue) * 100}%` }}
+                                  />
+                                </div>
+                                <div className="flex justify-between text-xs text-gray-500 mt-2">
+                                  <span>Revenue</span>
+                                  <span className="font-semibold text-[#2c786c]">
+                                    {formatCurrency(product.revenueValue)}
+                                  </span>
+                                </div>
+                              </div>
+                            ));
+                          })()}
+                        </div>
+                      )}
+                    </div>
+                    <div className="bg-white rounded-2xl p-6 border border-gray-100">
+                      <h3 className="text-lg font-semibold text-gray-800 mb-4">Category Contribution</h3>
+                      {topCategories.length === 0 ? (
+                        <p className="text-sm text-gray-500">Category contribution data will appear soon.</p>
+                      ) : (
+                        <div className="space-y-3">
+                          {(() => {
+                            const totalRevenue = topCategories.reduce((sum, cat) => sum + cat.revenueValue, 0) || 1;
+                            return topCategories.map((category) => (
+                              <div key={`category-${category.category}`} className="bg-gray-50 rounded-xl p-4 border border-gray-100">
+                                <div className="flex justify-between items-center mb-1">
+                                  <p className="text-sm font-semibold text-gray-800 truncate">{category.category}</p>
+                                  <span className="text-xs text-gray-500">{category.quantity} items</span>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                  <div className="w-full h-2 rounded-full bg-white border border-gray-200 overflow-hidden">
+                                    <div
+                                      className="h-2 bg-purple-500 rounded-full"
+                                      style={{ width: `${(category.revenueValue / totalRevenue) * 100}%` }}
+                                    />
+                                  </div>
+                                  <span className="text-xs font-semibold text-purple-600">
+                                    {Math.round((category.revenueValue / totalRevenue) * 100)}%
+                                  </span>
+                                </div>
+                                <p className="text-xs text-gray-500 mt-2">
+                                  {formatCurrency(category.revenueValue)} revenue
+                                </p>
+                              </div>
+                            ));
+                          })()}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Recent Orders Breakdown */}
+                  <div className="bg-white rounded-2xl p-6 border border-gray-100">
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <h3 className="text-lg font-semibold text-gray-800">Recent Delivered Orders</h3>
+                        <p className="text-sm text-gray-500">Last {recentOrders.length} delivered orders with item breakdown</p>
+                      </div>
+                      <button
+                        onClick={() => setShowAddProductModal(false)}
+                        className="hidden"
+                        aria-hidden="true"
+                      ></button>
+                    </div>
+                    {recentOrders.length === 0 ? (
+                      <p className="text-sm text-gray-500">Deliveries will appear here as soon as orders are completed.</p>
+                    ) : (
+                      <div className="space-y-4">
+                        {recentOrders.map(order => (
+                          <div key={`report-order-${order.id}`} className="border border-gray-100 rounded-xl p-4 hover:border-[#2c786c]/30 transition-colors">
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+                              <div>
+                                <p className="text-sm font-semibold text-gray-800">
+                                  Order #{order.order_number || order.id}
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                  {formatDateTime(order.created_at)} • {order.items.length} item{order.items.length !== 1 ? 's' : ''}
+                                </p>
+                              </div>
+                              <div className="mt-2 sm:mt-0 text-right">
+                                <p className="text-sm font-semibold text-[#2c786c]">
+                                  {formatCurrency(order.total_amount)}
+                                </p>
+                                {order.discount_amount > 0 && (
+                                  <p className="text-xs text-amber-600">Discounts: {formatCurrency(order.discount_amount)}</p>
+                                )}
+                              </div>
+                            </div>
+                            <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                              {order.items.map((item, index) => (
+                                <div key={`order-${order.id}-item-${index}`} className="bg-gray-50 rounded-lg p-3">
+                                  <p className="text-sm font-medium text-gray-800 truncate">{item.name}</p>
+                                  <p className="text-xs text-gray-500">
+                                    {item.quantity} x {formatCurrency(item.unit_price, { minimumFractionDigits: 2 })}
+                                  </p>
+                                  <p className="text-xs font-semibold text-[#2c786c]">
+                                    {formatCurrency(item.total_price, { minimumFractionDigits: 2 })}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </>
               )}
             </div>
           )}
