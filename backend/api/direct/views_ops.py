@@ -1,3 +1,180 @@
+async def direct_pharmacy_sales_report(request, pharmacy_id):
+    try:
+        from api.users.models import Pharmacy
+        from api.orders.models import Order, OrderLine
+        from channels.db import database_sync_to_async
+        from django.db.models import Sum, Count, F, DecimalField
+        from django.db.models.functions import Coalesce
+        from decimal import Decimal
+
+        @database_sync_to_async
+        def gather_sales():
+            pharmacy = Pharmacy.objects.get(id=int(pharmacy_id))
+            base_orders = (
+                Order.objects.filter(
+                    order_lines__inventory_item__pharmacy=pharmacy,
+                    order_status='delivered'
+                )
+                .select_related('customer__user')
+                .prefetch_related('order_lines__inventory_item__category')
+                .distinct()
+            )
+
+            total_orders = base_orders.count()
+            total_revenue = base_orders.aggregate(
+                total=Coalesce(Sum('total_amount'), Decimal('0.00'))
+            )['total']
+
+            total_discount = base_orders.aggregate(
+                total=Coalesce(Sum('discount_amount'), Decimal('0.00'))
+            )['total']
+
+            total_tax = base_orders.aggregate(
+                total=Coalesce(Sum('tax_amount'), Decimal('0.00'))
+            )['total']
+
+            total_delivery = base_orders.aggregate(
+                total=Coalesce(Sum('delivery_fee'), Decimal('0.00'))
+            )['total']
+
+            avg_order_value = Decimal('0.00')
+            if total_orders:
+                avg_order_value = (total_revenue or Decimal('0.00')) / Decimal(total_orders)
+
+            top_customers = list(
+                base_orders.values('customer__first_name', 'customer__last_name')
+                .annotate(
+                    order_count=Count('id'),
+                    total_spent=Coalesce(Sum('total_amount'), Decimal('0.00'))
+                )
+                .order_by('-total_spent')[:10]
+            )
+
+            order_lines = (
+                OrderLine.objects.filter(
+                    order__in=base_orders,
+                    inventory_item__pharmacy=pharmacy
+                )
+                .select_related('inventory_item__category', 'order')
+            )
+
+            product_sales = {}
+            category_sales = {}
+            monthly_sales = {}
+
+            for line in order_lines:
+                item_name = getattr(line.inventory_item, 'name', 'Unnamed Product')
+                category_name = getattr(getattr(line.inventory_item, 'category', None), 'name', 'Uncategorized')
+                month_key = line.order.created_at.strftime('%Y-%m') if line.order and line.order.created_at else 'Unknown'
+
+                product_entry = product_sales.setdefault(item_name, {
+                    'product': item_name,
+                    'quantity': 0,
+                    'revenue': Decimal('0.00')
+                })
+                product_entry['quantity'] += line.quantity
+                product_entry['revenue'] += Coalesce(line.total_price, Decimal('0.00'))
+
+                category_entry = category_sales.setdefault(category_name, {
+                    'category': category_name,
+                    'quantity': 0,
+                    'revenue': Decimal('0.00')
+                })
+                category_entry['quantity'] += line.quantity
+                category_entry['revenue'] += Coalesce(line.total_price, Decimal('0.00'))
+
+                month_entry = monthly_sales.setdefault(month_key, {
+                    'month': month_key,
+                    'orders': 0,
+                    'revenue': Decimal('0.00')
+                })
+                month_entry['revenue'] += Coalesce(line.total_price, Decimal('0.00'))
+
+            for month_key, entry in monthly_sales.items():
+                entry['orders'] = base_orders.filter(
+                    created_at__year=int(month_key.split('-')[0]),
+                    created_at__month=int(month_key.split('-')[1])
+                ).count()
+
+            product_ranking = sorted(product_sales.values(), key=lambda x: x['revenue'], reverse=True)[:15]
+            category_ranking = sorted(category_sales.values(), key=lambda x: x['revenue'], reverse=True)
+            monthly_breakdown = sorted(monthly_sales.values(), key=lambda x: x['month'])
+
+            detailed_orders = []
+            for order in base_orders.order_by('-created_at')[:100]:
+                detailed_orders.append({
+                    'id': order.id,
+                    'order_number': getattr(order, 'order_number', order.id),
+                    'total_amount': float(order.total_amount or 0),
+                    'subtotal': float(order.subtotal or 0),
+                    'discount_amount': float(order.discount_amount or 0),
+                    'delivery_fee': float(order.delivery_fee or 0),
+                    'created_at': order.created_at.isoformat() if order.created_at else None,
+                    'customer': {
+                        'first_name': getattr(getattr(order, 'customer', None), 'first_name', ''),
+                        'last_name': getattr(getattr(order, 'customer', None), 'last_name', ''),
+                    },
+                    'items': [
+                        {
+                            'name': getattr(line.inventory_item, 'name', ''),
+                            'quantity': line.quantity,
+                            'unit_price': float(line.unit_price or 0),
+                            'total_price': float(line.total_price or 0),
+                        }
+                        for line in order.order_lines.all()
+                    ]
+                })
+
+            return {
+                'summary': {
+                    'total_orders': total_orders,
+                    'total_revenue': float(total_revenue or 0),
+                    'total_discount': float(total_discount or 0),
+                    'total_tax': float(total_tax or 0),
+                    'total_delivery_fee': float(total_delivery or 0),
+                    'average_order_value': float(avg_order_value or 0),
+                },
+                'top_products': [
+                    {
+                        'product': entry['product'],
+                        'quantity': entry['quantity'],
+                        'revenue': float(entry['revenue'])
+                    }
+                    for entry in product_ranking
+                ],
+                'top_categories': [
+                    {
+                        'category': entry['category'],
+                        'quantity': entry['quantity'],
+                        'revenue': float(entry['revenue'])
+                    }
+                    for entry in category_ranking
+                ],
+                'monthly_sales': [
+                    {
+                        'month': entry['month'],
+                        'orders': entry['orders'],
+                        'revenue': float(entry['revenue'])
+                    }
+                    for entry in monthly_breakdown
+                ],
+                'top_customers': [
+                    {
+                        'first_name': entry['customer__first_name'],
+                        'last_name': entry['customer__last_name'],
+                        'orders': entry['order_count'],
+                        'total_spent': float(entry['total_spent'])
+                    }
+                    for entry in top_customers
+                ],
+                'recent_orders': detailed_orders,
+            }
+
+        report = await gather_sales()
+        return JsonResponse({'success': True, 'report': report})
+    except Exception as e:
+        logger.exception('Error generating pharmacy sales report')
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 import logging
