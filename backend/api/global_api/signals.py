@@ -6,6 +6,7 @@ from django.db import connection
 import time
 
 from .models import SystemHealth, ApiUsage
+from .utils import telemetry_writes_enabled
 
 
 # ============================================================================
@@ -15,6 +16,8 @@ from .models import SystemHealth, ApiUsage
 @receiver(post_save, sender=ApiUsage)
 def update_api_usage_cache(sender, instance, created, **kwargs):
     """Update cache with latest API usage statistics"""
+    if not telemetry_writes_enabled():
+        return
     if created:
         # Update cache with new API usage data
         cache_key = f'api_usage_stats_{instance.user.id if instance.user else "anonymous"}'
@@ -34,6 +37,8 @@ def update_api_usage_cache(sender, instance, created, **kwargs):
 @receiver(post_save, sender=SystemHealth)
 def update_system_health_cache(sender, instance, created, **kwargs):
     """Update cache with latest system health information"""
+    if not telemetry_writes_enabled():
+        return
     if created:
         # Update cache with new system health data
         cache_key = f'system_health_{instance.component}'
@@ -51,6 +56,8 @@ def update_system_health_cache(sender, instance, created, **kwargs):
 
 def update_overall_system_health():
     """Update overall system health based on component statuses"""
+    if not telemetry_writes_enabled():
+        return
     try:
         # Get latest status for each component
         components = SystemHealth.objects.values('component').distinct()
@@ -96,6 +103,8 @@ def update_overall_system_health():
 
 def check_database_health():
     """Check database connectivity and performance"""
+    if not telemetry_writes_enabled():
+        return True
     try:
         start_time = time.time()
         
@@ -114,27 +123,31 @@ def check_database_health():
         response_time = (time.time() - start_time) * 1000  # Convert to milliseconds
         
         # Create health record
-        SystemHealth.objects.create(
-            component='database',
-            status=status,
-            message=message,
-            response_time=response_time
-        )
+        if telemetry_writes_enabled():
+            SystemHealth.objects.create(
+                component='database',
+                status=status,
+                message=message,
+                response_time=response_time
+            )
         
         return status == 'healthy'
         
     except Exception as e:
         # Create critical health record
-        SystemHealth.objects.create(
-            component='database',
-            status='critical',
-            message=f'Database health check failed: {str(e)}'
-        )
+        if telemetry_writes_enabled():
+            SystemHealth.objects.create(
+                component='database',
+                status='critical',
+                message=f'Database health check failed: {str(e)}'
+            )
         return False
 
 
 def check_cache_health():
     """Check cache connectivity and performance"""
+    if not telemetry_writes_enabled():
+        return True
     try:
         start_time = time.time()
         
@@ -155,22 +168,24 @@ def check_cache_health():
         response_time = (time.time() - start_time) * 1000  # Convert to milliseconds
         
         # Create health record
-        SystemHealth.objects.create(
-            component='cache',
-            status=status,
-            message=message,
-            response_time=response_time
-        )
+        if telemetry_writes_enabled():
+            SystemHealth.objects.create(
+                component='cache',
+                status=status,
+                message=message,
+                response_time=response_time
+            )
         
         return status == 'healthy'
         
     except Exception as e:
         # Create critical health record
-        SystemHealth.objects.create(
-            component='cache',
-            status='critical',
-            message=f'Cache health check failed: {str(e)}'
-        )
+        if telemetry_writes_enabled():
+            SystemHealth.objects.create(
+                component='cache',
+                status='critical',
+                message=f'Cache health check failed: {str(e)}'
+            )
         return False
 
 
@@ -180,6 +195,8 @@ def check_cache_health():
 
 def perform_system_health_checks():
     """Perform comprehensive system health checks"""
+    if not telemetry_writes_enabled():
+        return True
     try:
         # Check database health
         db_healthy = check_database_health()
@@ -205,24 +222,27 @@ def perform_system_health_checks():
             storage_message = f'File storage health check failed: {str(e)}'
         
         # Create storage health record
-        SystemHealth.objects.create(
-            component='storage',
-            status=storage_status,
-            message=storage_message
-        )
+        if telemetry_writes_enabled():
+            SystemHealth.objects.create(
+                component='storage',
+                status=storage_status,
+                message=storage_message
+            )
         
         # Update overall system health
-        update_overall_system_health()
+        if telemetry_writes_enabled():
+            update_overall_system_health()
         
         return db_healthy and cache_healthy and storage_status == 'healthy'
         
     except Exception as e:
         # Create critical overall health record
-        SystemHealth.objects.create(
-            component='overall',
-            status='critical',
-            message=f'System health check failed: {str(e)}'
-        )
+        if telemetry_writes_enabled():
+            SystemHealth.objects.create(
+                component='overall',
+                status='critical',
+                message=f'System health check failed: {str(e)}'
+            )
         return False
 
 
