@@ -110,8 +110,7 @@ const DispatchOfferCard: React.FC<DispatchOfferCardProps> = ({
     <View style={wrapperStyles}>
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Ionicons name="flash" size={24} color="#FFD700" />
-          <Text style={styles.headerTitle}>New Delivery!</Text>
+          <Text style={styles.headerTitle}>Assignment Offer!</Text>
         </View>
         <Animated.View
           style={[
@@ -125,7 +124,7 @@ const DispatchOfferCard: React.FC<DispatchOfferCardProps> = ({
       </View>
 
       <View style={styles.earningsSection}>
-        <Text style={styles.earningsLabel}>You'll Earn</Text>
+        <Text style={styles.earningsLabel}>You&apos;ll Earn</Text>
         <Text style={styles.earningsAmount}>₱{offer.total_earnings.toFixed(2)}</Text>
         {offer.is_batch && (
           <View style={styles.badge}>
@@ -330,7 +329,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E0E0E0',
     borderRadius: 12,
-    padding: 12,
+    padding: 8,
     marginBottom: 16,
     backgroundColor: '#FDFDFD',
   },

@@ -156,12 +156,30 @@ class ApiService {
         timestamp: new Date().toISOString()
       });
 
-      const data = await response.json();
+      let data: any = null;
+      if (response.status !== 204) {
+        try {
+          data = await response.json();
+        } catch (parseError) {
+          console.warn('⚠️ Failed to parse API response as JSON:', {
+            error: parseError instanceof Error ? parseError.message : parseError,
+            status: response.status,
+            url: response.url,
+          });
+        }
+      }
       
-      console.log('📄 API Response Data:', {
-        data,
-        timestamp: new Date().toISOString()
-      });
+      if (data !== null) {
+        console.log('📄 API Response Data:', {
+          data,
+          timestamp: new Date().toISOString()
+        });
+      } else {
+        console.log('📄 API Response Data: <no body>', {
+          status: response.status,
+          timestamp: new Date().toISOString()
+        });
+      }
 
       if (!response.ok) {
         const isAuthError = response.status === 401 || response.status === 403;
@@ -169,29 +187,29 @@ class ApiService {
           console.error('❌ API Request Failed:', {
             status: response.status,
             statusText: response.statusText,
-            error: data.error || data.details || 'Request failed',
-            message: data.message,
+            error: data?.error || data?.details || 'Request failed',
+            message: data?.message,
             timestamp: new Date().toISOString()
           });
         }
         
         return {
           success: false,
-          error: data.error || data.details || 'Request failed',
-          message: data.message,
+          error: data?.error || data?.details || 'Request failed',
+          message: data?.message,
         };
       }
 
       console.log('✅ API Request Successful:', {
         success: true,
-        message: data.message,
+        message: data?.message,
         timestamp: new Date().toISOString()
       });
 
       return {
         success: true,
         data: data,
-        message: data.message,
+        message: data?.message,
       };
     } catch (error) {
       console.error('💥 API Network Error:', {
@@ -245,12 +263,30 @@ class ApiService {
         timestamp: new Date().toISOString()
       });
 
-      const data = await response.json();
+      let data: any = null;
+      if (response.status !== 204) {
+        try {
+          data = await response.json();
+        } catch (parseError) {
+          console.warn('⚠️ Failed to parse API direct response as JSON:', {
+            error: parseError instanceof Error ? parseError.message : parseError,
+            status: response.status,
+            url: response.url,
+          });
+        }
+      }
 
-      console.log('📄 API Direct Response Data:', {
-        data,
-        timestamp: new Date().toISOString()
-      });
+      if (data !== null) {
+        console.log('📄 API Direct Response Data:', {
+          data,
+          timestamp: new Date().toISOString()
+        });
+      } else {
+        console.log('📄 API Direct Response Data: <no body>', {
+          status: response.status,
+          timestamp: new Date().toISOString()
+        });
+      }
 
       if (!response.ok) {
         return {
@@ -626,6 +662,7 @@ class ApiService {
       })
     });
   }
+
 
   // Prescription order methods
   async createPrescriptionOrder(orderData: any): Promise<ApiResponse<any>> {
