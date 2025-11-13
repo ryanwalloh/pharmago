@@ -819,7 +819,7 @@ const OrderTrackingScreen: React.FC = () => {
       case 'in_transit':
         return {
           title: 'Out for Delivery',
-          subtitle: 'Track your rider in real time as they head your way.',
+          subtitle: 'Your rider is on the way to your location.',
           showMap: true,
           fallbackImage: STATUS_IMAGES.out_for_delivery
         };

@@ -14,6 +14,7 @@ const STRIPE_PUBLISHABLE_KEY = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY ||
 /** @type {import('@expo/config').ExpoConfig} */
 module.exports = {
   expo: {
+    owner: 'ryamazingw',
     name: 'PharmaGo',
     slug: 'pharmago-customer',
     version: '1.0.0',
@@ -108,7 +109,9 @@ module.exports = {
       // Also expose to JS runtime for reverse geocoding fallback
       googleMapsApiKey: GOOGLE_MAPS_API_KEY,
       stripePublishableKey: STRIPE_PUBLISHABLE_KEY,
-      eas: {},
+      eas: {
+        projectId: 'd09844f8-c94b-4ca3-89ea-584093d1d9ab',
+      },
     },
   },
 };
