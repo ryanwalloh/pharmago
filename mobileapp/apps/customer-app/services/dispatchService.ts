@@ -28,9 +28,13 @@ export interface DispatchOffer {
   orders?: {
     order_number: string;
     customer_name: string;
-    pharmacy_name: string;
-    pharmacy_address: string;
-    delivery_address: string;
+    pharmacy?: {
+      name: string;
+      address: string;
+    };
+    pharmacy_name?: string;
+    pharmacy_address?: string;
+    delivery_address?: string;
     earnings: number;
   }[];
 }

@@ -3,6 +3,7 @@
 import Constants from 'expo-constants';
 import { NativeModules } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { uploadDriverLicenseImage } from './cloudinaryService';
 
 // Lazy initialization to avoid import-time crashes in production builds
 let cachedApiBaseUrl: string | null = null;
@@ -562,8 +563,6 @@ class ApiService {
     try {
       // Step 1: Upload to Cloudinary
       console.log('☁️ Uploading driver license to Cloudinary...');
-      const { uploadDriverLicenseImage } = await import('./cloudinaryService');
-      
       const cloudinaryResult = await uploadDriverLicenseImage(localUri);
       
       if (!cloudinaryResult.success || !cloudinaryResult.url) {
