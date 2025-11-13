@@ -178,6 +178,15 @@ export default function ActiveDeliveryScreen() {
 
     const loadMaps = async () => {
       try {
+        if (typeof globalThis.location === 'undefined') {
+          (globalThis as any).location = {
+            href: 'app://-/',
+            origin: 'app://-',
+            protocol: 'app:',
+            host: '',
+          };
+        }
+
         const mapsModule = await import('react-native-maps');
         if (!isMounted) {
           return;
@@ -204,7 +213,7 @@ export default function ActiveDeliveryScreen() {
     const timer = setTimeout(() => {
       void loadMaps();
     }, 200);
-    
+
     return () => {
       isMounted = false;
       clearTimeout(timer);
