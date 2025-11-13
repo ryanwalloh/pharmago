@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert,
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { apiService } from '../../customer-app/services/api';
+import { uploadToCloudinary } from '../../customer-app/services/cloudinaryService';
 
 export default function RiderRegistration4() {
   const router = useRouter();
@@ -262,8 +263,6 @@ export default function RiderRegistration4() {
                         router.replace('/RiderRegistration3');
                         return;
                       }
-
-                      const { uploadToCloudinary } = await import('../../customer-app/services/cloudinaryService');
 
                       if ((!bike_id_url || bike_id_url.startsWith('file:')) && s2.bike_id_local_uri) {
                         const uploadRes = await uploadToCloudinary(s2.bike_id_local_uri, 'pharmago-file-uploads/valid-ids', `valid_id_${Date.now()}.jpg`);
