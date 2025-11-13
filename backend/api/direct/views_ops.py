@@ -67,34 +67,41 @@ async def direct_pharmacy_sales_report(request, pharmacy_id):
                 category_name = getattr(getattr(line.inventory_item, 'category', None), 'name', 'Uncategorized')
                 month_key = line.order.created_at.strftime('%Y-%m') if line.order and line.order.created_at else 'Unknown'
 
+                quantity = int(getattr(line, 'quantity', 0) or 0)
+                total_price = Decimal(getattr(line, 'total_price', Decimal('0.00')) or 0)
+
                 product_entry = product_sales.setdefault(item_name, {
                     'product': item_name,
                     'quantity': 0,
                     'revenue': Decimal('0.00')
                 })
-                product_entry['quantity'] += line.quantity
-                product_entry['revenue'] += Coalesce(line.total_price, Decimal('0.00'))
+                product_entry['quantity'] += quantity
+                product_entry['revenue'] += total_price
 
                 category_entry = category_sales.setdefault(category_name, {
                     'category': category_name,
                     'quantity': 0,
                     'revenue': Decimal('0.00')
                 })
-                category_entry['quantity'] += line.quantity
-                category_entry['revenue'] += Coalesce(line.total_price, Decimal('0.00'))
+                category_entry['quantity'] += quantity
+                category_entry['revenue'] += total_price
 
                 month_entry = monthly_sales.setdefault(month_key, {
                     'month': month_key,
                     'orders': 0,
                     'revenue': Decimal('0.00')
                 })
-                month_entry['revenue'] += Coalesce(line.total_price, Decimal('0.00'))
+                month_entry['revenue'] += total_price
 
             for month_key, entry in monthly_sales.items():
-                entry['orders'] = base_orders.filter(
-                    created_at__year=int(month_key.split('-')[0]),
-                    created_at__month=int(month_key.split('-')[1])
-                ).count()
+                try:
+                    year_str, month_str = month_key.split('-')
+                    entry['orders'] = base_orders.filter(
+                        created_at__year=int(year_str),
+                        created_at__month=int(month_str)
+                    ).count()
+                except Exception:
+                    entry['orders'] = 0
 
             product_ranking = sorted(product_sales.values(), key=lambda x: x['revenue'], reverse=True)[:15]
             category_ranking = sorted(category_sales.values(), key=lambda x: x['revenue'], reverse=True)
