@@ -1880,19 +1880,61 @@ const PharmacyDashboard = () => {
 
   const recentOrders = useMemo(() => salesReport?.recent_orders || [], [salesReport]);
 
-  const generateLinePath = (data, width, height) => {
-    if (!data.length) return '';
+  const buildRevenueChartGeometry = useMemo(() => {
+    const data = monthlyRevenueSeries;
+    const width = 600;
+    const height = 180;
+    if (!data.length) {
+      return {
+        linePath: '',
+        areaPath: '',
+        points: [],
+        labels: [],
+      };
+    }
+
     const maxRevenue = Math.max(...data.map(item => item.revenue), 1);
-    const stepX = width / Math.max(data.length - 1, 1);
-    return data
-      .map((item, index) => {
-        const x = index * stepX;
-        const normalized = item.revenue / maxRevenue;
-        const y = height - normalized * height;
-        return `${index === 0 ? 'M' : 'L'}${x},${y}`;
-      })
-      .join(' ');
-  };
+    if (data.length === 1) {
+      const x = width / 2;
+      const normalized = data[0].revenue / maxRevenue;
+      const y = height - normalized * height;
+      return {
+        linePath: `M${x},${y}`,
+        areaPath: `M${x},${y} L${x},${height} L${x},${height} Z`,
+        points: [{ x, y, label: data[0].label }],
+        labels: [{ x, text: data[0].label }],
+      };
+    }
+
+    const stepX = width / (data.length - 1);
+    const commands = [];
+    const areaCommands = [];
+    data.forEach((item, index) => {
+      const x = index * stepX;
+      const normalized = item.revenue / maxRevenue;
+      const y = height - normalized * height;
+      commands.push(`${index === 0 ? 'M' : 'L'}${x},${y}`);
+      areaCommands.push({ x, y });
+    });
+
+    const areaPath =
+      `${commands[0]} ` +
+      areaCommands
+        .slice(1)
+        .map(point => `L${point.x},${point.y}`)
+        .join(' ') +
+      ` L${width},${height} L0,${height} Z`;
+
+    return {
+      linePath: commands.join(' '),
+      areaPath,
+      points: areaCommands,
+      labels: data.map((item, index) => ({
+        x: index * stepX,
+        text: item.label
+      })),
+    };
+  }, [monthlyRevenueSeries]);
 
   if (loading) {
     return (
@@ -2471,30 +2513,42 @@ const PharmacyDashboard = () => {
                                   <stop offset="100%" stopColor="#2c786c" stopOpacity="0" />
                                 </linearGradient>
                               </defs>
-                              <path
-                                d={`${generateLinePath(monthlyRevenueSeries, 600, 180)} L600,200 L0,200 Z`}
-                                fill="url(#revenueGradient)"
-                                stroke="none"
-                              />
-                              <path
-                                d={generateLinePath(monthlyRevenueSeries, 600, 180)}
-                                fill="none"
-                                stroke="#2c786c"
-                                strokeWidth="3"
-                                strokeLinecap="round"
-                              />
-                              {monthlyRevenueSeries.map((point, index) => {
-                                const x = monthlyRevenueSeries.length === 1 ? 0 : (index / (monthlyRevenueSeries.length - 1)) * 600;
-                                const y = 180 - (point.revenue / Math.max(...monthlyRevenueSeries.map(p => p.revenue), 1)) * 180;
-                                return (
-                                  <circle key={point.label} cx={x} cy={y} r="4" fill="#2c786c" stroke="#ffffff" strokeWidth="2" />
-                                );
-                              })}
+                              {buildRevenueChartGeometry.areaPath && (
+                                <path
+                                  d={buildRevenueChartGeometry.areaPath}
+                                  fill="url(#revenueGradient)"
+                                  stroke="none"
+                                />
+                              )}
+                              {buildRevenueChartGeometry.linePath && (
+                                <path
+                                  d={buildRevenueChartGeometry.linePath}
+                                  fill="none"
+                                  stroke="#2c786c"
+                                  strokeWidth="3"
+                                  strokeLinecap="round"
+                                />
+                              )}
+                              {buildRevenueChartGeometry.points.map(point => (
+                                <circle
+                                  key={`pt-${point.label || point.x}`}
+                                  cx={point.x}
+                                  cy={point.y}
+                                  r="4"
+                                  fill="#2c786c"
+                                  stroke="#ffffff"
+                                  strokeWidth="2"
+                                />
+                              ))}
                             </svg>
-                            <div className="absolute bottom-2 left-0 right-0 flex justify-between px-4 text-xs text-gray-500">
-                              {monthlyRevenueSeries.map(point => (
-                                <span key={`tick-${point.label}`} className="w-16 text-center truncate">
-                                  {point.label}
+                            <div
+                              className={`absolute bottom-2 left-0 right-0 flex ${
+                                monthlyRevenueSeries.length === 1 ? 'justify-center' : 'justify-between'
+                              } px-4 text-xs text-gray-500`}
+                            >
+                              {buildRevenueChartGeometry.labels.map((label, idx) => (
+                                <span key={`tick-${label.text}-${idx}`} className="w-16 text-center truncate">
+                                  {label.text}
                                 </span>
                               ))}
                             </div>
