@@ -153,7 +153,7 @@ export default function RiderLoginScreen() {
                 <Text style={styles.label}>Phone or Email</Text>
                 <TextInput
                   style={styles.input}
-                  placeholder="e.g. 0917 123 4567 or you@example.com"
+                  placeholder="0917***4567 or you@example.com"
                   placeholderTextColor="#9E9E9E"
                   value={identifier}
                   onChangeText={setIdentifier}

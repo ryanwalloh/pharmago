@@ -39,7 +39,13 @@ export async function sendRiderLocationUpdate(
         request.accuracy !== undefined && request.accuracy !== null
           ? Number(request.accuracy)
           : undefined,
-      timestamp: new Date(request.locationTimestamp).toISOString(),
+      timestamp: (() => {
+        const timestampValue = Number(request.locationTimestamp);
+        if (Number.isFinite(timestampValue) && timestampValue > 0) {
+          return new Date(timestampValue).toISOString();
+        }
+        return new Date().toISOString();
+      })(),
       reason: request.reason,
       distance_moved: request.distanceFromLast,
     };
