@@ -1,6 +1,66 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+
+const RAILWAY_THEME = {
+  appBackground: 'linear-gradient(135deg, #070C1F 0%, #0C132F 45%, #141C3D 70%, #1A2452 100%)',
+  surfacePrimary: 'rgba(15, 22, 44, 0.92)',
+  surfaceSecondary: 'rgba(20, 28, 54, 0.8)',
+  cardHighlight: 'rgba(29, 39, 74, 0.85)',
+  borderSoft: '1px solid rgba(66, 156, 255, 0.18)',
+  textPrimary: '#F4F6FF',
+  textSecondary: '#93A3C6',
+  accentTeal: '#32E0C4',
+  accentPink: '#FF4D8D',
+  accentPurple: '#6C63FF',
+  accentOrange: '#FFB347',
+  shadowSoft: '0 24px 48px rgba(5, 10, 24, 0.45)',
+  shadowStrong: '0 32px 70px rgba(2, 6, 18, 0.6)',
+};
+
+const PRIMARY_PANEL_STYLE = {
+  background: RAILWAY_THEME.surfacePrimary,
+  border: RAILWAY_THEME.borderSoft,
+  boxShadow: RAILWAY_THEME.shadowStrong,
+  backdropFilter: 'blur(18px)',
+};
+
+const SECONDARY_PANEL_STYLE = {
+  background: RAILWAY_THEME.surfaceSecondary,
+  border: '1px solid rgba(76, 111, 255, 0.16)',
+  boxShadow: RAILWAY_THEME.shadowSoft,
+  backdropFilter: 'blur(16px)',
+};
+
+const MODAL_SCRIM_STYLE = {
+  background: 'rgba(3, 8, 20, 0.78)',
+  backdropFilter: 'blur(18px)',
+};
+
+const MODAL_PANEL_STYLE = {
+  background: 'linear-gradient(160deg, rgba(15,22,44,0.96), rgba(7,12,26,0.96))',
+  border: '1px solid rgba(76,111,255,0.28)',
+  boxShadow: '0 48px 96px rgba(2,6,18,0.78)',
+  color: RAILWAY_THEME.textPrimary,
+};
+
+const MODAL_SECTION_STYLE = {
+  background: 'rgba(255,255,255,0.03)',
+  border: '1px solid rgba(255,255,255,0.06)',
+  borderRadius: '20px',
+};
+
+const MODAL_PRIMARY_BUTTON_STYLE = {
+  background: 'linear-gradient(135deg, rgba(50,224,196,0.6), rgba(108,99,255,0.6))',
+  border: '1px solid rgba(255,255,255,0.08)',
+  color: '#F4F6FF',
+};
+
+const MODAL_SECONDARY_BUTTON_STYLE = {
+  background: 'rgba(255,255,255,0.03)',
+  border: '1px solid rgba(255,255,255,0.08)',
+  color: 'rgba(244,246,255,0.75)',
+};
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -19,7 +79,6 @@ const AdminDashboard = () => {
   const [pendingPharmacies, setPendingPharmacies] = useState([]);
   const [loadingPendingPharmacies, setLoadingPendingPharmacies] = useState(false);
   const [pharmacyList, setPharmacyList] = useState([]);
-  const [loadingPharmacyList, setLoadingPharmacyList] = useState(false);
   
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -193,7 +252,6 @@ const AdminDashboard = () => {
   // Fetch active pharmacies for Manage Pharmacies list (direct endpoint, no auth)
   const fetchActivePharmacies = async () => {
     try {
-      setLoadingPharmacyList(true);
       const base = (process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
       const resp = await axios.get(`${base}/api/active-pharmacies/`);
       const arr = Array.isArray(resp.data) ? resp.data : [];
@@ -209,7 +267,6 @@ const AdminDashboard = () => {
       console.error('Error fetching active pharmacies:', err?.response?.status, err?.message, err?.response?.data);
       setPharmacyList([]);
     } finally {
-      setLoadingPharmacyList(false);
     }
   };
 
@@ -489,9 +546,9 @@ const AdminDashboard = () => {
   }, [activeNav, activeTile]);
 
   const navItems = [
-    { id: 'Dashboard', label: 'Dashboard', icon: 'M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z' },
-    { id: 'Manage Pharmacies', label: 'Manage Pharmacies', icon: 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4' },
-    { id: 'Manage Riders', label: 'Manage Riders', icon: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z' },
+    { id: 'Dashboard', label: 'Dashboard', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
+    { id: 'Manage Pharmacies', label: 'Pharmacies', icon: 'M3 7h18M5 7v10a2 2 0 002 2h10a2 2 0 002-2V7M9 11h6v6H9z' },
+    { id: 'Manage Riders', label: 'Riders', icon: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197' },
     { id: 'Customers', label: 'Customers', icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z' },
     { id: 'Live Orders', label: 'Live Orders', icon: 'M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2' },
     { id: 'Mail', label: 'Mail', icon: 'M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z' },
@@ -499,15 +556,250 @@ const AdminDashboard = () => {
     { id: 'Settings', label: 'Settings', icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z' }
   ];
 
+  const getInitials = (value = '') => {
+    const cleaned = value.trim();
+    if (!cleaned) {
+      return 'PG';
+    }
+    return cleaned
+      .split(/\s+/)
+      .map(part => part[0])
+      .filter(Boolean)
+      .slice(0, 2)
+      .join('')
+      .toUpperCase();
+  };
+
+  const formatUnit = (count, singular, plural) => `${count.toLocaleString()} ${count === 1 ? singular : plural}`;
+
+  const dashboardMetrics = useMemo(() => {
+    const totalPharmacies = Number(pharmacyStats?.totalPharmacies) || 0;
+    const activePharmacies = Number(pharmacyStats?.activePharmacies) || 0;
+    const pendingPharmaciesCount = Number(pharmacyStats?.pendingApprovals) || 0;
+    const suspendedPharmacies = Number(pharmacyStats?.suspendedPharmacies) || 0;
+
+    const totalRiders = Number(riderStats?.totalRiders) || 0;
+    const activeRiders = Number(riderStats?.activeRiders) || 0;
+    const pendingRiders = Number(riderStats?.pendingApprovals) || 0;
+    const suspendedRiders = Number(riderStats?.suspendedRiders) || 0;
+
+    const networkSize = totalPharmacies + totalRiders;
+    const networkActive = activePharmacies + activeRiders;
+    const pendingCombined = pendingPharmaciesCount + pendingRiders;
+    const suspendedCombined = suspendedPharmacies + suspendedRiders;
+
+    const metrics = [
+      {
+        key: 'network',
+        label: 'Network Size',
+        display: networkSize.toLocaleString(),
+        descriptor: `${formatUnit(totalPharmacies, 'pharmacy', 'pharmacies')} • ${formatUnit(totalRiders, 'rider', 'riders')}`,
+        accent: 'linear-gradient(135deg, rgba(50,224,196,0.25), rgba(108,99,255,0.22))',
+        iconPath: 'M3 7h18M5 7v10a2 2 0 002 2h10a2 2 0 002-2V7M9 11h6v6H9z',
+      },
+      {
+        key: 'coverage',
+        label: 'Active Coverage',
+        display: networkActive.toLocaleString(),
+        descriptor: `${formatUnit(activePharmacies, 'active pharmacy', 'active pharmacies')} • ${formatUnit(activeRiders, 'active rider', 'active riders')}`,
+        accent: 'linear-gradient(135deg, rgba(108,99,255,0.24), rgba(50,224,196,0.22))',
+        iconPath: 'M5 13l4 4L19 7',
+      },
+      {
+        key: 'pending',
+        label: 'Pending Actions',
+        display: pendingCombined.toLocaleString(),
+        descriptor: `${formatUnit(pendingPharmaciesCount, 'pharmacy pending', 'pharmacies pending')} • ${formatUnit(pendingRiders, 'rider pending', 'riders pending')}`,
+        accent: 'linear-gradient(135deg, rgba(255,179,71,0.24), rgba(108,99,255,0.24))',
+        iconPath: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z',
+      },
+      {
+        key: 'suspended',
+        label: 'Suspended Accounts',
+        display: suspendedCombined.toLocaleString(),
+        descriptor: `${formatUnit(suspendedPharmacies, 'pharmacy suspended', 'pharmacies suspended')} • ${formatUnit(suspendedRiders, 'rider suspended', 'riders suspended')}`,
+        accent: 'linear-gradient(135deg, rgba(255,77,141,0.22), rgba(108,99,255,0.26))',
+        iconPath: 'M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728L5.636 5.636m12.728 12.728L18.364 5.636M5.636 18.364l12.728-12.728',
+      },
+    ];
+
+    return {
+      metrics,
+      summary: {
+        networkSize,
+        networkActive,
+        pendingCombined,
+        suspendedCombined,
+      },
+    };
+  }, [pharmacyStats, riderStats]);
+
+  const revenueTrend = useMemo(() => {
+    const rawTrend = Array.isArray(pharmacyStats?.weeklyRevenueTrend)
+      ? pharmacyStats.weeklyRevenueTrend
+      : Array.isArray(pharmacyStats?.weeklyRevenue)
+      ? pharmacyStats.weeklyRevenue
+      : [];
+
+    const normalize = (entries) => {
+      const trimmed = entries.slice(-7);
+      const mapped = trimmed.map((entry, index) => ({
+        label: entry?.label || entry?.day || entry?.name || `D${index + 1}`,
+        amount: Number(entry?.amount ?? entry?.total ?? entry?.revenue ?? entry?.value ?? 0),
+      }));
+      const max = Math.max(...mapped.map(item => item.amount), 1);
+      return mapped.map((item) => ({
+        ...item,
+        height: Math.min(95, Math.round((item.amount / max) * 90) + 8),
+      }));
+    };
+
+    if (rawTrend.length) {
+      return normalize(rawTrend);
+    }
+
+    return normalize([
+      { label: 'Mon', amount: 42000 },
+      { label: 'Tue', amount: 48000 },
+      { label: 'Wed', amount: 31000 },
+      { label: 'Thu', amount: 52000 },
+      { label: 'Fri', amount: 56000 },
+      { label: 'Sat', amount: 39000 },
+      { label: 'Sun', amount: 51000 },
+    ]);
+  }, [pharmacyStats]);
+
+  const incomeTrend = useMemo(() => {
+    const rawTrend = Array.isArray(pharmacyStats?.monthlyIncomeTrend)
+      ? pharmacyStats.monthlyIncomeTrend
+      : [];
+
+    const normalize = (entries) => {
+      const trimmed = entries.slice(-8);
+      const mapped = trimmed.map((entry, index) => ({
+        label: entry?.label || entry?.month || `M${index + 1}`,
+        profit: Number(entry?.profit ?? entry?.revenue ?? 0),
+        expense: Number(entry?.expense ?? entry?.cost ?? 0),
+      }));
+      const max = Math.max(...mapped.flatMap(item => [item.profit, item.expense]), 1);
+      return mapped.map((item) => ({
+        ...item,
+        profitHeight: Math.max(6, Math.round((item.profit / max) * 90) + 6),
+        expenseHeight: Math.max(6, Math.round((item.expense / max) * 90) + 6),
+      }));
+    };
+
+    if (rawTrend.length) {
+      return normalize(rawTrend);
+    }
+
+    return normalize([
+      { label: 'M1', profit: 48000, expense: 12000 },
+      { label: 'M2', profit: 52000, expense: 18000 },
+      { label: 'M3', profit: 41000, expense: 15000 },
+      { label: 'M4', profit: 56000, expense: 20000 },
+      { label: 'M5', profit: 60000, expense: 22000 },
+      { label: 'M6', profit: 47000, expense: 17000 },
+      { label: 'M7', profit: 58000, expense: 21000 },
+      { label: 'M8', profit: 61000, expense: 23000 },
+    ]);
+  }, [pharmacyStats]);
+
+  const topPharmaciesData = useMemo(() => {
+    const statsLeaders = Array.isArray(pharmacyStats?.topPharmacies)
+      ? pharmacyStats.topPharmacies
+      : Array.isArray(pharmacyStats?.topPerformers)
+      ? pharmacyStats.topPerformers
+      : [];
+
+    let source = statsLeaders;
+
+    if (!source.length && Array.isArray(pharmacyStats?.pendingPharmaciesData)) {
+      source = pharmacyStats.pendingPharmaciesData;
+    }
+
+    if (!source.length) {
+      source = Array.isArray(pharmacyList) ? pharmacyList : [];
+    }
+
+    const mapped = source
+      .filter(Boolean)
+      .slice(0, 5)
+      .map((pharmacy, index) => {
+        const name = pharmacy.pharmacy_name || pharmacy.name || `Pharmacy ${index + 1}`;
+        const email = pharmacy.business_email || pharmacy.email || 'Not provided';
+        const sales = Number(
+          pharmacy.total_sales ??
+          pharmacy.totalRevenue ??
+          pharmacy.total_orders ??
+          pharmacy.sales ??
+          0
+        );
+
+        return {
+          key: pharmacy.id || `${name}-${index}`,
+          name,
+          email,
+          sales,
+          avatar: getInitials(name),
+        };
+      });
+
+    if (!mapped.length) {
+      return [
+        { key: 'fallback-1', name: 'MediCare Pharmacy', email: 'contact@medicare.ph', sales: 1247, avatar: 'MC' },
+        { key: 'fallback-2', name: 'HealthPlus Drugstore', email: 'info@healthplus.ph', sales: 1156, avatar: 'HP' },
+        { key: 'fallback-3', name: 'QuickMed Solutions', email: 'hello@quickmed.ph', sales: 1089, avatar: 'QM' },
+        { key: 'fallback-4', name: 'Family Care Pharmacy', email: 'support@familycare.ph', sales: 987, avatar: 'FC' },
+        { key: 'fallback-5', name: 'Express Med Store', email: 'orders@expressmed.ph', sales: 856, avatar: 'EM' },
+      ];
+    }
+
+    const hasSales = mapped.some(item => item.sales > 0);
+    if (!hasSales) {
+      mapped.forEach((item, idx) => {
+        item.sales = (mapped.length - idx) * 120;
+      });
+    }
+
+    return mapped;
+  }, [pharmacyStats, pharmacyList]);
+
   const renderManageRiders = () => (
     <div className="space-y-8">
-      <div className="mb-8">
-        <div className="flex justify-between items-center">
-          <h1 className="text-4xl font-bold text-[#2C7A5D] mb-2">Rider Management</h1>
+      <div
+        className="relative rounded-3xl p-6 border overflow-hidden"
+        style={{
+          background: 'linear-gradient(165deg, rgba(19,27,53,0.92), rgba(13,19,40,0.9))',
+          borderColor: 'rgba(108,99,255,0.22)',
+        }}
+      >
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            background:
+              'radial-gradient(circle at 20% -5%, rgba(108,99,255,0.24), transparent 55%), radial-gradient(circle at 90% 0%, rgba(50,224,196,0.2), transparent 45%)',
+          }}
+        />
+        <div className="relative flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div>
+            <p className="text-xs uppercase tracking-[0.4em]" style={{ color: 'rgba(244,246,255,0.55)' }}>Dispatch Network</p>
+            <h1 className="text-3xl font-semibold text-white">Rider Management</h1>
+            <p className="text-sm mt-2" style={{ color: 'rgba(244,246,255,0.6)' }}>
+              Monitor fleet readiness and action rider approvals in real time.
+            </p>
+          </div>
+          <div className="flex items-center space-x-3">
           <button
             onClick={fetchRiderStats}
             disabled={loading}
-            className="px-4 py-2 bg-[#4DAF7C] text-white rounded-lg hover:bg-[#6BBF9A] transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+              className="px-4 py-2 rounded-xl text-sm font-semibold flex items-center space-x-2 transition-all duration-200"
+              style={{
+                background: 'linear-gradient(135deg, rgba(50,224,196,0.35), rgba(108,99,255,0.35))',
+                border: '1px solid rgba(255,255,255,0.08)',
+                color: '#F4F6FF',
+                opacity: loading ? 0.6 : 1,
+              }}
           >
             {loading ? (
               <>
@@ -515,344 +807,721 @@ const AdminDashboard = () => {
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
-                <span>Loading...</span>
+                  <span>Refreshing…</span>
               </>
             ) : (
               <>
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
-                <span>Refresh</span>
+                  <span>Sync Fleet</span>
               </>
             )}
           </button>
+            <button
+              className="px-4 py-2 rounded-xl text-sm font-semibold transition-all duration-200"
+              style={{
+                background: 'rgba(255,255,255,0.05)',
+                border: '1px solid rgba(255,255,255,0.08)',
+                color: 'rgba(244,246,255,0.75)',
+              }}
+            >
+              Dispatch Logs
+          </button>
+          </div>
         </div>
         {error && (
-          <div className="mt-2 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg">{error}</div>
+          <div
+            className="relative mt-4 px-4 py-3 rounded-2xl border flex items-center space-x-3"
+            style={{
+              background: 'rgba(255,77,141,0.12)',
+              borderColor: 'rgba(255,77,141,0.35)',
+              color: '#FF9AC2',
+            }}
+          >
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span>{error}</span>
+          </div>
         )}
       </div>
 
       {/* Stats Tiles */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className={`p-4 hover:shadow-lg transition-all duration-200 transform hover:-translate-y-0.5 cursor-pointer ${riderActiveTile === 'total' ? 'ring-2 ring-[#4DAF7C] ring-opacity-50' : ''}`} style={{borderRadius: '25% 10%', backgroundColor: '#F1FEC6'}} onClick={() => handleRiderTileClick('total')}>
-          <div className="flex items-center justify-between mb-4">
-            <p className="text-sm font-medium text-[#666666]">Total Riders</p>
-            <div className="p-3 bg-[#D5E8D4] rounded-xl">
-              <svg className="h-4 w-4 text-[#4DAF7C]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197" /></svg>
+        {[
+          {
+            key: 'total',
+            label: 'Total Riders',
+            value: riderStats.totalRiders,
+            description: 'Registered riders',
+            gradient: 'linear-gradient(135deg, rgba(50,224,196,0.22), rgba(108,99,255,0.24))',
+            iconPath: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197',
+          },
+          {
+            key: 'pending',
+            label: 'Pending Approvals',
+            value: riderStats.pendingApprovals,
+            description: 'Awaiting review',
+            gradient: 'linear-gradient(135deg, rgba(255,77,141,0.24), rgba(108,99,255,0.22))',
+            iconPath: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z',
+          },
+          {
+            key: 'active',
+            label: 'Active Riders',
+            value: riderStats.activeRiders,
+            description: 'Currently operating',
+            gradient: 'linear-gradient(135deg, rgba(108,99,255,0.24), rgba(50,224,196,0.22))',
+            iconPath: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z',
+          },
+          {
+            key: 'suspended',
+            label: 'Suspended',
+            value: riderStats.suspendedRiders,
+            description: 'Temporarily disabled',
+            gradient: 'linear-gradient(135deg, rgba(255,179,71,0.24), rgba(255,77,141,0.26))',
+            iconPath: 'M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728L5.636 5.636m12.728 12.728L18.364 5.636M5.636 18.364l12.728-12.728',
+          },
+        ].map((tile) => {
+          const isActive = riderActiveTile === tile.key;
+          return (
+            <button
+              key={tile.key}
+              onClick={() => handleRiderTileClick(tile.key)}
+              className="relative overflow-hidden rounded-3xl p-6 transition-all duration-300 text-left"
+              style={{
+                background: tile.gradient,
+                border: isActive ? '1px solid rgba(50,224,196,0.5)' : '1px solid rgba(255,255,255,0.06)',
+                boxShadow: isActive ? '0 18px 38px rgba(6,12,32,0.5)' : '0 10px 20px rgba(6,12,32,0.35)',
+                transform: isActive ? 'translateY(-4px)' : 'none',
+                color: '#F4F6FF',
+              }}
+            >
+              <div
+                className="absolute top-0 right-0 w-36 h-36 translate-x-12 -translate-y-20 blur-3xl opacity-70"
+                style={{ background: 'rgba(255,255,255,0.1)' }}
+              />
+              <div className="flex items-center justify-between mb-5 relative">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.35em]" style={{ color: 'rgba(244,246,255,0.7)' }}>
+                    {tile.label}
+                  </p>
+                  <div className="flex items-baseline space-x-2">
+                    <h2 className="text-3xl font-semibold text-white">
+                      {loading ? (
+                        <span className="inline-block animate-pulse bg-white/30 rounded w-16 h-6" />
+                      ) : (
+                        tile.value
+                      )}
+                    </h2>
+                    {isActive && (
+                      <span className="text-[0.65rem] uppercase tracking-[0.4em] text-[#32E0C4]">Active</span>
+                    )}
             </div>
           </div>
-          <h1 className="text-4xl mb-6 font-bold text-gray-700 mb-1">{riderStats.totalRiders}</h1>
-          <p className="text-sm text-[#999999]">Registered riders</p>
+                <div
+                  className="p-3 rounded-xl"
+                  style={{
+                    background: 'rgba(0,0,0,0.18)',
+                  }}
+                >
+                  <svg className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={tile.iconPath} />
+        </svg>
         </div>
-
-        <div className={`p-4 hover:shadow-lg transition-all duration-200 transform hover:-translate-y-0.5 cursor-pointer ${riderActiveTile === 'pending' ? 'ring-2 ring-[#4DAF7C] ring-opacity-50' : ''}`} style={{borderRadius: '25% 10%', backgroundColor: '#C2DEDB'}} onClick={() => handleRiderTileClick('pending')}>
-          <div className="flex items-center justify-between mb-4">
-            <p className="text-sm font-medium text-[#666666]">Pending Approvals</p>
-            <div className="p-3 bg-[#D5E8D4] rounded-xl">
-              <svg className="h-4 w-4 text-[#4DAF7C]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
             </div>
+              <p className="text-xs font-medium" style={{ color: 'rgba(244,246,255,0.75)' }}>
+                {tile.description}
+              </p>
+              <div className="mt-5 h-10 relative overflow-hidden rounded-full">
+                <div
+                  className="absolute inset-0"
+                  style={{
+                    background: isActive
+                      ? 'linear-gradient(135deg, rgba(50,224,196,0.5), rgba(108,99,255,0.45))'
+                      : 'linear-gradient(135deg, rgba(255,255,255,0.2), rgba(255,255,255,0))',
+                    transform: 'skewX(-20deg)',
+                    opacity: 0.35,
+                  }}
+                />
           </div>
-          <h1 className="text-4xl mb-6 font-bold text-gray-700 mb-1">{riderStats.pendingApprovals}</h1>
-          <p className="text-sm text-[#999999]">Awaiting review</p>
-        </div>
-
-        <div className={`p-4 hover:shadow-lg transition-all duration-200 transform hover:-translate-y-0.5 cursor-pointer ${riderActiveTile === 'active' ? 'ring-2 ring-[#4DAF7C] ring-opacity-50' : ''}`} style={{borderRadius: '25% 10%', backgroundColor: '#FADADD'}} onClick={() => handleRiderTileClick('active')}>
-          <div className="flex items-center justify-between mb-4">
-            <p className="text-sm font-medium text-[#666666]">Active Riders</p>
-            <div className="p-3 bg-[#D5E8D4] rounded-xl">
-              <svg className="h-4 w-4 text-[#4DAF7C]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-            </div>
-          </div>
-          <h1 className="text-4xl mb-6 font-bold text-gray-700 mb-1">{riderStats.activeRiders}</h1>
-          <p className="text-sm text-[#999999]">Currently operating</p>
-        </div>
-
-        <div className={`p-4 hover:shadow-lg transition-all duration-200 transform hover:-translate-y-0.5 cursor-pointer ${riderActiveTile === 'suspended' ? 'ring-2 ring-[#4DAF7C] ring-opacity-50' : ''}`} style={{borderRadius: '25% 10%', backgroundColor: '#C3BEF7'}} onClick={() => handleRiderTileClick('suspended')}>
-          <div className="flex items-center justify-between mb-4">
-            <p className="text-sm font-medium text-[#666666]">Suspended</p>
-            <div className="p-3 bg-[#D5E8D4] rounded-xl"><svg className="h-4 w-4 text-[#4DAF7C]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728L5.636 5.636" /></svg></div>
-          </div>
-          <h1 className="text-4xl mb-6 font-bold text-gray-700 mb-1">{riderStats.suspendedRiders}</h1>
-          <p className="text-sm text-[#999999]">Temporarily disabled</p>
-        </div>
+            </button>
+          );
+        })}
       </div>
 
       {/* List */}
-      <div className="bg-white rounded-2xl shadow-2xl border border-[#D5E8D4] p-8">
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-xl font-bold text-[#2C7A5D]">
+      <div
+        className="rounded-3xl p-6 border relative overflow-hidden"
+        style={{
+          background: 'linear-gradient(165deg, rgba(19,27,53,0.92), rgba(13,19,40,0.92))',
+          borderColor: 'rgba(76,111,255,0.22)',
+        }}
+      >
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            background: 'radial-gradient(circle at 20% 0%, rgba(108,99,255,0.18), transparent 55%), radial-gradient(circle at 80% -10%, rgba(50,224,196,0.18), transparent 45%)',
+          }}
+        />
+        <div className="relative flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+          <div>
+            <h1 className="text-xl font-semibold text-white">
             {riderActiveTile === 'pending' ? 'Pending Riders' : riderActiveTile === 'active' ? 'Active Riders' : riderActiveTile === 'suspended' ? 'Suspended Riders' : 'All Riders'}
           </h1>
-          <div className="flex space-x-2">
-            <button onClick={fetchRiderStats} disabled={loading} className="px-4 py-2 bg-[#4DAF7C] text-white rounded-lg hover:bg-[#6BBF9A] transition-colors duration-200">Refresh</button>
+            <p className="text-xs uppercase tracking-[0.4em]" style={{ color: 'rgba(244,246,255,0.55)' }}>
+              Fleet overview
+            </p>
+          </div>
+          <div className="flex space-x-3">
+            <button
+              onClick={fetchRiderStats}
+              disabled={loading}
+              className="px-4 py-2 rounded-xl text-sm font-semibold"
+              style={{
+                background: 'linear-gradient(135deg, rgba(50,224,196,0.3), rgba(108,99,255,0.3))',
+                border: '1px solid rgba(255,255,255,0.08)',
+                color: '#F4F6FF',
+                opacity: loading ? 0.6 : 1,
+              }}
+            >
+              {loading ? 'Refreshing…' : 'Refresh'}
+            </button>
           </div>
         </div>
 
-        {/* Search */}
-        <div className="mb-6">
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <svg className="h-5 w-5 text-[#999999]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+        <div className="relative mb-6">
+          <div
+            className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"
+            style={{ color: 'rgba(244,246,255,0.6)' }}
+          >
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
             </div>
-            <input type="text" placeholder="Search riders by name or phone..." value={riderSearchTerm} onChange={(e) => setRiderSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-3 border border-[#D5E8D4] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#6BBF9A] focus:ring-opacity-20 focus:border-[#6BBF9A] transition-all duration-200 text-sm" />
+          <input
+            type="text"
+            placeholder="Search riders by name or phone..."
+            value={riderSearchTerm}
+            onChange={(e) => setRiderSearchTerm(e.target.value)}
+            className="w-full pl-11 pr-12 py-3 rounded-2xl text-sm focus:outline-none transition-all duration-200"
+            style={{
+              background: 'rgba(13,20,38,0.85)',
+              border: '1px solid rgba(108,99,255,0.22)',
+              color: '#F4F6FF',
+            }}
+          />
             {riderSearchTerm && (
-              <button onClick={() => setRiderSearchTerm('')} className="absolute inset-y-0 right-0 pr-3 flex items-center text-[#999999] hover:text-[#666666] transition-colors duration-200">
-                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+            <button
+              onClick={() => setRiderSearchTerm('')}
+              className="absolute inset-y-0 right-0 pr-4 flex items-center text-[#32E0C4] hover:text-[#FF4D8D] transition-colors duration-200"
+            >
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
               </button>
             )}
-          </div>
         </div>
 
-        {/* Pending Riders Table */}
+        <div className="relative max-h-96 overflow-y-auto space-y-3 pr-1">
         {riderActiveTile === 'pending' ? (
           loadingPendingRiders ? (
-            <div className="text-center py-8">
-              <div className="animate-spin mx-auto h-8 w-8 border-4 border-[#4DAF7C] border-t-transparent rounded-full"></div>
-              <p className="mt-2 text-sm text-[#666666]">Loading pending riders...</p>
+              <div className="flex flex-col items-center justify-center py-12 space-y-3">
+                <div className="w-14 h-14 rounded-full border-4 border-transparent border-t-[rgba(50,224,196,0.6)] animate-spin" />
+                <p className="text-sm" style={{ color: 'rgba(244,246,255,0.65)' }}>Loading pending riders...</p>
             </div>
           ) : pendingRiders.length > 0 ? (
-            <div className="space-y-3">
-              <div className="grid grid-cols-12 gap-2 lg:gap-4 p-3 lg:p-4 bg-[#D5E8D4] rounded-xl border border-[#6BBF9A] font-semibold text-[#2C7A5D] text-xs lg:text-sm">
+              <>
+                <div
+                  className="grid grid-cols-12 gap-2 lg:gap-4 px-4 py-3 rounded-2xl text-[0.7rem] uppercase tracking-[0.3em]"
+                  style={{
+                    background: 'rgba(255,255,255,0.04)',
+                    border: '1px solid rgba(108,99,255,0.25)',
+                    color: 'rgba(244,246,255,0.6)',
+                  }}
+                >
                 <div className="col-span-2">Name</div>
                 <div className="col-span-2">Phone</div>
                 <div className="col-span-3">Email</div>
                 <div className="col-span-3">Vehicle</div>
-                <div className="col-span-2 flex items-center justify-center"><span className="text-xs">Action</span></div>
+                  <div className="col-span-2 flex items-center justify-center">Action</div>
               </div>
               {pendingRiders
                 .filter(r => `${r.first_name} ${r.last_name}`.toLowerCase().includes(riderSearchTerm.toLowerCase()) || (r.phone_number || '').includes(riderSearchTerm))
                 .map(rider => (
-                  <div key={rider.id} className="grid grid-cols-12 gap-2 lg:gap-4 p-3 lg:p-4 rounded-xl hover:bg-[#D5E8D4] transition-colors duration-200 border border-transparent hover:border-[#6BBF9A] items-center">
+                    <div
+                      key={rider.id}
+                      className="grid grid-cols-12 gap-2 lg:gap-4 px-4 py-3 rounded-2xl border transition-all duration-200"
+                      style={{
+                        background: 'rgba(255,255,255,0.02)',
+                        borderColor: 'rgba(255,255,255,0.05)',
+                        color: 'rgba(244,246,255,0.85)',
+                      }}
+                    >
                     <div className="col-span-2">
-                      <h3 className="font-semibold text-[#2C7A5D] text-xs lg:text-sm truncate">{rider.first_name} {rider.last_name}</h3>
+                        <h3 className="font-semibold text-white text-sm truncate">{rider.first_name} {rider.last_name}</h3>
                     </div>
-                    <div className="col-span-2"><p className="text-xs lg:text-sm text-[#666666] truncate">{rider.phone_number || '—'}</p></div>
-                    <div className="col-span-3"><p className="text-xs lg:text-sm text-[#666666] truncate">{rider.email || '—'}</p></div>
-                    <div className="col-span-3"><p className="text-xs lg:text-sm text-[#666666] truncate">{rider.vehicle_type || '—'} {rider.plate_number ? `• ${rider.plate_number}` : ''}</p></div>
+                      <div className="col-span-2">
+                        <p className="text-sm truncate">{rider.phone_number || '—'}</p>
+                      </div>
+                      <div className="col-span-3">
+                        <p className="text-sm truncate">{rider.email || '—'}</p>
+                      </div>
+                      <div className="col-span-3">
+                        <p className="text-sm truncate">
+                          {rider.vehicle_type || '—'} {rider.plate_number ? `• ${rider.plate_number}` : ''}
+                        </p>
+                      </div>
                     <div className="col-span-2 flex items-center justify-center">
-                      <button onClick={() => handleViewRider(rider)} className="px-2 lg:px-3 py-1 bg-[#4DAF7C] text-white text-xs rounded-lg hover:bg-[#6BBF9A] transition-colors duration-200">View</button>
+                        <button
+                          onClick={() => handleViewRider(rider)}
+                          className="px-3 py-1 rounded-xl text-xs font-semibold transition-colors duration-200"
+                          style={{
+                            background: 'linear-gradient(135deg, rgba(50,224,196,0.35), rgba(108,99,255,0.35))',
+                            border: '1px solid rgba(255,255,255,0.08)',
+                            color: '#F4F6FF',
+                          }}
+                        >
+                          View
+                        </button>
                     </div>
                   </div>
                 ))}
-            </div>
-          ) : (
-            <div className="text-center py-8">
-              <svg className="mx-auto h-12 w-12 text-[#999999]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-              <h3 className="mt-2 text-sm font-medium text-[#666666]">No pending riders</h3>
-              <p className="mt-1 text-sm text-[#999999]">All rider applications have been reviewed</p>
+              </>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-12 space-y-3">
+                <svg className="h-12 w-12" viewBox="0 0 24 24" fill="none" stroke={RAILWAY_THEME.accentTeal}>
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <h3 className="text-sm font-semibold" style={{ color: 'rgba(244,246,255,0.8)' }}>No pending riders</h3>
+                <p className="text-xs text-center" style={{ color: 'rgba(244,246,255,0.6)' }}>All rider applications have been reviewed</p>
             </div>
           )
         ) : riderActiveTile === 'active' ? (
           loadingPendingRiders ? (
-            <div className="text-center py-8">
-              <div className="animate-spin mx-auto h-8 w-8 border-4 border-[#4DAF7C] border-t-transparent rounded-full"></div>
-              <p className="mt-2 text-sm text-[#666666]">Loading active riders...</p>
+              <div className="flex flex-col items-center justify-center py-12 space-y-3">
+                <div className="w-14 h-14 rounded-full border-4 border-transparent border-t-[rgba(50,224,196,0.6)] animate-spin" />
+                <p className="text-sm" style={{ color: 'rgba(244,246,255,0.65)' }}>Loading active riders...</p>
             </div>
           ) : activeRiders.length > 0 ? (
-            <div className="space-y-3">
-              <div className="grid grid-cols-12 gap-2 lg:gap-4 p-3 lg:p-4 bg-[#D5E8D4] rounded-xl border border-[#6BBF9A] font-semibold text-[#2C7A5D] text-xs lg:text-sm">
+              <>
+                <div
+                  className="grid grid-cols-12 gap-2 lg:gap-4 px-4 py-3 rounded-2xl text-[0.7rem] uppercase tracking-[0.3em]"
+                  style={{
+                    background: 'rgba(255,255,255,0.04)',
+                    border: '1px solid rgba(108,99,255,0.25)',
+                    color: 'rgba(244,246,255,0.6)',
+                  }}
+                >
                 <div className="col-span-2">Name</div>
                 <div className="col-span-2">Phone</div>
                 <div className="col-span-3">Email</div>
                 <div className="col-span-3">Vehicle</div>
-                <div className="col-span-2 flex items-center justify-center"><span className="text-xs">Action</span></div>
+                  <div className="col-span-2 flex items-center justify-center">Action</div>
               </div>
               {activeRiders
                 .filter(r => `${r.first_name} ${r.last_name}`.toLowerCase().includes(riderSearchTerm.toLowerCase()) || (r.phone_number || '').includes(riderSearchTerm))
                 .map(rider => (
-                  <div key={rider.id} className="grid grid-cols-12 gap-2 lg:gap-4 p-3 lg:p-4 rounded-xl hover:bg-[#D5E8D4] transition-colors duration-200 border border-transparent hover:border-[#6BBF9A] items-center">
+                    <div
+                      key={rider.id}
+                      className="grid grid-cols-12 gap-2 lg:gap-4 px-4 py-3 rounded-2xl border transition-all duration-200"
+                      style={{
+                        background: 'rgba(255,255,255,0.02)',
+                        borderColor: 'rgba(255,255,255,0.05)',
+                        color: 'rgba(244,246,255,0.85)',
+                      }}
+                    >
                     <div className="col-span-2">
-                      <h3 className="font-semibold text-[#2C7A5D] text-xs lg:text-sm truncate">{rider.first_name} {rider.last_name}</h3>
+                        <h3 className="font-semibold text-white text-sm truncate">{rider.first_name} {rider.last_name}</h3>
                     </div>
-                    <div className="col-span-2"><p className="text-xs lg:text-sm text-[#666666] truncate">{rider.phone_number || '—'}</p></div>
-                    <div className="col-span-3"><p className="text-xs lg:text-sm text-[#666666] truncate">{rider.email || '—'}</p></div>
-                    <div className="col-span-3"><p className="text-xs lg:text-sm text-[#666666] truncate">{rider.vehicle_type || '—'} {rider.plate_number ? `• ${rider.plate_number}` : ''}</p></div>
+                      <div className="col-span-2">
+                        <p className="text-sm truncate">{rider.phone_number || '—'}</p>
+                      </div>
+                      <div className="col-span-3">
+                        <p className="text-sm truncate">{rider.email || '—'}</p>
+                      </div>
+                      <div className="col-span-3">
+                        <p className="text-sm truncate">
+                          {rider.vehicle_type || '—'} {rider.plate_number ? `• ${rider.plate_number}` : ''}
+                        </p>
+                      </div>
                     <div className="col-span-2 flex items-center justify-center">
-                      <button onClick={() => handleViewRider(rider)} className="px-2 lg:px-3 py-1 bg-[#4DAF7C] text-white text-xs rounded-lg hover:bg-[#6BBF9A] transition-colors duration-200">View</button>
+                        <button
+                          onClick={() => handleViewRider(rider)}
+                          className="px-3 py-1 rounded-xl text-xs font-semibold transition-colors duration-200"
+                          style={{
+                            background: 'linear-gradient(135deg, rgba(50,224,196,0.35), rgba(108,99,255,0.35))',
+                            border: '1px solid rgba(255,255,255,0.08)',
+                            color: '#F4F6FF',
+                          }}
+                        >
+                          View
+                        </button>
                     </div>
                   </div>
                 ))}
-            </div>
-          ) : (
-            <div className="text-center py-8">
-              <svg className="mx-auto h-12 w-12 text-[#999999]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2" /></svg>
-              <h3 className="mt-2 text-sm font-medium text-[#666666]">No active riders</h3>
+              </>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-12 space-y-3">
+                <svg className="h-12 w-12" viewBox="0 0 24 24" fill="none" stroke={RAILWAY_THEME.accentTeal}>
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2" />
+                </svg>
+                <h3 className="text-sm font-semibold" style={{ color: 'rgba(244,246,255,0.8)' }}>No active riders</h3>
+                <p className="text-xs text-center" style={{ color: 'rgba(244,246,255,0.6)' }}>Riders will appear here once they are on duty</p>
             </div>
           )
         ) : riderActiveTile === 'suspended' ? (
           loadingPendingRiders ? (
-            <div className="text-center py-8">
-              <div className="animate-spin mx-auto h-8 w-8 border-4 border-[#4DAF7C] border-t-transparent rounded-full"></div>
-              <p className="mt-2 text-sm text-[#666666]">Loading suspended riders...</p>
+              <div className="flex flex-col items-center justify-center py-12 space-y-3">
+                <div className="w-14 h-14 rounded-full border-4 border-transparent border-t-[rgba(50,224,196,0.6)] animate-spin" />
+                <p className="text-sm" style={{ color: 'rgba(244,246,255,0.65)' }}>Loading suspended riders...</p>
             </div>
           ) : suspendedRiders.length > 0 ? (
-            <div className="space-y-3">
-              <div className="grid grid-cols-12 gap-2 lg:gap-4 p-3 lg:p-4 bg-[#D5E8D4] rounded-xl border border-[#6BBF9A] font-semibold text-[#2C7A5D] text-xs lg:text-sm">
+              <>
+                <div
+                  className="grid grid-cols-12 gap-2 lg:gap-4 px-4 py-3 rounded-2xl text-[0.7rem] uppercase tracking-[0.3em]"
+                  style={{
+                    background: 'rgba(255,255,255,0.04)',
+                    border: '1px solid rgba(108,99,255,0.25)',
+                    color: 'rgba(244,246,255,0.6)',
+                  }}
+                >
                 <div className="col-span-2">Name</div>
                 <div className="col-span-2">Phone</div>
                 <div className="col-span-3">Email</div>
                 <div className="col-span-3">Vehicle</div>
-                <div className="col-span-2 flex items-center justify-center"><span className="text-xs">Action</span></div>
+                  <div className="col-span-2 flex items-center justify-center">Action</div>
               </div>
               {suspendedRiders
                 .filter(r => `${r.first_name} ${r.last_name}`.toLowerCase().includes(riderSearchTerm.toLowerCase()) || (r.phone_number || '').includes(riderSearchTerm))
                 .map(rider => (
-                  <div key={rider.id} className="grid grid-cols-12 gap-2 lg:gap-4 p-3 lg:p-4 rounded-xl hover:bg-[#D5E8D4] transition-colors duration-200 border border-transparent hover:border-[#6BBF9A] items-center">
+                    <div
+                      key={rider.id}
+                      className="grid grid-cols-12 gap-2 lg:gap-4 px-4 py-3 rounded-2xl border transition-all duration-200"
+                      style={{
+                        background: 'rgba(255,255,255,0.02)',
+                        borderColor: 'rgba(255,255,255,0.05)',
+                        color: 'rgba(244,246,255,0.85)',
+                      }}
+                    >
                     <div className="col-span-2">
-                      <h3 className="font-semibold text-[#2C7A5D] text-xs lg:text-sm truncate">{rider.first_name} {rider.last_name}</h3>
+                        <h3 className="font-semibold text-white text-sm truncate">{rider.first_name} {rider.last_name}</h3>
                     </div>
-                    <div className="col-span-2"><p className="text-xs lg:text-sm text-[#666666] truncate">{rider.phone_number || '—'}</p></div>
-                    <div className="col-span-3"><p className="text-xs lg:text-sm text-[#666666] truncate">{rider.email || '—'}</p></div>
-                    <div className="col-span-3"><p className="text-xs lg:text-sm text-[#666666] truncate">{rider.vehicle_type || '—'} {rider.plate_number ? `• ${rider.plate_number}` : ''}</p></div>
+                      <div className="col-span-2">
+                        <p className="text-sm truncate">{rider.phone_number || '—'}</p>
+                      </div>
+                      <div className="col-span-3">
+                        <p className="text-sm truncate">{rider.email || '—'}</p>
+                      </div>
+                      <div className="col-span-3">
+                        <p className="text-sm truncate">
+                          {rider.vehicle_type || '—'} {rider.plate_number ? `• ${rider.plate_number}` : ''}
+                        </p>
+                      </div>
                     <div className="col-span-2 flex items-center justify-center">
-                      <button onClick={() => handleViewRider(rider)} className="px-2 lg:px-3 py-1 bg-[#4DAF7C] text-white text-xs rounded-lg hover:bg-[#6BBF9A] transition-colors duration-200">View</button>
+                        <button
+                          onClick={() => handleViewRider(rider)}
+                          className="px-3 py-1 rounded-xl text-xs font-semibold transition-colors duration-200"
+                          style={{
+                            background: 'linear-gradient(135deg, rgba(50,224,196,0.35), rgba(108,99,255,0.35))',
+                            border: '1px solid rgba(255,255,255,0.08)',
+                            color: '#F4F6FF',
+                          }}
+                        >
+                          View
+                        </button>
                     </div>
                   </div>
                 ))}
-            </div>
-          ) : (
-            <div className="text-center py-8">
-              <svg className="mx-auto h-12 w-12 text-[#999999]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2" /></svg>
-              <h3 className="mt-2 text-sm font-medium text-[#666666]">No suspended riders</h3>
+              </>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-12 space-y-3">
+                <svg className="h-12 w-12" viewBox="0 0 24 24" fill="none" stroke={RAILWAY_THEME.accentPink}>
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2" />
+                </svg>
+                <h3 className="text-sm font-semibold" style={{ color: 'rgba(244,246,255,0.8)' }}>No suspended riders</h3>
+                <p className="text-xs text-center" style={{ color: 'rgba(244,246,255,0.6)' }}>All riders are in good standing</p>
             </div>
           )
         ) : (
           loadingPendingRiders ? (
-            <div className="text-center py-8">
-              <div className="animate-spin mx-auto h-8 w-8 border-4 border-[#4DAF7C] border-t-transparent rounded-full"></div>
-              <p className="mt-2 text-sm text-[#666666]">Loading riders...</p>
+              <div className="flex flex-col items-center justify-center py-12 space-y-3">
+                <div className="w-14 h-14 rounded-full border-4 border-transparent border-t-[rgba(50,224,196,0.6)] animate-spin" />
+                <p className="text-sm" style={{ color: 'rgba(244,246,255,0.65)' }}>Loading riders...</p>
             </div>
           ) : allRiders.length > 0 ? (
-            <div className="space-y-3">
-              <div className="grid grid-cols-12 gap-2 lg:gap-4 p-3 lg:p-4 bg-[#D5E8D4] rounded-xl border border-[#6BBF9A] font-semibold text-[#2C7A5D] text-xs lg:text-sm">
+              <>
+                <div
+                  className="grid grid-cols-12 gap-2 lg:gap-4 px-4 py-3 rounded-2xl text-[0.7rem] uppercase tracking-[0.3em]"
+                  style={{
+                    background: 'rgba(255,255,255,0.04)',
+                    border: '1px solid rgba(108,99,255,0.25)',
+                    color: 'rgba(244,246,255,0.6)',
+                  }}
+                >
                 <div className="col-span-2">Name</div>
                 <div className="col-span-2">Phone</div>
                 <div className="col-span-3">Email</div>
                 <div className="col-span-3">Vehicle</div>
-                <div className="col-span-2 flex items-center justify-center"><span className="text-xs">Action</span></div>
+                  <div className="col-span-2 flex items-center justify-center">Action</div>
               </div>
               {allRiders
                 .filter(r => `${r.first_name} ${r.last_name}`.toLowerCase().includes(riderSearchTerm.toLowerCase()) || (r.phone_number || '').includes(riderSearchTerm))
                 .map(rider => (
-                  <div key={rider.id} className="grid grid-cols-12 gap-2 lg:gap-4 p-3 lg:p-4 rounded-xl hover:bg-[#D5E8D4] transition-colors duration-200 border border-transparent hover:border-[#6BBF9A] items-center">
+                    <div
+                      key={rider.id}
+                      className="grid grid-cols-12 gap-2 lg:gap-4 px-4 py-3 rounded-2xl border transition-all duration-200"
+                      style={{
+                        background: 'rgba(255,255,255,0.02)',
+                        borderColor: 'rgba(255,255,255,0.05)',
+                        color: 'rgba(244,246,255,0.85)',
+                      }}
+                    >
                     <div className="col-span-2">
-                      <h3 className="font-semibold text-[#2C7A5D] text-xs lg:text-sm truncate">{rider.first_name} {rider.last_name}</h3>
+                        <h3 className="font-semibold text-white text-sm truncate">{rider.first_name} {rider.last_name}</h3>
                     </div>
-                    <div className="col-span-2"><p className="text-xs lg:text-sm text-[#666666] truncate">{rider.phone_number || '—'}</p></div>
-                    <div className="col-span-3"><p className="text-xs lg:text-sm text-[#666666] truncate">{rider.email || '—'}</p></div>
-                    <div className="col-span-3"><p className="text-xs lg:text-sm text-[#666666] truncate">{rider.vehicle_type || '—'} {rider.plate_number ? `• ${rider.plate_number}` : ''}</p></div>
+                      <div className="col-span-2">
+                        <p className="text-sm truncate">{rider.phone_number || '—'}</p>
+                      </div>
+                      <div className="col-span-3">
+                        <p className="text-sm truncate">{rider.email || '—'}</p>
+                      </div>
+                      <div className="col-span-3">
+                        <p className="text-sm truncate">
+                          {rider.vehicle_type || '—'} {rider.plate_number ? `• ${rider.plate_number}` : ''}
+                        </p>
+                      </div>
                     <div className="col-span-2 flex items-center justify-center">
-                      <button onClick={() => handleViewRider(rider)} className="px-2 lg:px-3 py-1 bg-[#4DAF7C] text-white text-xs rounded-lg hover:bg-[#6BBF9A] transition-colors duration-200">View</button>
+                        <button
+                          onClick={() => handleViewRider(rider)}
+                          className="px-3 py-1 rounded-xl text-xs font-semibold transition-colors duration-200"
+                          style={{
+                            background: 'linear-gradient(135deg, rgba(50,224,196,0.35), rgba(108,99,255,0.35))',
+                            border: '1px solid rgba(255,255,255,0.08)',
+                            color: '#F4F6FF',
+                          }}
+                        >
+                          View
+                        </button>
                     </div>
                   </div>
                 ))}
-            </div>
-          ) : (
-            <div className="text-center py-8">
-              <svg className="mx-auto h-12 w-12 text-[#999999]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2" /></svg>
-              <h3 className="mt-2 text-sm font-medium text-[#666666]">No riders found</h3>
+              </>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-12 space-y-3">
+                <svg className="h-12 w-12" viewBox="0 0 24 24" fill="none" stroke={RAILWAY_THEME.accentTeal}>
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2" />
+                </svg>
+                <h3 className="text-sm font-semibold" style={{ color: 'rgba(244,246,255,0.8)' }}>No riders found</h3>
+                <p className="text-xs text-center" style={{ color: 'rgba(244,246,255,0.6)' }}>
+                  Use the filters above to narrow down your search
+                </p>
             </div>
           )
         )}
+        </div>
       </div>
     </div>
   );
 
   const renderRiderDetailsModal = () => {
     if (!isRiderModalOpen || !selectedRider) return null;
+
+    const mutedText = 'rgba(244,246,255,0.65)';
+    const subtleText = 'rgba(244,246,255,0.55)';
+    const status = (selectedRider.status || 'pending').toLowerCase();
+    const statusColor =
+      status === 'approved'
+        ? RAILWAY_THEME.accentTeal
+        : status === 'suspended'
+        ? RAILWAY_THEME.accentPink
+        : RAILWAY_THEME.accentOrange;
+
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-        <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-hidden">
-          <div className="flex items-center justify-between p-6 border-b border-[#D5E8D4]">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={MODAL_SCRIM_STYLE}>
+        <div className="relative w-full max-w-3xl max-h-[90vh] overflow-hidden rounded-[28px]" style={MODAL_PANEL_STYLE}>
+          <div
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              background:
+                'radial-gradient(circle at 10% 0%, rgba(108,99,255,0.32), transparent 55%), radial-gradient(circle at 90% -10%, rgba(50,224,196,0.28), transparent 45%)',
+            }}
+          />
+          <div className="relative flex items-start justify-between px-8 py-6 border-b border-white/10">
+            <div className="flex items-center space-x-4">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#32E0C4] via-[#6C63FF] to-[#FF4D8D] flex items-center justify-center text-white font-semibold shadow-inner shadow-[#32E0C433]">
+                {`${selectedRider.first_name?.[0] || ''}${selectedRider.last_name?.[0] || ''}`.toUpperCase() || 'RD'}
+              </div>
             <div>
-              <h2 className="text-2xl font-bold text-[#2C7A5D]">{selectedRider.first_name} {selectedRider.last_name}</h2>
-              <p className="text-sm text-[#666666]">Pending Rider Application</p>
+                <p className="text-xs uppercase tracking-[0.4em]" style={{ color: subtleText }}>Rider Profile</p>
+                <h2 className="text-2xl font-semibold text-white">{selectedRider.first_name} {selectedRider.last_name}</h2>
+                <p className="text-xs mt-1 uppercase tracking-[0.3em]" style={{ color: statusColor }}>
+                  {status}
+                </p>
             </div>
-            <button onClick={handleCloseRiderModal} className="p-2 hover:bg-[#D5E8D4] rounded-lg transition-colors duration-200">
-              <svg className="h-6 w-6 text-[#666666]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+            </div>
+            <button
+              onClick={handleCloseRiderModal}
+              className="p-2 rounded-lg transition-colors duration-200"
+              style={MODAL_SECONDARY_BUTTON_STYLE}
+            >
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 18L18 6M6 6l12 12" />
+              </svg>
             </button>
           </div>
-          <div className="p-6 overflow-y-auto max-h-[calc(90vh-200px)]">
+
+          <div className="relative px-8 py-6 overflow-y-auto max-h-[calc(90vh-200px)] space-y-6">
             {riderModalLoading ? (
-              <div className="flex items-center justify-center py-12">
-                <div className="animate-spin mx-auto h-12 w-12 border-4 border-[#4DAF7C] border-t-transparent rounded-full"></div>
+              <div className="flex flex-col items-center justify-center py-16 space-y-3">
+                <div className="w-14 h-14 rounded-full border-4 border-transparent border-t-[rgba(50,224,196,0.6)] animate-spin" />
+                <p className="text-sm" style={{ color: mutedText }}>Loading rider details…</p>
               </div>
             ) : riderModalError ? (
-              <div className="text-center py-8 text-red-600">{riderModalError}</div>
-            ) : detailedRiderData ? (
+              <div className="flex flex-col items-center justify-center py-16 space-y-4" style={MODAL_SECTION_STYLE}>
+                <svg className="h-12 w-12 text-[#FF4D8D]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <p className="text-sm font-medium text-white text-center">{riderModalError}</p>
+                <button
+                  onClick={() => handleViewRider(selectedRider)}
+                  className="px-5 py-2 rounded-xl text-sm font-semibold transition-colors duration-200"
+                  style={MODAL_PRIMARY_BUTTON_STYLE}
+                >
+                  Retry loading
+                </button>
+              </div>
+            ) : (
               <div className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div><label className="block text-sm text-[#666666] mb-1">Date of Birth</label><p className="text-[#2C7A5D] font-semibold">{detailedRiderData.date_of_birth || '—'}</p></div>
-                  <div><label className="block text-sm text-[#666666] mb-1">Gender</label><p className="text-[#2C7A5D] font-semibold capitalize">{detailedRiderData.gender || '—'}</p></div>
-                  <div><label className="block text-sm text-[#666666] mb-1">Vehicle</label><p className="text-[#2C7A5D] font-semibold">{detailedRiderData.vehicle_type || '—'} {detailedRiderData.vehicle_brand ? `• ${detailedRiderData.vehicle_brand}` : ''}</p></div>
-                  <div><label className="block text-sm text-[#666666] mb-1">Plate / Color</label><p className="text-[#2C7A5D] font-semibold">{detailedRiderData.plate_number || '—'} {detailedRiderData.vehicle_color ? `• ${detailedRiderData.vehicle_color}` : ''}</p></div>
+                <div className="p-6" style={MODAL_SECTION_STYLE}>
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.4em]" style={{ color: subtleText }}>Overview</p>
+                      <h3 className="text-lg font-semibold text-white">Contact Information</h3>
                 </div>
+                    <div className="flex flex-col md:items-end text-xs" style={{ color: subtleText }}>
+                      <span>{selectedRider.email || 'No email'}</span>
+                      <span>{selectedRider.phone_number || 'No phone'}</span>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
                 <div>
-                  <h3 className="text-lg font-bold text-[#2C7A5D] mb-2">Driver's License</h3>
-                  {detailedRiderData.documents && detailedRiderData.documents.length > 0 ? (
+                      <p className="text-xs uppercase tracking-[0.3em]" style={{ color: subtleText }}>Full Name</p>
+                      <p className="text-white font-semibold">{selectedRider.first_name} {selectedRider.last_name}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.3em]" style={{ color: subtleText }}>Application Date</p>
+                      <p className="text-white font-semibold">{selectedRider.created_at ? new Date(selectedRider.created_at).toLocaleString() : '—'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.3em]" style={{ color: subtleText }}>Primary Phone</p>
+                      <p className="text-white font-semibold">{selectedRider.phone_number || '—'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.3em]" style={{ color: subtleText }}>Email Address</p>
+                      <p className="text-white font-semibold">{selectedRider.email || '—'}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-6 space-y-6" style={MODAL_SECTION_STYLE}>
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.4em]" style={{ color: subtleText }}>Profile</p>
+                    <h3 className="text-lg font-semibold text-white">Personal & Vehicle Details</h3>
+                  </div>
+                  {detailedRiderData ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
+                      <div>
+                        <p className="text-xs uppercase tracking-[0.3em]" style={{ color: subtleText }}>Date of Birth</p>
+                        <p className="text-white font-semibold">{detailedRiderData.date_of_birth || '—'}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs uppercase tracking-[0.3em]" style={{ color: subtleText }}>Gender</p>
+                        <p className="text-white font-semibold capitalize">{detailedRiderData.gender || '—'}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs uppercase tracking-[0.3em]" style={{ color: subtleText }}>Vehicle Type</p>
+                        <p className="text-white font-semibold">{detailedRiderData.vehicle_type || '—'}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs uppercase tracking-[0.3em]" style={{ color: subtleText }}>Brand & Color</p>
+                        <p className="text-white font-semibold">
+                          {detailedRiderData.vehicle_brand || '—'} {detailedRiderData.vehicle_color ? `• ${detailedRiderData.vehicle_color}` : ''}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs uppercase tracking-[0.3em]" style={{ color: subtleText }}>Plate Number</p>
+                        <p className="text-white font-semibold">{detailedRiderData.plate_number || '—'}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs uppercase tracking-[0.3em]" style={{ color: subtleText }}>Emergency Contact</p>
+                        <p className="text-white font-semibold">{detailedRiderData.emergency_contact || '—'}</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center py-10 space-y-3">
+                      <div className="w-10 h-10 rounded-full border-4 border-transparent border-t-[rgba(50,224,196,0.6)] animate-spin" />
+                      <p className="text-xs" style={{ color: mutedText }}>Loading personal details…</p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="p-6 space-y-4" style={MODAL_SECTION_STYLE}>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.4em]" style={{ color: subtleText }}>Compliance</p>
+                      <h3 className="text-lg font-semibold text-white">Uploaded Documents</h3>
+                    </div>
+                  </div>
+                  {detailedRiderData && detailedRiderData.documents ? (
+                    detailedRiderData.documents.length > 0 ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {detailedRiderData.documents.map((doc) => {
-                        // Check if URL is from Cloudinary (direct URL) or needs backend proxy
+                          const statusLabel = (doc.status || 'pending').toLowerCase();
+                          const docStatusColor =
+                            statusLabel === 'approved'
+                              ? RAILWAY_THEME.accentTeal
+                              : statusLabel === 'rejected'
+                              ? RAILWAY_THEME.accentPink
+                              : RAILWAY_THEME.accentOrange;
                         const isCloudinaryUrl = doc.file_url && (
                           doc.file_url.includes('cloudinary.com') || 
                           doc.file_url.startsWith('http://') || 
                           doc.file_url.startsWith('https://')
                         );
-                        
-                        // Use Cloudinary URL directly if available, otherwise use backend proxy
                         const imageUrl = isCloudinaryUrl 
                           ? doc.file_url 
                           : `${(process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '')}/api/document/${doc.id}/`;
                         
                         return (
-                          <div key={doc.id} className="bg-white rounded-lg p-4 border border-[#D5E8D4]">
-                            <div className="w-full h-48 bg-gray-100 rounded-lg mb-3 overflow-hidden flex items-center justify-center relative">
-                              {doc.file_url || doc.id ? (
-                                <>
+                            <div key={doc.id} className="p-4 space-y-3" style={MODAL_SECTION_STYLE}>
+                              <div className="w-full h-48 rounded-xl overflow-hidden bg-[#0f162c] flex items-center justify-center">
+                                {doc.file_url ? (
                                   <img 
                                     src={imageUrl} 
-                                    alt="Driver License" 
-                                    className="w-full h-full object-cover cursor-pointer hover:opacity-80 transition-opacity duration-200" 
+                                    alt={doc.document_type || 'Document'}
+                                    className="w-full h-full object-cover cursor-pointer transition-opacity duration-200 hover:opacity-80"
                                     onClick={() => window.open(imageUrl, '_blank')}
                                     onError={(e) => {
-                                      console.error('Failed to load image:', imageUrl);
-                                      e.target.style.display = 'none';
-                                      e.target.nextSibling.style.display = 'flex';
+                                      e.currentTarget.style.display = 'none';
                                     }}
                                   />
-                                  {/* Fallback for failed image loads */}
-                                  <div 
-                                    className="w-full h-full flex flex-col items-center justify-center bg-[#D5E8D4] absolute inset-0"
-                                    style={{ display: 'none' }}
-                                  >
-                                    <svg className="h-8 w-8 text-[#999999] mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                    <span className="text-[#999999] text-sm">Unable to load preview</span>
-                                    {isCloudinaryUrl && (
-                                      <button
-                                        onClick={() => window.open(imageUrl, '_blank')}
-                                        className="mt-2 px-3 py-1 bg-[#4DAF7C] text-white text-xs rounded hover:bg-[#6BBF9A]"
-                                      >
-                                        Try opening directly
-                                      </button>
-                                    )}
-                                  </div>
-                                </>
-                              ) : (
-                                <span className="text-[#999999] text-sm">No preview</span>
+                                ) : (
+                                  <span className="text-xs" style={{ color: mutedText }}>No preview available</span>
                               )}
                             </div>
-                            <div className="text-center">
-                              <p className="text-xs text-[#666666] mb-1">
-                                Status: <span className={`font-medium capitalize ${
-                                  doc.status === 'approved' ? 'text-green-600' :
-                                  doc.status === 'rejected' ? 'text-red-600' :
-                                  'text-yellow-600'
-                                }`}>{doc.status || 'pending'}</span>
-                              </p>
-                              {isCloudinaryUrl && (
-                                <p className="text-xs text-blue-600">☁️ Cloudinary</p>
+                              <div className="text-center space-y-1">
+                                <p className="text-sm font-semibold text-white">{doc.document_type || 'Document'}</p>
+                                <p className="text-xs" style={{ color: mutedText }}>
+                                  Status:{' '}
+                                  <span className="font-semibold" style={{ color: docStatusColor }}>
+                                    {statusLabel.charAt(0).toUpperCase() + statusLabel.slice(1)}
+                                  </span>
+                                </p>
+                                {doc.expiry_date && (
+                                  <p className="text-xs" style={{ color: subtleText }}>
+                                    Expires: {new Date(doc.expiry_date).toLocaleDateString()}
+                                  </p>
                               )}
                             </div>
                           </div>
@@ -860,22 +1529,42 @@ const AdminDashboard = () => {
                       })}
                     </div>
                   ) : (
-                    <p className="text-sm text-[#666666]">No documents uploaded</p>
-                  )}
+                      <div className="flex flex-col items-center justify-center py-10 space-y-3">
+                        <svg className="h-10 w-10 text-white/40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                        <p className="text-xs" style={{ color: mutedText }}>No documents submitted</p>
                 </div>
-              </div>
-            ) : (
-              <div className="text-center py-8">
-                <div className="animate-spin mx-auto h-8 w-8 border-4 border-[#4DAF7C] border-t-transparent rounded-full"></div>
-                <p className="mt-2 text-sm text-[#666666]">Loading rider details...</p>
+                    )
+                  ) : (
+                    <div className="flex flex-col items-center justify-center py-10 space-y-3">
+                      <div className="w-10 h-10 rounded-full border-4 border-transparent border-t-[rgba(50,224,196,0.6)] animate-spin" />
+                      <p className="text-xs" style={{ color: mutedText }}>Loading documents…</p>
               </div>
             )}
           </div>
-          <div className="flex items-center justify-between p-6 border-t border-[#D5E8D4] bg-[#F8F9FA]">
-            <div className="text-sm text-[#666666]">Rider ID: {selectedRider?.id}</div>
+              </div>
+            )}
+          </div>
+
+          <div className="relative flex items-center justify-between px-8 py-6 border-t border-white/10">
+            <div className="text-xs" style={{ color: subtleText }}>Rider ID: {selectedRider.id}</div>
             <div className="flex space-x-3">
-              <button onClick={handleCloseRiderModal} className="px-6 py-2 border border-[#D5E8D4] text-[#666666] rounded-lg hover:bg-[#D5E8D4] transition-colors duration-200">Close</button>
-              <button onClick={handleApproveRider} disabled={riderModalLoading} className="px-6 py-2 bg-[#4DAF7C] text-white rounded-lg hover:bg-[#6BBF9A] transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed">{riderModalLoading ? 'Approving...' : 'Approve Rider'}</button>
+              <button
+                onClick={handleCloseRiderModal}
+                className="px-6 py-2 rounded-xl text-sm font-semibold transition-colors duration-200"
+                style={MODAL_SECONDARY_BUTTON_STYLE}
+              >
+                Close
+              </button>
+              <button
+                onClick={handleApproveRider}
+                disabled={riderModalLoading}
+                className="px-6 py-2 rounded-xl text-sm font-semibold transition-colors duration-200 disabled:opacity-60 disabled:cursor-not-allowed"
+                style={MODAL_PRIMARY_BUTTON_STYLE}
+              >
+                {riderModalLoading ? 'Approving…' : 'Approve Rider'}
+              </button>
             </div>
           </div>
         </div>
@@ -885,124 +1574,135 @@ const AdminDashboard = () => {
 
   const renderRiderSuccessModal = () => {
     if (!isRiderSuccessOpen || !riderSuccessData) return null;
+
+    const mutedText = 'rgba(244,246,255,0.68)';
+    const subtleText = 'rgba(244,246,255,0.52)';
+
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-        <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full">
-          <div className="flex items-center justify-between p-6 border-b border-[#D5E8D4]">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={MODAL_SCRIM_STYLE}>
+        <div
+          className="relative w-full max-w-md rounded-[24px] overflow-hidden"
+          style={{
+            ...MODAL_PANEL_STYLE,
+            background: 'linear-gradient(160deg, rgba(15,24,48,0.95), rgba(9,15,30,0.95))',
+          }}
+        >
+          <div
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              background:
+                'radial-gradient(circle at 18% 0%, rgba(108,99,255,0.3), transparent 55%), radial-gradient(circle at 82% -10%, rgba(50,224,196,0.28), transparent 45%)',
+            }}
+          />
+          <div className="relative flex items-start justify-between px-6 py-5 border-b border-white/10">
             <div className="flex items-center space-x-3">
-              <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-green-600 rounded-xl flex items-center justify-center text-white">
-                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#32E0C4] via-[#6C63FF] to-[#FF4D8D] flex items-center justify-center text-white shadow-inner shadow-[#32E0C433]">
+                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
               </div>
               <div>
-                <h2 className="text-xl font-bold text-[#2C7A5D]">Rider Approved!</h2>
-                <p className="text-sm text-[#666666]">Welcome email sent</p>
+                <p className="text-xs uppercase tracking-[0.4em]" style={{ color: subtleText }}>Approval Complete</p>
+                <h2 className="text-lg font-semibold text-white">Rider Approved</h2>
               </div>
             </div>
-            <button onClick={handleCloseRiderSuccess} className="p-2 hover:bg-[#D5E8D4] rounded-lg transition-colors duration-200">
-              <svg className="h-6 w-6 text-[#666666]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+            <button
+              onClick={handleCloseRiderSuccess}
+              className="p-2 rounded-lg transition-colors duration-200"
+              style={MODAL_SECONDARY_BUTTON_STYLE}
+            >
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 18L18 6M6 6l12 12" />
+              </svg>
             </button>
           </div>
-          <div className="p-6">
-            <div className="space-y-4">
-              <div className="text-center">
-                <h3 className="text-lg font-semibold text-[#2C7A5D] mb-2">✅ {riderSuccessData.riderName} Approved!</h3>
-                <p className="text-sm text-[#666666] mb-4">The rider account is now active and ready to start deliveries.</p>
-              </div>
 
-              <div className="bg-[#F8F9FA] rounded-xl p-4 space-y-3">
-                <div className="flex items-center space-x-3">
-                  <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
-                    <svg className="h-4 w-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                    </svg>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-[#2C7A5D]">Welcome Email Sent</p>
-                    <p className="text-xs text-[#666666]">{riderSuccessData.email}</p>
-                  </div>
+          <div className="relative px-6 py-5 space-y-5">
+            <div className="text-center space-y-2">
+              <h3 className="text-xl font-semibold text-white">{riderSuccessData.riderName}</h3>
+              <p className="text-sm" style={{ color: mutedText }}>
+                Rider account activated and welcome communication sent.
+              </p>
+            </div>
+
+            <div className="p-4 space-y-3" style={MODAL_SECTION_STYLE}>
+              <div className="flex items-center space-x-3">
+                <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-[#32E0C4] to-[#6C63FF] flex items-center justify-center">
+                  <svg className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
                 </div>
-
-                <div className="flex items-center space-x-3">
-                  <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
-                    <svg className="h-4 w-4 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-                    </svg>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-[#2C7A5D]">Login Credentials</p>
-                    <p className="text-xs text-[#666666]">Rider will use their registration password</p>
-                  </div>
-                </div>
-
-                <div className="flex items-center space-x-3">
-                  <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
-                    <svg className="h-4 w-4 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-[#2C7A5D]">Email Status</p>
-                    <p className="text-xs text-[#666666] capitalize">{riderSuccessData.emailStatus || 'sent'}</p>
-                  </div>
+                <div>
+                  <p className="text-sm font-semibold text-white">Welcome email sent</p>
+                  <p className="text-xs" style={{ color: subtleText }}>{riderSuccessData.email}</p>
                 </div>
               </div>
+              <div className="flex items-center space-x-3">
+                <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-[#FF4D8D] to-[#B064FF] flex items-center justify-center">
+                  <svg className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-white">Dispatch access granted</p>
+                  <p className="text-xs" style={{ color: subtleText }}>Rider can now accept live delivery offers</p>
+                </div>
+              </div>
+              <div className="flex items-center space-x-3">
+                <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-[#32E0C4] to-[#FFB347] flex items-center justify-center">
+                  <svg className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-white">Email status</p>
+                  <p className="text-xs capitalize" style={{ color: subtleText }}>{riderSuccessData.emailStatus || 'sent'}</p>
+                </div>
+              </div>
+            </div>
 
+            <div
+              className="p-4 rounded-2xl"
+              style={{
+                background: riderSuccessData.emailStatus === 'sent' ? 'rgba(72,187,120,0.14)' : 'rgba(255,77,141,0.12)',
+                border: riderSuccessData.emailStatus === 'sent' ? '1px solid rgba(72,187,120,0.32)' : '1px solid rgba(255,77,141,0.32)',
+              }}
+            >
               {riderSuccessData.emailStatus === 'sent' ? (
-                <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-                  <div className="flex items-start space-x-2">
-                    <svg className="h-5 w-5 text-green-600 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <div>
-                      <p className="text-sm font-medium text-green-800">Email Sent Successfully</p>
-                      <p className="text-xs text-green-700">
-                        The rider has received their login credentials and can now access the app.
-                      </p>
-                    </div>
+                <div className="flex space-x-3">
+                  <svg className="h-5 w-5 text-[#48BB78] mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <div className="text-xs" style={{ color: mutedText }}>
+                    Credentials delivered successfully. Rider is informed and ready for dispatch duties.
                   </div>
                 </div>
               ) : (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                  <div className="flex items-start space-x-2">
-                    <svg className="h-5 w-5 text-red-600 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <div>
-                      <p className="text-sm font-medium text-red-800">Email Sending Failed</p>
-                      <p className="text-xs text-red-700">
-                        Please contact the rider directly to inform them of their approval.
-                      </p>
-                    </div>
+                <div className="flex space-x-3">
+                  <svg className="h-5 w-5 text-[#FF4D8D] mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <div className="text-xs" style={{ color: mutedText }}>
+                    Email delivery failed. Please reach out to the rider manually so they can log in and start accepting deliveries.
                   </div>
                 </div>
               )}
             </div>
           </div>
-          <div className="flex items-center justify-end p-6 border-t border-[#D5E8D4] bg-[#F8F9FA]">
-            <button onClick={handleCloseRiderSuccess} className="px-6 py-2 bg-[#4DAF7C] text-white rounded-lg hover:bg-[#6BBF9A] transition-colors duration-200">Got it!</button>
+
+          <div className="relative flex items-center justify-end px-6 py-4 border-t border-white/10">
+            <button
+              onClick={handleCloseRiderSuccess}
+              className="px-4 py-2 rounded-xl text-sm font-semibold transition-colors duration-200"
+              style={MODAL_PRIMARY_BUTTON_STYLE}
+            >
+              Acknowledge
+            </button>
           </div>
         </div>
       </div>
     );
   };
-
-  // Mock data for demonstration
-  const mockData = {
-    totalSales: 1247,
-    salesToday: 89,
-    totalOrders: 3421,
-    totalRevenue: 45680,
-    lastMonthSales: 1156,
-    thisWeekSales: 623
-  };
-
-  const topPharmacies = [
-    { name: 'MediCare Pharmacy', email: 'contact@medicare.ph', sales: 1247, avatar: 'MC' },
-    { name: 'HealthPlus Drugstore', email: 'info@healthplus.ph', sales: 1156, avatar: 'HP' },
-    { name: 'QuickMed Solutions', email: 'hello@quickmed.ph', sales: 1089, avatar: 'QM' },
-    { name: 'Family Care Pharmacy', email: 'support@familycare.ph', sales: 987, avatar: 'FC' },
-    { name: 'Express Med Store', email: 'orders@expressmed.ph', sales: 856, avatar: 'EM' }
-  ];
 
   // Filter pharmacies based on search term
   const filteredPharmacies = pharmacyList.filter(pharmacy =>
@@ -1012,169 +1712,331 @@ const AdminDashboard = () => {
     (pharmacy.business_email || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const renderDashboard = () => (
-    <div className="space-y-8">
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-4xl font-bold text-[#2C7A5D] mb-2">Sales Overview</h1>
-              </div>
+  const renderDashboard = () => {
+    const metricTiles = dashboardMetrics.metrics;
+    const summary = dashboardMetrics.summary;
 
-      {/* Top Tiles */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="p-4 hover:shadow-lg transition-all duration-200 transform hover:-translate-y-0.5" style={{borderRadius: '25% 10%', backgroundColor: '#F1FEC6'}}>
-          <div className="flex items-center justify-between mb-4">
-            <p className="text-sm font-medium text-[#666666]">Total Sales</p>
-            <div className="p-3 bg-[#D5E8D4] rounded-xl">
-              <svg className="h-4 w-4 text-[#4DAF7C]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4m0 0L7 13m0 0l-2.5 5M7 13l2.5 5m6-5v6a2 2 0 01-2 2H9a2 2 0 01-2-2v-6m8 0V9a2 2 0 00-2-2H9a2 2 0 00-2 2v4.01" />
-              </svg>
+    return (
+      <div className="space-y-10">
+        <header className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+          <div>
+            <p className="text-xs uppercase tracking-[0.45em]" style={{ color: RAILWAY_THEME.textSecondary }}>
+              Executive Summary
+            </p>
+            <h1 className="text-4xl font-semibold" style={{ color: RAILWAY_THEME.textPrimary }}>
+              Sales Overview
+            </h1>
             </div>
+          <div className="flex items-center space-x-3">
+            <div
+              className="px-3 py-1 rounded-full text-xs font-semibold"
+              style={{ background: 'rgba(50,224,196,0.2)', color: RAILWAY_THEME.accentTeal }}
+            >
+              Auto-sync Enabled
           </div>
-          <h1 className="text-4xl mb-6 font-bold text-gray-700 mb-1">{mockData.totalSales.toLocaleString()}</h1>
-          <p className="text-sm text-[#999999]">Last month: {mockData.lastMonthSales.toLocaleString()}</p>
+            <div
+              className="px-3 py-1 rounded-full text-xs font-semibold"
+              style={{ background: 'rgba(108,99,255,0.12)', color: RAILWAY_THEME.textSecondary }}
+            >
+              {`Pending Actions: ${summary.pendingCombined.toLocaleString()}`}
         </div>
+            <button
+              className="px-4 py-2 rounded-xl border text-sm font-semibold"
+              style={{
+                color: RAILWAY_THEME.textSecondary,
+                borderColor: 'rgba(108,99,255,0.3)',
+                background: 'rgba(108,99,255,0.08)',
+              }}
+            >
+              Export Report
+            </button>
+            </div>
+        </header>
 
-        <div className="p-4 hover:shadow-lg transition-all duration-200 transform hover:-translate-y-0.5" style={{borderRadius: '25% 10%', backgroundColor: '#C2DEDB'}}>
-          <div className="flex items-center justify-between mb-4">
-            <p className="text-sm font-medium text-[#666666]">Sales Today</p>
-            <div className="p-3 bg-[#D5E8D4] rounded-xl">
-              <svg className="h-4 w-4 text-[#4DAF7C]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+          {metricTiles.map((tile) => (
+            <div
+              key={tile.key}
+              className="relative overflow-hidden rounded-3xl p-6 transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_20px_40px_rgba(5,10,24,0.45)]"
+              style={{
+                background: tile.accent,
+                border: '1px solid rgba(255,255,255,0.06)',
+              }}
+            >
+              <div
+                className="absolute top-0 right-0 w-40 h-40 translate-x-12 -translate-y-20 blur-3xl opacity-70"
+                style={{ background: 'rgba(255,255,255,0.1)' }}
+              />
+              <div className="flex items-center justify-between mb-6 relative">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.4em]" style={{ color: 'rgba(244,246,255,0.7)' }}>
+                    {tile.label}
+                  </p>
+                  <h2 className="text-3xl font-semibold text-white mt-1">{tile.display}</h2>
+            </div>
+                <div
+                  className="p-3 rounded-xl shadow-inner"
+                  style={{ background: 'rgba(0,0,0,0.15)' }}
+                >
+                  <svg className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={tile.iconPath} />
               </svg>
             </div>
           </div>
-          <h1 className="text-4xl mb-6 font-bold text-gray-700 mb-1">{mockData.salesToday}</h1>
-          <p className="text-sm text-[#999999]">This Week: {mockData.thisWeekSales}</p>
-        </div>
-
-        <div className="p-4 hover:shadow-lg transition-all duration-200 transform hover:-translate-y-0.5" style={{borderRadius: '25% 10%', backgroundColor: '#FADADD'}}>
-          <div className="flex items-center justify-between mb-4">
-            <p className="text-sm font-medium text-[#666666]">Total Orders</p>
-            <div className="p-3 bg-[#D5E8D4] rounded-xl">
-              <svg className="h-4 w-4 text-[#4DAF7C]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
-              </svg>
-            </div>
-          </div>
-          <h1 className="text-4xl mb-6 font-bold text-gray-700 mb-1">{mockData.totalOrders.toLocaleString()}</h1>
-          <p className="text-sm text-[#999999]">Across all pharmacies</p>
-        </div>
-
-        <div className="p-4 hover:shadow-lg transition-all duration-200 transform hover:-translate-y-0.5" style={{borderRadius: '25% 10%', backgroundColor: '#C3BEF7'}}>
-          <div className="flex items-center justify-between mb-4">
-            <p className="text-sm font-medium text-[#666666]">Total Revenue</p>
-            <div className="p-3 bg-[#D5E8D4] rounded-xl">
-              <svg className="h-4 w-4 text-[#4DAF7C]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-          </div>
-          <h1 className="text-4xl mb-6 font-bold text-gray-700 mb-1">₱{mockData.totalRevenue.toLocaleString()}</h1>
-          <p className="text-sm text-[#999999]">Service fees from deliveries</p>
+              <p className="text-xs font-medium" style={{ color: 'rgba(244,246,255,0.75)' }}>
+                {tile.descriptor}
+              </p>
+              <div className="mt-6 h-16 relative overflow-hidden rounded-xl">
+                <div
+                  className="absolute inset-0"
+                  style={{
+                    background: 'linear-gradient(180deg, rgba(255,255,255,0.25), rgba(255,255,255,0))',
+                    opacity: 0.35,
+                    transform: 'skewY(-6deg)',
+                  }}
+                />
+                <div
+                  className="absolute inset-0"
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(255,255,255,0.25) 0%, transparent 60%)',
+                    clipPath: 'polygon(0 100%, 0 60%, 25% 40%, 45% 55%, 70% 30%, 85% 45%, 100% 15%, 100% 100%)',
+                  }}
+                />
         </div>
       </div>
+          ))}
+        </section>
 
-      {/* Second Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Revenue Analytics */}
-        <div className="bg-white rounded-2xl shadow-2xl border border-[#D5E8D4] p-8">
-          <div className="flex justify-between items-center mb-6">
-            <h1 className="text-xl font-bold text-[#2C7A5D]">Revenue Analytics</h1>
-            <select className="px-3 py-2 border border-[#D5E8D4] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#6BBF9A] focus:ring-opacity-20 focus:border-[#6BBF9A] transition-all duration-200">
+        <section className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          <div
+            className="rounded-3xl p-6 border relative overflow-hidden"
+            style={{
+              background: 'linear-gradient(160deg, rgba(19,27,53,0.92), rgba(13,19,40,0.9))',
+              borderColor: 'rgba(108,99,255,0.25)',
+            }}
+          >
+            <div
+              className="absolute inset-0 pointer-events-none"
+              style={{
+                background:
+                  'radial-gradient(circle at 15% 15%, rgba(108,99,255,0.25), transparent 55%), radial-gradient(circle at 90% 0%, rgba(50,224,196,0.22), transparent 50%)',
+              }}
+            />
+            <div className="relative flex justify-between items-start mb-8">
+              <div>
+                <h2 className="text-lg font-semibold text-white mb-1">Revenue Analytics</h2>
+                <p className="text-xs uppercase tracking-[0.4em]" style={{ color: 'rgba(244,246,255,0.55)' }}>
+                  Week in Review
+                </p>
+              </div>
+              <select
+                className="px-3 py-2 rounded-xl text-xs font-medium"
+                style={{
+                  background: 'rgba(15,22,44,0.9)',
+                  border: '1px solid rgba(108,99,255,0.32)',
+                  color: 'rgba(244,246,255,0.8)',
+                }}
+              >
               <option>This Week</option>
               <option>This Month</option>
               <option>This Year</option>
             </select>
           </div>
-          <div className="h-64 flex items-end justify-between space-x-2">
-            {[65, 78, 45, 89, 92, 67, 85].map((height, index) => (
-              <div key={index} className="flex flex-col items-center">
-                <div 
-                  className="w-8 bg-gradient-to-t from-[#4DAF7C] to-[#6BBF9A] rounded-t-lg mb-2"
-                  style={{ height: `${height}%` }}
-                ></div>
-                <span className="text-xs text-[#999999]">{['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][index]}</span>
+            <div className="relative h-64 flex items-end justify-between space-x-3">
+              {revenueTrend.map((item) => (
+                <div key={item.label} className="flex flex-col items-center space-y-2">
+                  <div
+                    className="w-8 rounded-t-xl relative overflow-hidden"
+                    title={`₱${item.amount.toLocaleString()}`}
+                    style={{
+                      height: `${item.height}%`,
+                      background: 'linear-gradient(180deg, rgba(50,224,196,0.85), rgba(108,99,255,0.65))',
+                      boxShadow: '0 12px 24px rgba(6,12,32,0.4)',
+                    }}
+                  >
+                    <div
+                      className="absolute inset-x-0 top-2 h-2 rounded-full opacity-60"
+                      style={{
+                        background: 'rgba(255,255,255,0.35)',
+                      }}
+                    />
+                  </div>
+                  <span className="text-xs font-medium tracking-wide" style={{ color: 'rgba(244,246,255,0.65)' }}>
+                    {item.label}
+                  </span>
               </div>
             ))}
+              <div className="absolute inset-x-0 bottom-14 border-t border-dashed" style={{ borderColor: 'rgba(147,163,198,0.18)' }} />
+              <div className="absolute inset-x-0 bottom-28 border-t border-dashed" style={{ borderColor: 'rgba(147,163,198,0.18)' }} />
           </div>
           </div>
 
-        {/* Total Income */}
-        <div className="bg-white rounded-2xl shadow-2xl border border-[#D5E8D4] p-8">
-          <div className="flex justify-between items-center mb-6">
-            <h1 className="text-xl font-bold text-[#2C7A5D]">Total Income</h1>
-            <div className="flex space-x-2">
-              <div className="flex items-center space-x-1">
-                <div className="w-3 h-3 bg-[#10B981] rounded"></div>
-                <span className="text-xs text-[#666666]">Profit</span>
+          <div
+            className="rounded-3xl p-6 border relative overflow-hidden"
+            style={{
+              background: 'linear-gradient(160deg, rgba(19,27,53,0.92), rgba(13,19,40,0.9))',
+              borderColor: 'rgba(50,224,196,0.25)',
+            }}
+          >
+            <div
+              className="absolute inset-0 pointer-events-none"
+              style={{
+                background:
+                  'radial-gradient(circle at 20% 20%, rgba(50,224,196,0.2), transparent 50%), radial-gradient(circle at 85% 10%, rgba(255,77,141,0.2), transparent 50%)',
+              }}
+            />
+            <div className="relative flex justify-between items-start mb-8">
+              <div>
+                <h2 className="text-lg font-semibold text-white mb-1">Total Income</h2>
+                <p className="text-xs uppercase tracking-[0.4em]" style={{ color: 'rgba(244,246,255,0.55)' }}>
+                  Profit vs Outflow
+                </p>
               </div>
-              <div className="flex items-center space-x-1">
-                <div className="w-3 h-3 bg-[#EF4444] rounded"></div>
-                <span className="text-xs text-[#666666]">Loss</span>
+              <div className="flex space-x-3">
+                <div className="flex items-center space-x-1 text-xs" style={{ color: RAILWAY_THEME.accentTeal }}>
+                  <span className="w-2 h-2 rounded-full" style={{ background: RAILWAY_THEME.accentTeal }} />
+                  <span>Profit</span>
               </div>
+                <div className="flex items-center space-x-1 text-xs" style={{ color: RAILWAY_THEME.accentPink }}>
+                  <span className="w-2 h-2 rounded-full" style={{ background: RAILWAY_THEME.accentPink }} />
+                  <span>Expense</span>
             </div>
           </div>
-          <p className="text-sm text-[#666666] mb-4">View your income in a certain period of time</p>
-          <div className="h-48 flex items-end justify-between space-x-1">
-            {Array.from({ length: 8 }, (_, i) => (
-              <div key={i} className="flex flex-col items-center space-y-1">
-                <div className="w-6 bg-[#10B981] rounded-t" style={{ height: `${Math.random() * 60 + 20}%` }}></div>
-                <div className="w-6 bg-[#EF4444] rounded-b" style={{ height: `${Math.random() * 20 + 5}%` }}></div>
-                <span className="text-xs text-[#999999]">{`M${i + 1}`}</span>
               </div>
-            ))}
+            <div className="relative h-48 flex items-end justify-between space-x-2">
+              {incomeTrend.map((item) => (
+                <div key={item.label} className="flex flex-col items-center space-y-2">
+                  <div className="flex space-x-1">
+                    <div
+                      className="w-6 rounded-t-lg"
+                      title={`Profit ₱${item.profit.toLocaleString()}`}
+                      style={{
+                        height: `${item.profitHeight}%`,
+                        background: 'linear-gradient(180deg, rgba(50,224,196,0.9), rgba(50,224,196,0.45))',
+                      }}
+                    />
+                    <div
+                      className="w-6 rounded-b-lg self-end"
+                      title={`Expense ₱${item.expense.toLocaleString()}`}
+                      style={{
+                        height: `${item.expenseHeight}%`,
+                        background: 'linear-gradient(180deg, rgba(255,77,141,0.85), rgba(255,77,141,0.45))',
+                      }}
+                    />
               </div>
+                  <span className="text-xs font-medium tracking-wide" style={{ color: 'rgba(244,246,255,0.65)' }}>
+                    {item.label}
+                  </span>
             </div>
+              ))}
+              <div className="absolute inset-x-0 bottom-16 border-t border-dashed" style={{ borderColor: 'rgba(147,163,198,0.18)' }} />
           </div>
+          </div>
+        </section>
 
-      {/* Top Pharmacy List */}
-      <div className="bg-white rounded-2xl shadow-2xl border border-[#D5E8D4] p-8">
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-xl font-bold text-[#2C7A5D]">Top Pharmacy</h1>
-          <select className="px-3 py-2 border border-[#D5E8D4] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#6BBF9A] focus:ring-opacity-20 focus:border-[#6BBF9A] transition-all duration-200">
+        <section
+          className="rounded-3xl p-6 border relative overflow-hidden"
+          style={{
+            background: 'linear-gradient(165deg, rgba(19,27,53,0.92), rgba(13,19,40,0.92))',
+            borderColor: 'rgba(108,99,255,0.25)',
+          }}
+        >
+          <div
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              background: 'radial-gradient(circle at 25% 0%, rgba(108,99,255,0.2), transparent 55%)',
+            }}
+          />
+          <div className="relative flex justify-between items-center mb-6">
+            <div>
+              <h2 className="text-xl font-semibold text-white">Top Pharmacy</h2>
+              <p className="text-xs uppercase tracking-[0.4em]" style={{ color: 'rgba(244,246,255,0.55)' }}>
+                Performance leaderboard
+              </p>
+            </div>
+            <select
+              className="px-3 py-2 rounded-xl text-xs font-medium"
+              style={{
+                background: 'rgba(15,22,44,0.9)',
+                border: '1px solid rgba(108,99,255,0.32)',
+                color: 'rgba(244,246,255,0.8)',
+              }}
+            >
             <option>This Week</option>
             <option>This Month</option>
             <option>This Year</option>
           </select>
         </div>
-        <div className="max-h-80 overflow-y-auto space-y-3">
-          {topPharmacies.map((pharmacy, index) => (
-            <div 
-              key={index} 
-              className={`flex items-center p-4 rounded-xl transition-colors duration-200 ${
-                index < 3 
-                  ? 'bg-[#D5E8D4] border border-[#6BBF9A]' 
-                  : 'hover:bg-[#D5E8D4]'
-              }`}
-            >
-              <div className="w-12 h-12 bg-gradient-to-br from-[#4DAF7C] to-[#6BBF9A] rounded-xl flex items-center justify-center text-white font-bold text-sm mr-4">
+          <div className="relative max-h-80 overflow-y-auto space-y-3 pr-1">
+            {topPharmaciesData.map((pharmacy, index) => (
+              <div
+                key={pharmacy.key}
+                className="flex items-center p-4 rounded-2xl transition-all duration-200 relative overflow-hidden"
+                style={{
+                  background: index < 3 ? 'linear-gradient(135deg, rgba(50,224,196,0.2), rgba(108,99,255,0.18))' : 'rgba(255,255,255,0.02)',
+                  border: index < 3 ? '1px solid rgba(50,224,196,0.35)' : '1px solid rgba(255,255,255,0.05)',
+                }}
+              >
+                <div
+                  className="absolute inset-0 opacity-30"
+                  style={{
+                    background: index < 3 ? 'linear-gradient(135deg, rgba(255,255,255,0.12), transparent 55%)' : 'none',
+                  }}
+                />
+                <div className="relative w-12 h-12 bg-gradient-to-br from-[#32E0C4] via-[#6C63FF] to-[#FF4D8D] rounded-xl flex items-center justify-center text-white font-bold text-sm mr-4">
                 {pharmacy.avatar}
               </div>
-              <div className="flex-1">
-                <h3 className="font-semibold text-[#2C7A5D]">{pharmacy.name}</h3>
-                <p className="text-sm text-[#666666]">{pharmacy.email}</p>
+                <div className="relative flex-1 min-w-0">
+                  <h3 className="font-semibold text-white truncate">{pharmacy.name}</h3>
+                  <p className="text-sm" style={{ color: 'rgba(244,246,255,0.55)' }}>{pharmacy.email}</p>
               </div>
-              <div className="text-right">
-                <p className="font-bold text-[#2C7A5D]">{pharmacy.sales.toLocaleString()}</p>
-                <p className="text-sm text-[#999999]">Total Sales</p>
+                <div className="relative text-right">
+                  <p className="font-bold text-white">₱{pharmacy.sales.toLocaleString()}</p>
+                  <p className="text-xs" style={{ color: 'rgba(244,246,255,0.55)' }}>Total Sales</p>
               </div>
             </div>
           ))}
         </div>
-      </div>
+        </section>
     </div>
   );
+  };
 
   const renderManagePharmacies = () => (
     <div className="space-y-8">
-      {/* Header */}
-      <div className="mb-8">
-        <div className="flex justify-between items-center">
-          <h1 className="text-4xl font-bold text-[#2C7A5D] mb-2">Pharmacy Management</h1>
+      <div
+        className="relative rounded-3xl p-6 border overflow-hidden"
+        style={{
+          background: 'linear-gradient(165deg, rgba(19,27,53,0.92), rgba(13,19,40,0.9))',
+          borderColor: 'rgba(108,99,255,0.22)',
+        }}
+      >
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            background:
+              'radial-gradient(circle at 15% 0%, rgba(108,99,255,0.24), transparent 55%), radial-gradient(circle at 85% -10%, rgba(50,224,196,0.2), transparent 45%)',
+          }}
+        />
+        <div className="relative flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div>
+            <p className="text-xs uppercase tracking-[0.4em]" style={{ color: 'rgba(244,246,255,0.55)' }}>Control Center</p>
+            <h1 className="text-3xl font-semibold text-white">Pharmacy Management</h1>
+            <p className="text-sm mt-2" style={{ color: 'rgba(244,246,255,0.6)' }}>
+              Review onboarding requests and keep partner pharmacies in sync.
+            </p>
+          </div>
+          <div className="flex items-center space-x-3">
           <button
             onClick={fetchPharmacyStats}
             disabled={loading}
-            className="px-4 py-2 bg-[#4DAF7C] text-white rounded-lg hover:bg-[#6BBF9A] transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+              className="px-4 py-2 rounded-xl text-sm font-semibold flex items-center space-x-2 transition-all duration-200"
+              style={{
+                background: 'linear-gradient(135deg, rgba(50,224,196,0.35), rgba(108,99,255,0.35))',
+                border: '1px solid rgba(255,255,255,0.08)',
+                color: '#F4F6FF',
+                opacity: loading ? 0.6 : 1,
+              }}
           >
             {loading ? (
               <>
@@ -1182,144 +2044,206 @@ const AdminDashboard = () => {
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
-                <span>Loading...</span>
+                  <span>Refreshing…</span>
               </>
             ) : (
               <>
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
-                <span>Refresh</span>
+                  <span>Sync Stats</span>
               </>
             )}
           </button>
+            <button
+              className="px-4 py-2 rounded-xl text-sm font-semibold transition-all duration-200"
+              style={{
+                background: 'rgba(255,255,255,0.05)',
+                border: '1px solid rgba(255,255,255,0.08)',
+                color: 'rgba(244,246,255,0.75)',
+              }}
+            >
+              View Logs
+          </button>
         </div>
-        {error && (
-          <div className="mt-2 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg">
-            {error}
           </div>
+        {error && (
+          <div
+            className="relative mt-4 px-4 py-3 rounded-2xl border flex items-center space-x-3"
+            style={{
+              background: 'rgba(255,77,141,0.12)',
+              borderColor: 'rgba(255,77,141,0.35)',
+              color: '#FF9AC2',
+            }}
+          >
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            <span>{error}</span>
+            </div>
         )}
-      </div>
+        </div>
 
       {/* Stats Tiles */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div 
-          className={`p-4 hover:shadow-lg transition-all duration-200 transform hover:-translate-y-0.5 cursor-pointer ${activeTile === 'total' ? 'ring-2 ring-[#4DAF7C] ring-opacity-50' : ''}`}
-          style={{borderRadius: '25% 10%', backgroundColor: '#F1FEC6'}}
-          onClick={() => handleTileClick('total')}
-        >
-          <div className="flex items-center justify-between mb-4">
-            <p className="text-sm font-medium text-[#666666]">Total Pharmacies</p>
-            <div className="p-3 bg-[#D5E8D4] rounded-xl">
-              <svg className="h-4 w-4 text-[#4DAF7C]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+        {[
+          {
+            key: 'total',
+            label: 'Total Pharmacies',
+            value: pharmacyStats.totalPharmacies,
+            description: 'Registered pharmacies',
+            gradient: 'linear-gradient(135deg, rgba(50,224,196,0.22), rgba(108,99,255,0.24))',
+            iconPath: 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4',
+          },
+          {
+            key: 'pending',
+            label: 'Pending Approvals',
+            value: pharmacyStats.pendingApprovals,
+            description: 'Awaiting review',
+            gradient: 'linear-gradient(135deg, rgba(255,77,141,0.22), rgba(108,99,255,0.24))',
+            iconPath: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z',
+          },
+          {
+            key: 'active',
+            label: 'Active Pharmacies',
+            value: pharmacyStats.activePharmacies,
+            description: 'Currently operating',
+            gradient: 'linear-gradient(135deg, rgba(108,99,255,0.24), rgba(50,224,196,0.22))',
+            iconPath: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z',
+          },
+          {
+            key: 'suspended',
+            label: 'Suspended',
+            value: pharmacyStats.suspendedPharmacies,
+            description: 'Temporarily disabled',
+            gradient: 'linear-gradient(135deg, rgba(255,179,71,0.24), rgba(255,77,141,0.26))',
+            iconPath: 'M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728L5.636 5.636m12.728 12.728L18.364 5.636M5.636 18.364l12.728-12.728',
+          },
+        ].map((tile) => {
+          const isActive = activeTile === tile.key;
+          return (
+            <button
+              key={tile.key}
+              onClick={() => handleTileClick(tile.key)}
+              className="relative overflow-hidden rounded-3xl p-6 transition-all duration-300 text-left"
+              style={{
+                background: tile.gradient,
+                border: isActive ? '1px solid rgba(50,224,196,0.5)' : '1px solid rgba(255,255,255,0.06)',
+                boxShadow: isActive ? '0 18px 38px rgba(6,12,32,0.5)' : '0 10px 20px rgba(6,12,32,0.35)',
+                transform: isActive ? 'translateY(-4px)' : 'none',
+                color: '#F4F6FF',
+              }}
+            >
+              <div
+                className="absolute top-0 right-0 w-36 h-36 translate-x-12 -translate-y-20 blur-3xl opacity-70"
+                style={{ background: 'rgba(255,255,255,0.1)' }}
+              />
+              <div className="flex items-center justify-between mb-5 relative">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.35em]" style={{ color: 'rgba(244,246,255,0.7)' }}>
+                    {tile.label}
+                  </p>
+                  <div className="flex items-baseline space-x-2">
+                    <h2 className="text-3xl font-semibold text-white">
+            {loading ? (
+                        <span className="inline-block animate-pulse bg-white/30 rounded w-16 h-6" />
+                      ) : (
+                        tile.value
+                      )}
+                    </h2>
+                    {isActive && (
+                      <span className="text-[0.65rem] uppercase tracking-[0.4em] text-[#32E0C4]">Active</span>
+                    )}
+        </div>
+                </div>
+                <div
+                  className="p-3 rounded-xl"
+                  style={{
+                    background: 'rgba(0,0,0,0.18)',
+                  }}
+                >
+                  <svg className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={tile.iconPath} />
               </svg>
             </div>
           </div>
-          <h1 className="text-4xl mb-6 font-bold text-gray-700 mb-1">
-            {loading ? (
-              <div className="animate-pulse bg-gray-300 h-10 w-16 rounded"></div>
-            ) : (
-              pharmacyStats.totalPharmacies
-            )}
-          </h1>
-          <p className="text-sm text-[#999999]">Registered pharmacies</p>
-        </div>
-
-        <div 
-          className={`p-4 hover:shadow-lg transition-all duration-200 transform hover:-translate-y-0.5 cursor-pointer ${activeTile === 'pending' ? 'ring-2 ring-[#4DAF7C] ring-opacity-50' : ''}`}
-          style={{borderRadius: '25% 10%', backgroundColor: '#C2DEDB'}}
-          onClick={() => handleTileClick('pending')}
-        >
-          <div className="flex items-center justify-between mb-4">
-            <p className="text-sm font-medium text-[#666666]">Pending Approvals</p>
-            <div className="p-3 bg-[#D5E8D4] rounded-xl">
-              <svg className="h-4 w-4 text-[#4DAF7C]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
+              <p className="text-xs font-medium" style={{ color: 'rgba(244,246,255,0.75)' }}>
+                {tile.description}
+              </p>
+              <div className="mt-5 h-10 relative overflow-hidden rounded-full">
+                <div
+                  className="absolute inset-0"
+                  style={{
+                    background: isActive
+                      ? 'linear-gradient(135deg, rgba(50,224,196,0.5), rgba(108,99,255,0.45))'
+                      : 'linear-gradient(135deg, rgba(255,255,255,0.2), rgba(255,255,255,0))',
+                    transform: 'skewX(-20deg)',
+                    opacity: 0.4,
+                  }}
+                />
             </div>
-          </div>
-          <h1 className="text-4xl mb-6 font-bold text-gray-700 mb-1">
-            {loading ? (
-              <div className="animate-pulse bg-gray-300 h-10 w-16 rounded"></div>
-            ) : (
-              pharmacyStats.pendingApprovals
-            )}
-          </h1>
-          <p className="text-sm text-[#999999]">Awaiting review</p>
-        </div>
-
-        <div 
-          className={`p-4 hover:shadow-lg transition-all duration-200 transform hover:-translate-y-0.5 cursor-pointer ${activeTile === 'active' ? 'ring-2 ring-[#4DAF7C] ring-opacity-50' : ''}`}
-          style={{borderRadius: '25% 10%', backgroundColor: '#FADADD'}}
-          onClick={() => handleTileClick('active')}
-        >
-          <div className="flex items-center justify-between mb-4">
-            <p className="text-sm font-medium text-[#666666]">Active Pharmacies</p>
-            <div className="p-3 bg-[#D5E8D4] rounded-xl">
-              <svg className="h-4 w-4 text-[#4DAF7C]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-          </div>
-          <h1 className="text-4xl mb-6 font-bold text-gray-700 mb-1">
-            {loading ? (
-              <div className="animate-pulse bg-gray-300 h-10 w-16 rounded"></div>
-            ) : (
-              pharmacyStats.activePharmacies
-            )}
-          </h1>
-          <p className="text-sm text-[#999999]">Currently operating</p>
-        </div>
-
-        <div 
-          className={`p-4 hover:shadow-lg transition-all duration-200 transform hover:-translate-y-0.5 cursor-pointer ${activeTile === 'suspended' ? 'ring-2 ring-[#4DAF7C] ring-opacity-50' : ''}`}
-          style={{borderRadius: '25% 10%', backgroundColor: '#C3BEF7'}}
-          onClick={() => handleTileClick('suspended')}
-        >
-          <div className="flex items-center justify-between mb-4">
-            <p className="text-sm font-medium text-[#666666]">Suspended</p>
-            <div className="p-3 bg-[#D5E8D4] rounded-xl">
-              <svg className="h-4 w-4 text-[#4DAF7C]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728L5.636 5.636m12.728 12.728L18.364 5.636M5.636 18.364l12.728-12.728" />
-              </svg>
-            </div>
-          </div>
-          <h1 className="text-4xl mb-6 font-bold text-gray-700 mb-1">
-            {loading ? (
-              <div className="animate-pulse bg-gray-300 h-10 w-16 rounded"></div>
-            ) : (
-              pharmacyStats.suspendedPharmacies
-            )}
-          </h1>
-          <p className="text-sm text-[#999999]">Temporarily disabled</p>
-        </div>
+            </button>
+          );
+        })}
       </div>
 
       {/* Pharmacy List */}
-      <div className="bg-white rounded-2xl shadow-2xl border border-[#D5E8D4] p-8">
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-xl font-bold text-[#2C7A5D]">
+      <div
+        className="rounded-3xl p-6 border relative overflow-hidden"
+        style={{
+          background: 'linear-gradient(165deg, rgba(19,27,53,0.92), rgba(13,19,40,0.92))',
+          borderColor: 'rgba(76,111,255,0.22)',
+        }}
+      >
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            background: 'radial-gradient(circle at 20% 0%, rgba(108,99,255,0.18), transparent 55%), radial-gradient(circle at 80% -10%, rgba(50,224,196,0.18), transparent 45%)',
+          }}
+        />
+        <div className="relative flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+          <div>
+            <h1 className="text-xl font-semibold text-white">
             {activeTile === 'total' && 'Total Pharmacies'}
             {activeTile === 'pending' && 'Pending Approvals'}
             {activeTile === 'active' && 'Active Pharmacies'}
             {activeTile === 'suspended' && 'Suspended Pharmacies'}
           </h1>
-          <div className="flex space-x-2">
-            <button className="px-4 py-2 bg-[#4DAF7C] text-white rounded-lg hover:bg-[#6BBF9A] transition-colors duration-200">
+            <p className="text-xs uppercase tracking-[0.4em]" style={{ color: 'rgba(244,246,255,0.55)' }}>
+              Overview & management
+            </p>
+          </div>
+          <div className="flex space-x-3">
+            <button
+              className="px-4 py-2 rounded-xl text-sm font-semibold"
+              style={{
+                background: 'linear-gradient(135deg, rgba(50,224,196,0.3), rgba(108,99,255,0.3))',
+                border: '1px solid rgba(255,255,255,0.08)',
+                color: '#F4F6FF',
+              }}
+            >
               Add Pharmacy
             </button>
-            <button className="px-4 py-2 border border-[#D5E8D4] text-[#666666] rounded-lg hover:bg-[#D5E8D4] transition-colors duration-200">
+            <button
+              className="px-4 py-2 rounded-xl text-sm font-semibold border"
+              style={{
+                borderColor: 'rgba(108,99,255,0.35)',
+                color: 'rgba(244,246,255,0.8)',
+                background: 'rgba(108,99,255,0.12)',
+              }}
+            >
               Export
             </button>
           </div>
         </div>
 
         {/* Search Bar */}
-        <div className="mb-6">
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <svg className="h-5 w-5 text-[#999999]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <div className="relative mb-6">
+          <div
+            className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"
+            style={{ color: 'rgba(244,246,255,0.6)' }}
+          >
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </div>
@@ -1328,96 +2252,99 @@ const AdminDashboard = () => {
               placeholder="Search pharmacies by name, address, owner, or contact..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-3 border border-[#D5E8D4] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#6BBF9A] focus:ring-opacity-20 focus:border-[#6BBF9A] transition-all duration-200 text-sm"
+            className="w-full pl-11 pr-12 py-3 rounded-2xl text-sm focus:outline-none transition-all duration-200"
+            style={{
+              background: 'rgba(13,20,38,0.85)',
+              border: '1px solid rgba(108,99,255,0.22)',
+              color: '#F4F6FF',
+            }}
             />
             {searchTerm && (
               <button
                 onClick={() => setSearchTerm('')}
-                className="absolute inset-y-0 right-0 pr-3 flex items-center text-[#999999] hover:text-[#666666] transition-colors duration-200"
+              className="absolute inset-y-0 right-0 pr-4 flex items-center text-[#32E0C4] hover:text-[#FF4D8D] transition-colors duration-200"
               >
                 <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
             )}
-          </div>
-          
-          {/* Search Results Count */}
           {searchTerm && (
-            <div className="mt-2 text-sm text-[#666666]">
-              {filteredPharmacies.length} of {pharmacyList.length} pharmacies found
+            <div className="mt-2 text-xs uppercase tracking-[0.4em]" style={{ color: 'rgba(244,246,255,0.45)' }}>
+              {filteredPharmacies.length} of {pharmacyList.length} matches
             </div>
           )}
         </div>
         
-        <div className="max-h-96 overflow-y-auto space-y-3">
+        <div className="relative max-h-96 overflow-y-auto space-y-3 pr-1">
           {activeTile === 'pending' ? (
             // Show pending pharmacies
             loadingPendingPharmacies ? (
-              <div className="text-center py-8">
-                <div className="animate-spin mx-auto h-8 w-8 border-4 border-[#4DAF7C] border-t-transparent rounded-full"></div>
-                <p className="mt-2 text-sm text-[#666666]">Loading pending pharmacies...</p>
+              <div className="flex flex-col items-center justify-center py-12 space-y-3">
+                <div className="w-14 h-14 rounded-full border-4 border-transparent border-t-[rgba(50,224,196,0.6)] animate-spin" />
+                <p className="text-sm" style={{ color: 'rgba(244,246,255,0.65)' }}>Loading pending pharmacies...</p>
               </div>
             ) : pendingPharmacies.length > 0 ? (
               <div className="space-y-3">
-                {/* Table Header */}
-                <div className="grid grid-cols-12 gap-2 lg:gap-4 p-3 lg:p-4 bg-[#D5E8D4] rounded-xl border border-[#6BBF9A] font-semibold text-[#2C7A5D] text-xs lg:text-sm">
-                  <div className="col-span-1 flex items-center justify-center">
-                    <span className="text-xs">Profile</span>
-                  </div>
+                <div
+                  className="grid grid-cols-12 gap-2 lg:gap-4 px-4 py-3 rounded-2xl text-[0.7rem] uppercase tracking-[0.3em]"
+                  style={{
+                    background: 'rgba(255,255,255,0.04)',
+                    border: '1px solid rgba(108,99,255,0.25)',
+                    color: 'rgba(244,246,255,0.6)',
+                  }}
+                >
+                  <div className="col-span-1 flex items-center justify-center">Profile</div>
                   <div className="col-span-3">Pharmacy Name</div>
                   <div className="col-span-2">Address</div>
                   <div className="col-span-2">Owner</div>
                   <div className="col-span-2">Phone</div>
                   <div className="col-span-1">Email</div>
-                  <div className="col-span-1 flex items-center justify-center">
-                    <span className="text-xs">Action</span>
-                  </div>
+                  <div className="col-span-1 flex items-center justify-center">Action</div>
                 </div>
                 
-                {/* Table Rows */}
                 {pendingPharmacies.map((pharmacy) => (
                   <div 
                     key={pharmacy.id}
-                    className="grid grid-cols-12 gap-2 lg:gap-4 p-3 lg:p-4 rounded-xl hover:bg-[#D5E8D4] transition-colors duration-200 border border-transparent hover:border-[#6BBF9A] items-center"
+                    className="grid grid-cols-12 gap-2 lg:gap-4 px-4 py-3 rounded-2xl border transition-all duration-200"
+                    style={{
+                      background: 'rgba(255,255,255,0.02)',
+                      borderColor: 'rgba(255,255,255,0.05)',
+                      color: 'rgba(244,246,255,0.85)',
+                    }}
                   >
-                    {/* Pharmacy Profile Picture */}
                     <div className="col-span-1 flex items-center justify-center">
-                      <div className="w-8 h-8 lg:w-10 lg:h-10 bg-gradient-to-br from-[#4DAF7C] to-[#6BBF9A] rounded-xl flex items-center justify-center text-white font-bold text-xs">
+                      <div className="w-9 h-9 bg-gradient-to-br from-[#32E0C4] via-[#6C63FF] to-[#FF4D8D] rounded-xl flex items-center justify-center text-white font-semibold text-xs shadow-inner shadow-[#32E0C466]">
                         {pharmacy.pharmacy_name.split(' ').map(word => word[0]).join('').substring(0, 2)}
                       </div>
                     </div>
-                    
-                    {/* Pharmacy Name */}
                     <div className="col-span-3">
-                      <h3 className="font-semibold text-[#2C7A5D] text-xs lg:text-sm truncate">{pharmacy.pharmacy_name}</h3>
+                      <h3 className="font-semibold text-white text-sm truncate">{pharmacy.pharmacy_name}</h3>
+                      <p className="text-xs" style={{ color: 'rgba(244,246,255,0.55)' }}>{pharmacy.business_email}</p>
                     </div>
-                    
-                    {/* Address */}
                     <div className="col-span-2">
-                      <p className="text-xs lg:text-sm text-[#666666] truncate">{pharmacy.barangay}, {pharmacy.city}</p>
+                      <p className="text-sm truncate">{pharmacy.barangay}, {pharmacy.city}</p>
                     </div>
-                    
-                    {/* Owner */}
                     <div className="col-span-2">
-                      <p className="text-xs lg:text-sm text-[#666666] truncate">{pharmacy.owner_first_name} {pharmacy.owner_last_name}</p>
+                      <p className="text-sm truncate">{pharmacy.owner_first_name} {pharmacy.owner_last_name}</p>
                     </div>
-                    
-                    {/* Phone */}
                     <div className="col-span-2">
-                      <p className="text-xs lg:text-sm text-[#666666] truncate">{pharmacy.business_phone}</p>
+                      <p className="text-sm truncate">{pharmacy.business_phone}</p>
                     </div>
-                    
-                    {/* Email */}
                     <div className="col-span-1">
-                      <p className="text-xs lg:text-sm text-[#666666] truncate">{pharmacy.business_email}</p>
+                      <span className="text-xs truncate" style={{ color: 'rgba(244,246,255,0.65)' }}>
+                        {pharmacy.business_email}
+                      </span>
                     </div>
-                    
-                    {/* Action Button */}
                     <div className="col-span-1 flex items-center justify-center">
                       <button 
                         onClick={() => handleViewPharmacy(pharmacy)}
-                        className="px-2 lg:px-3 py-1 bg-[#4DAF7C] text-white text-xs rounded-lg hover:bg-[#6BBF9A] transition-colors duration-200"
+                        className="px-3 py-1 rounded-xl text-xs font-semibold transition-colors duration-200"
+                        style={{
+                          background: 'linear-gradient(135deg, rgba(50,224,196,0.35), rgba(108,99,255,0.35))',
+                          border: '1px solid rgba(255,255,255,0.08)',
+                          color: '#F4F6FF',
+                        }}
                       >
                         View
                       </button>
@@ -1426,11 +2353,12 @@ const AdminDashboard = () => {
                 ))}
               </div>
             ) : (
-              <div className="text-center py-8">
-                <svg className="mx-auto h-12 w-12 text-[#999999]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                <h3 className="mt-2 text-sm font-medium text-[#666666]">No pending pharmacies</h3>
-                <p className="mt-1 text-sm text-[#999999]">All pharmacies have been reviewed</p>
+              <div className="flex flex-col items-center justify-center py-12 space-y-3">
+                <svg className="h-12 w-12" viewBox="0 0 24 24" fill="none" stroke={RAILWAY_THEME.accentTeal}>
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <h3 className="text-sm font-semibold" style={{ color: 'rgba(244,246,255,0.8)' }}>No pending pharmacies</h3>
+                <p className="text-xs text-center" style={{ color: 'rgba(244,246,255,0.6)' }}>All pharmacies have been reviewed</p>
               </div>
             )
           ) : (
@@ -1439,10 +2367,15 @@ const AdminDashboard = () => {
               filteredPharmacies.map((pharmacy) => (
               <div 
                 key={pharmacy.id}
-                className="flex items-center p-4 rounded-xl hover:bg-[#D5E8D4] transition-colors duration-200 border border-transparent hover:border-[#6BBF9A]"
+                className="flex items-center p-4 rounded-2xl border transition-all duration-200"
+                style={{
+                  background: 'rgba(255,255,255,0.02)',
+                  borderColor: 'rgba(255,255,255,0.05)',
+                  color: '#F4F6FF',
+                }}
               >
                 {/* Pharmacy Profile Picture */}
-                <div className="w-12 h-12 bg-gradient-to-br from-[#4DAF7C] to-[#6BBF9A] rounded-xl flex items-center justify-center text-white font-bold text-sm mr-4">
+                <div className="w-12 h-12 bg-gradient-to-br from-[#32E0C4] via-[#6C63FF] to-[#FF4D8D] rounded-xl flex items-center justify-center text-white font-bold text-sm mr-4 shadow-inner shadow-[#32E0C433]">
                   {(pharmacy.name || '').split(' ').map(word => word[0]).join('').substring(0, 2)}
                 </div>
                 
@@ -1450,9 +2383,9 @@ const AdminDashboard = () => {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
                     <div className="flex-1">
-                      <h3 className="font-semibold text-[#2C7A5D] text-lg">{pharmacy.name || 'Unnamed Pharmacy'}</h3>
-                      <p className="text-sm text-[#666666] mb-1">{pharmacy.address || 'No address'}</p>
-                      <div className="flex items-center space-x-4 text-sm text-[#999999]">
+                      <h3 className="font-semibold text-white text-lg">{pharmacy.name || 'Unnamed Pharmacy'}</h3>
+                      <p className="text-sm" style={{ color: 'rgba(244,246,255,0.6)' }}>{pharmacy.address || 'No address'}</p>
+                      <div className="flex items-center space-x-4 text-sm" style={{ color: 'rgba(244,246,255,0.55)' }}>
                         <span>Phone: {pharmacy.business_phone || 'N/A'}</span>
                         <span>Email: {pharmacy.business_email || 'N/A'}</span>
                       </div>
@@ -1460,10 +2393,23 @@ const AdminDashboard = () => {
                     
                     {/* Action Buttons */}
                     <div className="flex space-x-2 ml-4">
-                      <button className="px-3 py-1 bg-[#4DAF7C] text-white text-xs rounded-lg hover:bg-[#6BBF9A] transition-colors duration-200">
+                      <button
+                        className="px-3 py-1 text-xs font-semibold rounded-lg transition-colors duration-200"
+                        style={{
+                          background: 'linear-gradient(135deg, rgba(50,224,196,0.35), rgba(108,99,255,0.35))',
+                          border: '1px solid rgba(255,255,255,0.08)',
+                          color: '#F4F6FF',
+                        }}
+                      >
                         View
                       </button>
-                      <button className="px-3 py-1 border border-[#D5E8D4] text-[#666666] text-xs rounded-lg hover:bg-[#D5E8D4] transition-colors duration-200">
+                      <button
+                        className="px-3 py-1 text-xs font-semibold rounded-lg transition-colors duration-200 border"
+                        style={{
+                          borderColor: 'rgba(255,255,255,0.08)',
+                          color: 'rgba(244,246,255,0.75)',
+                        }}
+                      >
                         Edit
                       </button>
                     </div>
@@ -1472,18 +2418,23 @@ const AdminDashboard = () => {
               </div>
               ))
             ) : (
-              <div className="text-center py-8">
-                <svg className="mx-auto h-12 w-12 text-[#999999]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+              <div className="flex flex-col items-center justify-center py-12 space-y-3">
+                <svg className="h-12 w-12" viewBox="0 0 24 24" fill="none" stroke={RAILWAY_THEME.accentTeal}>
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                 </svg>
-                <h3 className="mt-2 text-sm font-medium text-[#666666]">No pharmacies found</h3>
-                <p className="mt-1 text-sm text-[#999999]">
+                <h3 className="text-sm font-semibold" style={{ color: 'rgba(244,246,255,0.8)' }}>No pharmacies found</h3>
+                <p className="text-xs text-center" style={{ color: 'rgba(244,246,255,0.6)' }}>
                   {searchTerm ? `No pharmacies match "${searchTerm}"` : 'No pharmacies available'}
                 </p>
                 {searchTerm && (
                   <button
                     onClick={() => setSearchTerm('')}
-                    className="mt-3 px-4 py-2 bg-[#4DAF7C] text-white text-sm rounded-lg hover:bg-[#6BBF9A] transition-colors duration-200"
+                    className="mt-3 px-4 py-2 text-xs font-semibold rounded-xl transition-colors duration-200"
+                    style={{
+                      background: 'linear-gradient(135deg, rgba(50,224,196,0.35), rgba(108,99,255,0.35))',
+                      border: '1px solid rgba(255,255,255,0.08)',
+                      color: '#F4F6FF',
+                    }}
                   >
                     Clear search
                   </button>
@@ -1500,353 +2451,316 @@ const AdminDashboard = () => {
   const renderPharmacyDetailsModal = () => {
     if (!isModalOpen || !selectedPharmacy) return null;
 
+    const mutedText = 'rgba(244,246,255,0.65)';
+    const subtleText = 'rgba(244,246,255,0.55)';
+
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-        <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
-          {/* Modal Header */}
-          <div className="flex items-center justify-between p-6 border-b border-[#D5E8D4]">
-            <div className="flex items-center space-x-3">
-              <div className="w-12 h-12 bg-gradient-to-br from-[#4DAF7C] to-[#6BBF9A] rounded-xl flex items-center justify-center text-white font-bold text-lg">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={MODAL_SCRIM_STYLE}>
+        <div className="relative w-full max-w-4xl max-h-[90vh] overflow-hidden rounded-[28px]" style={MODAL_PANEL_STYLE}>
+          <div
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              background:
+                'radial-gradient(circle at 15% 0%, rgba(108,99,255,0.32), transparent 55%), radial-gradient(circle at 85% -10%, rgba(50,224,196,0.28), transparent 45%)',
+            }}
+          />
+          <div className="relative flex items-start justify-between px-8 py-6 border-b border-white/10">
+            <div className="flex items-start space-x-4">
+              <div className="w-12 h-12 bg-gradient-to-br from-[#32E0C4] via-[#6C63FF] to-[#FF4D8D] rounded-xl flex items-center justify-center text-white font-bold text-lg shadow-inner shadow-[#32E0C433]">
                 {selectedPharmacy.pharmacy_name.split(' ').map(word => word[0]).join('').substring(0, 2)}
               </div>
               <div>
-                <h2 className="text-2xl font-bold text-[#2C7A5D]">{selectedPharmacy.pharmacy_name}</h2>
-                <p className="text-sm text-[#666666]">Pending Approval</p>
+                <p className="text-xs uppercase tracking-[0.4em]" style={{ color: subtleText }}>Pharmacy Profile</p>
+                <h2 className="text-2xl font-semibold text-white">{selectedPharmacy.pharmacy_name}</h2>
+                <p className="text-sm mt-1" style={{ color: mutedText }}>
+                  {selectedPharmacy.barangay}, {selectedPharmacy.city}
+                </p>
               </div>
+            </div>
+            <div className="flex items-center space-x-3">
+              <div className="px-3 py-1 rounded-full text-xs font-semibold tracking-[0.35em]" style={{ background: 'rgba(255,77,141,0.2)', color: RAILWAY_THEME.accentPink }}>
+                Pending
             </div>
             <button
               onClick={handleCloseModal}
-              className="p-2 hover:bg-[#D5E8D4] rounded-lg transition-colors duration-200"
+                className="p-2 rounded-xl transition-colors duration-200"
+                style={MODAL_SECONDARY_BUTTON_STYLE}
             >
-              <svg className="h-6 w-6 text-[#666666]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
+            </div>
           </div>
 
-          {/* Modal Content */}
-          <div className="p-6 overflow-y-auto max-h-[calc(90vh-200px)]">
+          <div className="relative px-8 py-6 overflow-y-auto max-h-[calc(90vh-200px)] space-y-6">
             {modalLoading ? (
-              <div className="flex items-center justify-center py-12">
-                <div className="text-center">
-                  <div className="animate-spin mx-auto h-12 w-12 border-4 border-[#4DAF7C] border-t-transparent rounded-full"></div>
-                  <p className="mt-4 text-sm text-[#666666]">Loading pharmacy details...</p>
+              <div className="flex flex-col items-center justify-center py-16 space-y-3">
+                <div className="w-14 h-14 rounded-full border-4 border-transparent border-t-[rgba(50,224,196,0.6)] animate-spin" />
+                <p className="text-sm" style={{ color: mutedText }}>Loading pharmacy details…</p>
                 </div>
+            ) : modalError ? (
+              <div className="flex flex-col items-center justify-center py-16 space-y-4" style={MODAL_SECTION_STYLE}>
+                <svg className="h-12 w-12 text-[#FF4D8D]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <p className="text-sm font-medium text-white text-center">{modalError}</p>
+                <button
+                  onClick={() => handleViewPharmacy(selectedPharmacy)}
+                  className="px-5 py-2 rounded-xl text-sm font-semibold transition-colors duration-200"
+                  style={MODAL_PRIMARY_BUTTON_STYLE}
+                >
+                  Retry loading
+                </button>
               </div>
             ) : (
-              <div className="space-y-8">
-                {/* Basic Information Section */}
-                <div className="bg-[#F8F9FA] rounded-xl p-6">
-                  <h3 className="text-lg font-bold text-[#2C7A5D] mb-4 flex items-center">
-                    <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    Basic Information
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-6">
+                <div className="p-6" style={MODAL_SECTION_STYLE}>
+                  <div className="flex items-center justify-between mb-4">
                     <div>
-                      <label className="block text-sm font-medium text-[#666666] mb-1">Pharmacy Name</label>
-                      <p className="text-[#2C7A5D] font-semibold">{selectedPharmacy.pharmacy_name}</p>
+                      <p className="text-xs uppercase tracking-[0.4em]" style={{ color: subtleText }}>Overview</p>
+                      <h3 className="text-lg font-semibold text-white">Basic Information</h3>
+                    </div>
+                    <div className="flex space-x-3 text-xs" style={{ color: subtleText }}>
+                      <span>{selectedPharmacy.business_email}</span>
+                      <span>•</span>
+                      <span>{selectedPharmacy.business_phone}</span>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.3em]" style={{ color: subtleText }}>Pharmacy Name</p>
+                      <p className="text-white font-semibold">{selectedPharmacy.pharmacy_name}</p>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-[#666666] mb-1">Owner Name</label>
-                      <p className="text-[#2C7A5D] font-semibold">{selectedPharmacy.owner_first_name} {selectedPharmacy.owner_last_name}</p>
+                      <p className="text-xs uppercase tracking-[0.3em]" style={{ color: subtleText }}>Owner</p>
+                      <p className="text-white font-semibold">{selectedPharmacy.owner_first_name} {selectedPharmacy.owner_last_name}</p>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-[#666666] mb-1">Business Phone</label>
-                      <p className="text-[#2C7A5D] font-semibold">{selectedPharmacy.business_phone}</p>
+                      <p className="text-xs uppercase tracking-[0.3em]" style={{ color: subtleText }}>Business Phone</p>
+                      <p className="text-white font-semibold">{selectedPharmacy.business_phone}</p>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-[#666666] mb-1">Business Email</label>
-                      <p className="text-[#2C7A5D] font-semibold">{selectedPharmacy.business_email}</p>
+                      <p className="text-xs uppercase tracking-[0.3em]" style={{ color: subtleText }}>Business Email</p>
+                      <p className="text-white font-semibold">{selectedPharmacy.business_email}</p>
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium text-[#666666] mb-1">Location</label>
-                      <p className="text-[#2C7A5D] font-semibold">{selectedPharmacy.barangay}, {selectedPharmacy.city}</p>
+                    <div className="md:col-span-2">
+                      <p className="text-xs uppercase tracking-[0.3em]" style={{ color: subtleText }}>Address</p>
+                      <p className="text-white font-semibold">{selectedPharmacy.barangay}, {selectedPharmacy.city}</p>
                     </div>
                   </div>
                 </div>
 
-                {/* Additional Information Section */}
-                <div className="bg-[#F8F9FA] rounded-xl p-6">
-                  <h3 className="text-lg font-bold text-[#2C7A5D] mb-4 flex items-center">
-                    <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                    Additional Information
-                  </h3>
-                  {modalError ? (
-                    <div className="text-center py-4">
-                      <div className="text-red-600 mb-2">
-                        <svg className="mx-auto h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
+                <div className="p-6 space-y-6" style={MODAL_SECTION_STYLE}>
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.4em]" style={{ color: subtleText }}>Compliance</p>
+                    <h3 className="text-lg font-semibold text-white">Licensing & Permits</h3>
                       </div>
-                      <p className="text-red-600 font-medium">{modalError}</p>
-                      <button
-                        onClick={() => handleViewPharmacy(selectedPharmacy)}
-                        className="mt-2 px-4 py-2 bg-[#4DAF7C] text-white rounded-lg hover:bg-[#6BBF9A] transition-colors duration-200"
-                      >
-                        Retry
-                      </button>
-                    </div>
-                  ) : detailedPharmacyData ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {detailedPharmacyData ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
                       <div>
-                        <label className="block text-sm font-medium text-[#666666] mb-1">Business Permit Number</label>
-                        <p className="text-[#2C7A5D] font-semibold">{detailedPharmacyData.business_permit_number || 'Not provided'}</p>
+                        <p className="text-xs uppercase tracking-[0.3em]" style={{ color: subtleText }}>Business Permit Number</p>
+                        <p className="text-white font-semibold">{detailedPharmacyData.business_permit_number || 'Not provided'}</p>
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-[#666666] mb-1">Business Permit Expiry</label>
-                        <p className="text-[#2C7A5D] font-semibold">
-                          {detailedPharmacyData.business_permit_expiry ? 
-                            new Date(detailedPharmacyData.business_permit_expiry).toLocaleDateString() : 
-                            'Not provided'
-                          }
+                        <p className="text-xs uppercase tracking-[0.3em]" style={{ color: subtleText }}>Business Permit Expiry</p>
+                        <p className="text-white font-semibold">
+                          {detailedPharmacyData.business_permit_expiry
+                            ? new Date(detailedPharmacyData.business_permit_expiry).toLocaleDateString()
+                            : 'Not provided'}
                         </p>
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-[#666666] mb-1">Pharmacy License Number</label>
-                        <p className="text-[#2C7A5D] font-semibold">{detailedPharmacyData.pharmacy_license_number || 'Not provided'}</p>
+                        <p className="text-xs uppercase tracking-[0.3em]" style={{ color: subtleText }}>Pharmacy License Number</p>
+                        <p className="text-white font-semibold">{detailedPharmacyData.pharmacy_license_number || 'Not provided'}</p>
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-[#666666] mb-1">Pharmacy License Expiry</label>
-                        <p className="text-[#2C7A5D] font-semibold">
-                          {detailedPharmacyData.pharmacy_license_expiry ? 
-                            new Date(detailedPharmacyData.pharmacy_license_expiry).toLocaleDateString() : 
-                            'Not provided'
-                          }
+                        <p className="text-xs uppercase tracking-[0.3em]" style={{ color: subtleText }}>Pharmacy License Expiry</p>
+                        <p className="text-white font-semibold">
+                          {detailedPharmacyData.pharmacy_license_expiry
+                            ? new Date(detailedPharmacyData.pharmacy_license_expiry).toLocaleDateString()
+                            : 'Not provided'}
                         </p>
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-[#666666] mb-1">Owner Date of Birth</label>
-                        <p className="text-[#2C7A5D] font-semibold">
-                          {detailedPharmacyData.owner_date_of_birth ? 
-                            new Date(detailedPharmacyData.owner_date_of_birth).toLocaleDateString() : 
-                            'Not provided'
-                          }
+                        <p className="text-xs uppercase tracking-[0.3em]" style={{ color: subtleText }}>Owner Date of Birth</p>
+                        <p className="text-white font-semibold">
+                          {detailedPharmacyData.owner_date_of_birth
+                            ? new Date(detailedPharmacyData.owner_date_of_birth).toLocaleDateString()
+                            : 'Not provided'}
                         </p>
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-[#666666] mb-1">Owner Gender</label>
-                        <p className="text-[#2C7A5D] font-semibold capitalize">{detailedPharmacyData.owner_gender || 'Not provided'}</p>
+                        <p className="text-xs uppercase tracking-[0.3em]" style={{ color: subtleText }}>Owner Gender</p>
+                        <p className="text-white font-semibold capitalize">{detailedPharmacyData.owner_gender || 'Not provided'}</p>
                       </div>
                       <div className="md:col-span-2">
-                        <label className="block text-sm font-medium text-[#666666] mb-1">Services Offered</label>
-                        <div className="flex flex-wrap gap-2">
+                        <p className="text-xs uppercase tracking-[0.3em]" style={{ color: subtleText }}>Services Offered</p>
+                        <div className="flex flex-wrap gap-2 mt-2">
                           {detailedPharmacyData.services_offered && detailedPharmacyData.services_offered.length > 0 ? (
                             detailedPharmacyData.services_offered.map((service, index) => (
                               <span
                                 key={index}
-                                className="px-3 py-1 bg-[#4DAF7C] text-white text-sm rounded-full"
+                                className="px-3 py-1 text-xs font-semibold rounded-full"
+                                style={{ background: 'rgba(50,224,196,0.25)', color: '#F4F6FF' }}
                               >
                                 {service.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
                               </span>
                             ))
                           ) : (
-                            <p className="text-[#2C7A5D] font-semibold">No services specified</p>
+                            <p className="text-white font-semibold">No services specified</p>
                           )}
                         </div>
                       </div>
                     </div>
                   ) : (
-                    <div className="text-center py-4">
-                      <div className="animate-spin mx-auto h-8 w-8 border-4 border-[#4DAF7C] border-t-transparent rounded-full"></div>
-                      <p className="mt-2 text-sm text-[#666666]">Loading additional information...</p>
+                    <div className="flex flex-col items-center justify-center py-10 space-y-3">
+                      <div className="w-10 h-10 rounded-full border-4 border-transparent border-t-[rgba(50,224,196,0.6)] animate-spin" />
+                      <p className="text-xs" style={{ color: mutedText }}>Loading additional information…</p>
                     </div>
                   )}
                 </div>
 
-                {/* Document Gallery Section */}
-                <div className="bg-[#F8F9FA] rounded-xl p-6">
-                  <h3 className="text-lg font-bold text-[#2C7A5D] mb-4 flex items-center">
-                    <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                    </svg>
-                    Uploaded Documents
-                  </h3>
-                  {modalError ? (
-                    <div className="text-center py-4">
-                      <p className="text-red-600">Unable to load documents</p>
+                <div className="p-6 space-y-4" style={MODAL_SECTION_STYLE}>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.4em]" style={{ color: subtleText }}>Compliance</p>
+                      <h3 className="text-lg font-semibold text-white">Uploaded Documents</h3>
                     </div>
-                  ) : detailedPharmacyData && detailedPharmacyData.documents ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {detailedPharmacyData.documents.map((document) => {
-                        // Determine file type from URL
-                        const getFileType = (url) => {
-                          if (!url) return 'unknown';
-                          const extension = url.split('.').pop().toLowerCase().split('?')[0]; // Remove query params
-                          if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(extension)) return 'image';
-                          if (extension === 'pdf') return 'pdf';
-                          return 'unknown';
-                        };
+                  </div>
+                  {(() => {
+                    if (!detailedPharmacyData) {
+                      return (
+                        <div className="flex flex-col items-center justify-center py-10 space-y-3">
+                          <div className="w-10 h-10 rounded-full border-4 border-transparent border-t-[rgba(50,224,196,0.6)] animate-spin" />
+                          <p className="text-xs" style={{ color: mutedText }}>Loading documents…</p>
+                        </div>
+                      );
+                    }
 
-                        const fileType = getFileType(document.file_url);
-                        const isImage = fileType === 'image';
-                        const isPdf = fileType === 'pdf';
-                        
-                        // Check if URL is from Cloudinary (direct URL) or needs backend proxy
-                        const isCloudinaryUrl = document.file_url && (
-                          document.file_url.includes('cloudinary.com') || 
-                          document.file_url.startsWith('http://') || 
-                          document.file_url.startsWith('https://')
-                        );
-                        
-                        // Use Cloudinary URL directly if available, otherwise use backend proxy
+                    const docs = Array.isArray(detailedPharmacyData.documents) ? detailedPharmacyData.documents : [];
+
+                    if (docs.length === 0) {
+                      return (
+                        <div className="flex flex-col items-center justify-center py-12 space-y-3">
+                          <svg className="h-12 w-12 text-white/40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                          <p className="text-xs" style={{ color: mutedText }}>No documents uploaded</p>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {docs.map((document) => {
+                          const extension = (document.file_url || '').split('.').pop()?.toLowerCase().split('?')[0];
+                          const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(extension || '');
+                          const isPdf = extension === 'pdf';
+                          const isCloudinaryUrl =
+                            document.file_url &&
+                            (document.file_url.includes('cloudinary.com') ||
+                              document.file_url.startsWith('http://') ||
+                              document.file_url.startsWith('https://'));
                         const imageUrl = isCloudinaryUrl 
                           ? document.file_url 
                           : `${(process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '')}/api/document/${document.id}/`;
 
+                          const statusColor =
+                            document.status === 'approved'
+                              ? RAILWAY_THEME.accentTeal
+                              : document.status === 'rejected'
+                              ? RAILWAY_THEME.accentPink
+                              : RAILWAY_THEME.accentOrange;
+
                         return (
-                          <div key={document.id} className="bg-white rounded-lg p-4 border border-[#D5E8D4]">
-                            <div className="w-full h-48 bg-gray-100 rounded-lg mb-3 overflow-hidden relative">
+                            <div key={document.id} className="p-4 space-y-3" style={MODAL_SECTION_STYLE}>
+                              <div className="w-full h-48 rounded-xl overflow-hidden bg-[#0f162c] flex items-center justify-center relative">
                               {document.file_url ? (
                                 <>
                                   {isImage ? (
                                     <img
                                       src={imageUrl}
                                       alt={document.document_type}
-                                      className="w-full h-full object-cover cursor-pointer hover:opacity-80 transition-opacity duration-200"
+                                        className="w-full h-full object-cover cursor-pointer transition-opacity duration-200 hover:opacity-80"
                                       onClick={() => window.open(imageUrl, '_blank')}
                                       onError={(e) => {
-                                        console.error('Failed to load image:', imageUrl);
-                                        e.target.style.display = 'none';
-                                        e.target.nextSibling.style.display = 'flex';
-                                      }}
-                                    />
-                                  ) : isPdf ? (
-                                    <div className="w-full h-full flex flex-col items-center justify-center bg-red-50 cursor-pointer hover:bg-red-100 transition-colors duration-200"
-                                         onClick={() => window.open(imageUrl, '_blank')}>
-                                      <svg className="h-12 w-12 text-red-500 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                                      </svg>
-                                      <span className="text-red-600 font-medium text-sm">PDF Document</span>
-                                      <span className="text-red-500 text-xs mt-1">Click to open</span>
-                                    </div>
-                                  ) : (
-                                    <div className="w-full h-full flex flex-col items-center justify-center bg-gray-50 cursor-pointer hover:bg-gray-100 transition-colors duration-200"
-                                         onClick={() => window.open(imageUrl, '_blank')}>
-                                      <svg className="h-12 w-12 text-gray-500 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                      </svg>
-                                      <span className="text-gray-600 font-medium text-sm">Document</span>
-                                      <span className="text-gray-500 text-xs mt-1">Click to open</span>
-                                    </div>
-                                  )}
-                                  
-                                  {/* Fallback for failed image loads */}
-                                  <div 
-                                    className="w-full h-full flex flex-col items-center justify-center bg-[#D5E8D4] absolute inset-0"
-                                    style={{ display: 'none' }}
-                                  >
-                                    <svg className="h-8 w-8 text-[#999999] mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                    <span className="text-[#999999] text-sm">Unable to load preview</span>
-                                    {isCloudinaryUrl && (
-                                      <button
+                                          e.currentTarget.style.display = 'none';
+                                        }}
+                                      />
+                                    ) : (
+                                      <div
+                                        className="w-full h-full flex flex-col items-center justify-center cursor-pointer transition-colors duration-200"
+                                        style={{ background: 'rgba(108,99,255,0.1)' }}
                                         onClick={() => window.open(imageUrl, '_blank')}
-                                        className="mt-2 px-3 py-1 bg-[#4DAF7C] text-white text-xs rounded hover:bg-[#6BBF9A]"
                                       >
-                                        Try opening directly
-                                      </button>
-                                    )}
+                                        <svg className="h-12 w-12 text-white mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                          <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth={1.5}
+                                            d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"
+                                          />
+                                        </svg>
+                                        <span className="text-xs font-semibold" style={{ color: mutedText }}>
+                                          {isPdf ? 'PDF Document' : 'Open Document'}
+                                        </span>
                                   </div>
+                                    )}
                                 </>
                               ) : (
-                                <div className="w-full h-full flex items-center justify-center bg-[#D5E8D4]">
-                                  <svg className="h-8 w-8 text-[#999999]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                  </svg>
-                                </div>
+                                  <span className="text-xs font-medium" style={{ color: mutedText }}>
+                                    No preview available
+                                  </span>
                               )}
                             </div>
-                            <div className="text-center">
-                              <p className="text-sm font-medium text-[#2C7A5D] mb-1">{document.document_type}</p>
-                              <p className="text-xs text-[#666666] mb-1">
-                                Status: <span className={`font-medium ${
-                                  document.status === 'approved' ? 'text-green-600' :
-                                  document.status === 'rejected' ? 'text-red-600' :
-                                  'text-yellow-600'
-                                }`}>
-                                  {document.status.charAt(0).toUpperCase() + document.status.slice(1)}
+                              <div className="text-center space-y-1">
+                                <p className="text-sm font-semibold text-white">{document.document_type}</p>
+                                <p className="text-xs" style={{ color: mutedText }}>
+                                  Status:{' '}
+                                  <span className="font-semibold" style={{ color: statusColor }}>
+                                    {(document.status || 'pending').charAt(0).toUpperCase() + (document.status || 'pending').slice(1)}
                                 </span>
                               </p>
-                              {isCloudinaryUrl && (
-                                <p className="text-xs text-blue-600 mb-1">
-                                  ☁️ Cloudinary
-                                </p>
-                              )}
                               {document.document_number && (
-                                <p className="text-xs text-[#999999]">ID: {document.document_number}</p>
+                                  <p className="text-xs" style={{ color: subtleText }}>ID: {document.document_number}</p>
                               )}
                               {document.expiry_date && (
-                                <p className="text-xs text-[#999999]">
+                                  <p className="text-xs" style={{ color: subtleText }}>
                                   Expires: {new Date(document.expiry_date).toLocaleDateString()}
                                 </p>
-                              )}
-                              {document.file_url && (
-                                <div className="mt-2 space-y-1">
-                                  <button
-                                    onClick={() => window.open(imageUrl, '_blank')}
-                                    className="w-full px-3 py-1 bg-[#4DAF7C] text-white text-xs rounded hover:bg-[#6BBF9A] transition-colors duration-200"
-                                  >
-                                    {isImage ? 'View Full Size' : isPdf ? 'Open PDF' : 'View Document'}
-                                  </button>
-                                  <p className="text-xs text-[#999999]">
-                                    {isImage ? 'Click image or button to view' : 'Click to open in new tab'}
-                                  </p>
-                                </div>
                               )}
                             </div>
                           </div>
                         );
                       })}
                     </div>
-                  ) : (
-                    <div className="text-center py-8">
-                      <div className="animate-spin mx-auto h-8 w-8 border-4 border-[#4DAF7C] border-t-transparent rounded-full"></div>
-                      <p className="mt-2 text-sm text-[#666666]">Loading documents...</p>
-                    </div>
-                  )}
+                    );
+                  })()}
                 </div>
               </div>
             )}
           </div>
 
-          {/* Modal Footer */}
-          <div className="flex items-center justify-between p-6 border-t border-[#D5E8D4] bg-[#F8F9FA]">
+          <div className="relative flex items-center justify-between px-8 py-6 border-t border-white/10">
             <div className="flex space-x-3">
               <button
                 onClick={handleCloseModal}
-                className="px-6 py-2 border border-[#D5E8D4] text-[#666666] rounded-lg hover:bg-[#D5E8D4] transition-colors duration-200"
+                className="px-6 py-2 rounded-xl text-sm font-semibold transition-colors duration-200"
+                style={MODAL_SECONDARY_BUTTON_STYLE}
               >
                 Close
               </button>
               <button
                 onClick={handleApprovePharmacy}
                 disabled={modalLoading}
-                className="px-6 py-2 bg-[#4DAF7C] text-white rounded-lg hover:bg-[#6BBF9A] transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                className="px-6 py-2 rounded-xl text-sm font-semibold transition-colors duration-200 disabled:opacity-60 disabled:cursor-not-allowed"
+                style={MODAL_PRIMARY_BUTTON_STYLE}
               >
-                {modalLoading ? (
-                  <>
-                    <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    <span>Approving...</span>
-                  </>
-                ) : (
-                  <>
-                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <span>Approve Pharmacy</span>
-                  </>
-                )}
+                {modalLoading ? 'Approving…' : 'Approve Pharmacy'}
               </button>
             </div>
-            <div className="text-sm text-[#666666]">
+            <div className="text-xs" style={{ color: subtleText }}>
               Pharmacy ID: {selectedPharmacy.id}
             </div>
           </div>
@@ -1859,122 +2773,118 @@ const AdminDashboard = () => {
   const renderSuccessModal = () => {
     if (!isSuccessModalOpen || !successData) return null;
 
+    const mutedText = 'rgba(244,246,255,0.68)';
+    const subtleText = 'rgba(244,246,255,0.52)';
+
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-        <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full">
-          {/* Modal Header */}
-          <div className="flex items-center justify-between p-6 border-b border-[#D5E8D4]">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={MODAL_SCRIM_STYLE}>
+        <div
+          className="relative w-full max-w-md rounded-[24px] overflow-hidden"
+          style={{
+            ...MODAL_PANEL_STYLE,
+            background: 'linear-gradient(160deg, rgba(17,27,53,0.95), rgba(10,18,36,0.95))',
+          }}
+        >
+          <div
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              background:
+                'radial-gradient(circle at 20% 0%, rgba(50,224,196,0.35), transparent 55%), radial-gradient(circle at 80% -10%, rgba(108,99,255,0.28), transparent 45%)',
+            }}
+          />
+          <div className="relative flex items-start justify-between px-6 py-5 border-b border-white/10">
             <div className="flex items-center space-x-3">
-              <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-green-600 rounded-xl flex items-center justify-center text-white">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#32E0C4] via-[#6C63FF] to-[#B064FF] flex items-center justify-center text-white shadow-inner shadow-[#32E0C433]">
                 <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
               </div>
               <div>
-                <h2 className="text-xl font-bold text-[#2C7A5D]">Pharmacy Approved!</h2>
-                <p className="text-sm text-[#666666]">Welcome email sent successfully</p>
+                <p className="text-xs uppercase tracking-[0.4em]" style={{ color: subtleText }}>Approval Complete</p>
+                <h2 className="text-lg font-semibold text-white">Pharmacy Approved</h2>
               </div>
             </div>
             <button
               onClick={handleCloseSuccessModal}
-              className="p-2 hover:bg-[#D5E8D4] rounded-lg transition-colors duration-200"
+              className="p-2 rounded-lg transition-colors duration-200"
+              style={MODAL_SECONDARY_BUTTON_STYLE}
             >
-              <svg className="h-6 w-6 text-[#666666]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
           </div>
 
-          {/* Modal Content */}
-          <div className="p-6">
-            <div className="space-y-4">
-              <div className="text-center">
-                <h3 className="text-lg font-semibold text-[#2C7A5D] mb-2">
-                  ✅ {successData.pharmacyName} Approved!
-                </h3>
-                <p className="text-sm text-[#666666] mb-4">
-                  The pharmacy has been successfully approved and is now active.
+          <div className="relative px-6 py-5 space-y-5">
+            <div className="text-center space-y-2">
+              <h3 className="text-xl font-semibold text-white">{successData.pharmacyName}</h3>
+              <p className="text-sm" style={{ color: mutedText }}>
+                The pharmacy is now live and the welcome email has been dispatched.
                 </p>
               </div>
 
-              <div className="bg-[#F8F9FA] rounded-xl p-4 space-y-3">
-                <div className="flex items-center space-x-3">
-                  <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
-                    <svg className="h-4 w-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                    </svg>
+            <div className="p-4 space-y-3" style={MODAL_SECTION_STYLE}>
+              <div className="flex items-center justify-between text-sm">
+                <span style={{ color: subtleText }}>Approved By</span>
+                <span className="font-semibold text-white">{successData.approvedBy || 'Super Admin'}</span>
                   </div>
-                  <div>
-                    <p className="text-sm font-medium text-[#2C7A5D]">Welcome Email Sent</p>
-                    <p className="text-xs text-[#666666]">{successData.businessEmail}</p>
+              <div className="flex items-center justify-between text-sm">
+                <span style={{ color: subtleText }}>Approval Date</span>
+                <span className="font-semibold text-white">{successData.approvalDate || new Date().toLocaleString()}</span>
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span style={{ color: subtleText }}>Email Recipient</span>
+                <span className="font-semibold text-white">{successData.ownerEmail}</span>
                   </div>
                 </div>
 
+            <div className="p-4 space-y-3" style={MODAL_SECTION_STYLE}>
                 <div className="flex items-center space-x-3">
-                  <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
-                    <svg className="h-4 w-4 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-[#32E0C4] to-[#6C63FF] flex items-center justify-center">
+                  <svg className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                     </svg>
                   </div>
                   <div>
-                    <p className="text-sm font-medium text-[#2C7A5D]">Login Token Generated</p>
-                    <p className="text-xs text-[#666666]">
-                      Expires: {new Date(successData.tokenExpiresAt).toLocaleString()}
+                  <p className="text-sm font-semibold text-white">Welcome email queued</p>
+                  <p className="text-xs" style={{ color: subtleText }}>
+                    Confirmation email sent to {successData.ownerEmail}
                     </p>
                   </div>
                 </div>
-
                 <div className="flex items-center space-x-3">
-                  <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
-                    <svg className="h-4 w-4 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-[#FF4D8D] to-[#B064FF] flex items-center justify-center">
+                  <svg className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 17v2h6v-2m-7-5h8m-9-5h10M12 3v18" />
                     </svg>
                   </div>
                   <div>
-                    <p className="text-sm font-medium text-[#2C7A5D]">Email Status</p>
-                    <p className="text-xs text-[#666666] capitalize">{successData.emailStatus}</p>
-                  </div>
-                </div>
-              </div>
-
-              {successData.emailStatus === 'sent' ? (
-                <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-                  <div className="flex items-start space-x-2">
-                    <svg className="h-5 w-5 text-green-600 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <div>
-                      <p className="text-sm font-medium text-green-800">Email Sent Successfully</p>
-                      <p className="text-xs text-green-700">
-                        The welcome email has been sent to the pharmacy's business email address via Gmail SMTP.
+                  <p className="text-sm font-semibold text-white">Pharmacy status updated</p>
+                  <p className="text-xs" style={{ color: subtleText }}>
+                    Dashboard metrics will reflect this approval immediately
                       </p>
                     </div>
                   </div>
-                </div>
-              ) : (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                  <div className="flex items-start space-x-2">
-                    <svg className="h-5 w-5 text-red-600 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <div>
-                      <p className="text-sm font-medium text-red-800">Email Sending Failed</p>
-                      <p className="text-xs text-red-700">
-                        The welcome email could not be sent. Please check the email configuration or try again later.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
           </div>
 
-          {/* Modal Footer */}
-          <div className="flex items-center justify-end p-6 border-t border-[#D5E8D4] bg-[#F8F9FA]">
+          <div className="relative flex items-center justify-end px-6 py-4 border-t border-white/10 space-x-3">
             <button
               onClick={handleCloseSuccessModal}
-              className="px-6 py-2 bg-[#4DAF7C] text-white rounded-lg hover:bg-[#6BBF9A] transition-colors duration-200"
+              className="px-4 py-2 rounded-xl text-sm font-semibold transition-colors duration-200"
+              style={MODAL_SECONDARY_BUTTON_STYLE}
             >
-              Got it!
+              Close
+            </button>
+            <button
+              onClick={() => {
+                handleCloseSuccessModal();
+                setActiveTile('active');
+              }}
+              className="px-4 py-2 rounded-xl text-sm font-semibold transition-colors duration-200"
+              style={MODAL_PRIMARY_BUTTON_STYLE}
+            >
+              View Active Pharmacies
             </button>
           </div>
         </div>
@@ -1983,27 +2893,80 @@ const AdminDashboard = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#D5E8D4] p-6">
+    <div
+      className="min-h-screen p-6 relative overflow-hidden"
+      style={{
+        background: RAILWAY_THEME.appBackground,
+        color: RAILWAY_THEME.textPrimary,
+      }}
+    >
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background: 'radial-gradient(circle at 20% 20%, rgba(255,77,141,0.18) 0%, transparent 45%), radial-gradient(circle at 80% 0%, rgba(50,224,196,0.16) 0%, transparent 40%)',
+        }}
+      />
       {/* Top Header */}
       <div className="w-full mb-6">
-        <div className="bg-white rounded-2xl border border-[#D5E8D4] p-6 w-full">
+        <div
+          className="relative rounded-3xl px-8 py-7 w-full overflow-hidden"
+          style={PRIMARY_PANEL_STYLE}
+        >
+          <div
+            className="absolute inset-0 opacity-80"
+            style={{
+              background: 'linear-gradient(135deg, rgba(50,224,196,0.12), rgba(108,99,255,0.12))',
+            }}
+          />
+          <div
+            className="absolute top-0 left-0 w-32 h-32 -translate-x-16 -translate-y-12 blur-3xl opacity-70"
+            style={{ background: 'rgba(108,99,255,0.35)' }}
+          />
+          <div
+            className="absolute top-0 right-0 w-36 h-36 translate-x-12 -translate-y-24 blur-3xl opacity-70"
+            style={{ background: 'rgba(50,224,196,0.35)' }}
+          />
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
               <img 
-                src="/assets/logosvgdark.svg" 
+                src="/assets/superpharmago.png"
                 alt="PharmaGo Logo" 
-                className="h-8 w-auto"
+                className="h-12 w-auto drop-shadow-lg"
               />
-              <span className="text-xl font-bold text-[#2C7A5D]">Admin Portal</span>
+              <div>
+                <span className="text-sm uppercase tracking-[0.35em]" style={{ color: RAILWAY_THEME.accentPurple }}>Control Center</span>
+                <div className="flex items-center space-x-2">
+                  <span className="text-2xl font-semibold tracking-wide" style={{ color: RAILWAY_THEME.textPrimary }}>Super Admin Console</span>
+                  <span className="px-3 py-1 rounded-full text-xs font-semibold" style={{ background: 'rgba(255,77,141,0.18)', color: RAILWAY_THEME.accentPink }}>LIVE</span>
+                </div>
+              </div>
             </div>
             <div className="flex items-center space-x-3">
-              <div className="w-8 h-8 bg-gradient-to-br from-[#4DAF7C] to-[#6BBF9A] rounded-lg flex items-center justify-center text-white font-bold text-sm">
+              <div className="w-9 h-9 bg-gradient-to-br from-[#32E0C4] via-[#6C63FF] to-[#FF4D8D] rounded-xl flex items-center justify-center text-white font-bold text-sm shadow-lg shadow-[#32E0C433]">
                 SA
               </div>
-              <span className="text-sm font-medium text-[#666666]">Super Admin</span>
+              <div className="text-right leading-tight">
+                <span className="block text-xs font-semibold uppercase tracking-wide" style={{ color: RAILWAY_THEME.textSecondary }}>Welcome back</span>
+                <span className="block text-sm font-semibold" style={{ color: RAILWAY_THEME.textPrimary }}>Super Admin</span>
+              </div>
               <button
                 onClick={handleLogout}
-                className="text-[#999999] hover:text-[#4DAF7C] transition-colors duration-200"
+                className="transition-colors duration-200 px-3 py-2 rounded-xl border"
+                style={{
+                  color: RAILWAY_THEME.textSecondary,
+                  borderColor: 'rgba(50, 224, 196, 0.2)',
+                  background: 'rgba(255, 255, 255, 0.03)',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.color = RAILWAY_THEME.accentTeal;
+                  e.currentTarget.style.borderColor = 'rgba(50, 224, 196, 0.4)';
+                  e.currentTarget.style.background = 'rgba(50, 224, 196, 0.08)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.color = RAILWAY_THEME.textSecondary;
+                  e.currentTarget.style.borderColor = 'rgba(50, 224, 196, 0.2)';
+                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)';
+                }}
               >
                 <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -2017,47 +2980,163 @@ const AdminDashboard = () => {
       {/* Main Content Area */}
       <div className="flex gap-6 w-full mx-auto">
         {/* Sidebar */}
-        <div className="w-80 bg-white rounded-2xl border border-[#D5E8D4] p-6 flex flex-col">
-          {/* Main Menu Header */}
-          <h1 className="text-lg font-bold text-[#2C7A5D] mb-6">Main Menu</h1>
+        <aside
+          className="w-80 rounded-3xl p-6 flex flex-col relative overflow-hidden"
+          style={{
+            ...SECONDARY_PANEL_STYLE,
+            background: 'linear-gradient(165deg, rgba(20,28,54,0.92), rgba(16,22,44,0.92))',
+          }}
+        >
+          <div
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              background: 'radial-gradient(circle at 85% -10%, rgba(255,77,141,0.22), transparent 55%), radial-gradient(circle at 0% 20%, rgba(50,224,196,0.18), transparent 45%)',
+            }}
+          />
+          <div className="relative">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <p className="text-xs uppercase tracking-[0.4em]" style={{ color: RAILWAY_THEME.textSecondary }}>Navigator</p>
+                <h2 className="text-lg font-semibold tracking-wide" style={{ color: RAILWAY_THEME.textPrimary }}>Main Menu</h2>
+              </div>
+              <div className="px-2 py-1 text-[0.65rem] font-semibold rounded-full" style={{ background: 'rgba(108,99,255,0.2)', color: RAILWAY_THEME.accentPurple }}>
+                SHIFT+K
+              </div>
+            </div>
 
-          {/* Navigation */}
           <nav className="flex-1 space-y-2">
-            {navItems.map((item) => (
+              {navItems.map((item) => {
+                const isActive = activeNav === item.id;
+                return (
               <button
                 key={item.id}
                 onClick={() => setActiveNav(item.id)}
-                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-left transition-all duration-200 ${
-                  activeNav === item.id
-                    ? 'bg-[#D5E8D4] text-[#2C7A5D] border border-[#6BBF9A] shadow-md'
-                    : 'text-[#666666] hover:bg-[#D5E8D4] hover:text-[#4DAF7C]'
-                }`}
-              >
-                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    className="group w-full flex items-center space-x-3 px-4 py-3 rounded-2xl text-left transition-all duration-200 relative overflow-hidden"
+                    style={{
+                      background: isActive ? 'linear-gradient(135deg, rgba(50,224,196,0.18), rgba(108,99,255,0.22))' : 'rgba(255, 255, 255, 0.02)',
+                      border: isActive ? '1px solid rgba(50,224,196,0.38)' : '1px solid rgba(255, 255, 255, 0.02)',
+                      boxShadow: isActive ? '0 18px 30px rgba(10, 15, 35, 0.42)' : 'none',
+                      color: isActive ? RAILWAY_THEME.textPrimary : RAILWAY_THEME.textSecondary,
+                    }}
+                  >
+                    <span
+                      className="absolute inset-y-0 left-0 w-1 rounded-full transition-all duration-200"
+                      style={{
+                        background: isActive ? `linear-gradient(180deg, ${RAILWAY_THEME.accentTeal}, ${RAILWAY_THEME.accentPurple})` : 'transparent',
+                      }}
+                    />
+                    <div
+                      className="p-2 rounded-xl transition-colors duration-200"
+                      style={{
+                        background: isActive ? 'rgba(50,224,196,0.18)' : 'rgba(255,255,255,0.03)',
+                      }}
+                    >
+                      <svg
+                        className="h-5 w-5 transition-colors duration-200"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        style={{ color: isActive ? RAILWAY_THEME.accentTeal : RAILWAY_THEME.textSecondary }}
+                      >
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={item.icon} />
                 </svg>
-                <span className="font-medium">{item.label}</span>
+                    </div>
+                    <div className="flex-1">
+                      <span className="font-medium tracking-wide block">{item.label}</span>
+                      <span
+                        className="text-[0.65rem] uppercase tracking-[0.4em] transition-opacity duration-200"
+                        style={{ color: isActive ? RAILWAY_THEME.accentPurple : 'rgba(147,163,198,0.5)' }}
+                      >
+                        {isActive ? 'Active' : 'Navigate'}
+                      </span>
+                    </div>
+                    <svg
+                      className="h-4 w-4 transition-all duration-200"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      style={{
+                        color: isActive ? RAILWAY_THEME.accentTeal : 'rgba(147,163,198,0.4)',
+                        transform: isActive ? 'translateX(4px)' : 'translateX(0)',
+                      }}
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
               </button>
-            ))}
+                );
+              })}
           </nav>
         </div>
+        </aside>
 
         {/* Hero Section */}
-        <div className="flex-1 bg-white rounded-2xl border border-[#D5E8D4] p-8 overflow-y-auto">
+        <div
+          className="flex-1 rounded-[32px] p-10 overflow-y-auto relative"
+          style={{
+            ...PRIMARY_PANEL_STYLE,
+            background: 'linear-gradient(160deg, rgba(17,24,49,0.92), rgba(24,31,61,0.92))',
+            border: '1px solid rgba(76,111,255,0.22)',
+          }}
+        >
+          <div
+            className="absolute inset-0 pointer-events-none rounded-[32px] overflow-hidden"
+            style={{
+              background: 'radial-gradient(circle at 15% 10%, rgba(108,99,255,0.22), transparent 55%), radial-gradient(circle at 85% 20%, rgba(50,224,196,0.16), transparent 45%)',
+            }}
+          />
+          <div className="relative">
           {activeNav === 'Dashboard' && renderDashboard()}
           {activeNav === 'Manage Pharmacies' && renderManagePharmacies()}
           {activeNav === 'Manage Riders' && renderManageRiders()}
-          {activeNav !== 'Dashboard' && activeNav !== 'Manage Pharmacies' && (
+          {activeNav !== 'Dashboard' && activeNav !== 'Manage Pharmacies' && activeNav !== 'Manage Riders' && (
             <div className="flex items-center justify-center h-full">
-              <div className="text-center">
-                <h2 className="text-2xl font-bold text-[#2C7A5D] mb-2">{activeNav}</h2>
-                <p className="text-[#666666]">This section will be implemented in future updates.</p>
+              <div
+                className="relative max-w-lg w-full rounded-3xl border px-10 py-12 text-center overflow-hidden"
+                style={{
+                  background: 'linear-gradient(165deg, rgba(19,27,53,0.92), rgba(13,19,40,0.92))',
+                  borderColor: 'rgba(108,99,255,0.22)',
+                }}
+              >
+                <div
+                  className="absolute inset-0 pointer-events-none"
+                  style={{
+                    background:
+                      'radial-gradient(circle at 25% -10%, rgba(50,224,196,0.2), transparent 55%), radial-gradient(circle at 80% 0%, rgba(255,77,141,0.2), transparent 50%)',
+                  }}
+                />
+                <div className="relative flex flex-col items-center space-y-4">
+                  <div className="p-3 rounded-full bg-gradient-to-br from-[#32E0C4] via-[#6C63FF] to-[#FF4D8D] text-white shadow-lg shadow-[#32E0C422]">
+                    <svg className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.6} d="M9 17v2h6v-2m-7-5h8m-9-5h10m-5-4v20" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h2 className="text-2xl font-semibold text-white mb-1">{activeNav} coming soon</h2>
+                    <p className="text-sm" style={{ color: 'rgba(244,246,255,0.6)' }}>
+                      We&apos;re wiring up this console module next. Ping the product team if you need an early preview.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setActiveNav('Dashboard')}
+                    className="px-4 py-2 rounded-xl text-sm font-semibold transition-colors duration-200"
+                    style={{
+                      background: 'linear-gradient(135deg, rgba(50,224,196,0.3), rgba(108,99,255,0.3))',
+                      border: '1px solid rgba(255,255,255,0.08)',
+                      color: '#F4F6FF',
+                    }}
+                  >
+                    Back to Dashboard
+                  </button>
+                </div>
               </div>
             </div>
           )}
+          </div>
         </div>
       </div>
       
+      {/* Pharmacy Details Modal */}
+      <div className="relative">
       {/* Pharmacy Details Modal */}
       {renderPharmacyDetailsModal()}
       {/* Rider Details Modal */}
@@ -2067,6 +3146,7 @@ const AdminDashboard = () => {
       {renderSuccessModal()}
       {/* Rider Success Modal */}
       {renderRiderSuccessModal()}
+      </div>
     </div>
   );
 };

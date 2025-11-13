@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { router } from 'expo-router';
 import { useAuth } from '../contexts/AuthContext';
 
 interface Onboarding4Props {
@@ -20,14 +21,21 @@ export default function Onboarding4({ onComplete, onNavigateToMain }: Onboarding
   const { completeOnboarding } = useAuth();
 
   const handleGetStarted = async () => {
-    // Mark onboarding as complete
-    await completeOnboarding();
-    
+    try {
+      // Mark onboarding as complete
+      await completeOnboarding();
+    } catch (error) {
+      console.error('Failed to complete onboarding:', error);
+    }
+
     if (onNavigateToMain) {
       onNavigateToMain();
     } else if (onComplete) {
       onComplete();
     }
+
+    // Ensure navigation to the main home screen
+    router.replace('/home');
   };
 
   return (
