@@ -784,6 +784,7 @@ const OrderTrackingScreen: React.FC = () => {
     accepted: require('../assets/accepted.png'),
     ready_for_pickup: require('../assets/ready_for_pickup.png'),
     delivered: require('../assets/delivered.png'),
+    out_for_delivery: require('../assets/outfordelivery.png'),
   };
 
   const getStatusInfo = () => {
@@ -813,10 +814,14 @@ const OrderTrackingScreen: React.FC = () => {
           showMap: false
         };
       case 'picked_up':
+      case 'delivering':
+      case 'out_for_delivery':
+      case 'in_transit':
         return {
           title: 'Out for Delivery',
-          subtitle: '', // No subtitle for map view
-          showMap: true
+          subtitle: 'Track your rider in real time as they head your way.',
+          showMap: true,
+          fallbackImage: STATUS_IMAGES.out_for_delivery
         };
       case 'delivered':
         return {
@@ -942,7 +947,12 @@ const OrderTrackingScreen: React.FC = () => {
           <TouchableOpacity style={styles.retryButton} onPress={onRefresh}>
             <Text style={styles.retryButtonText}>Retry</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.homeButton} onPress={() => router.push('/')}>
+          <TouchableOpacity
+            style={styles.homeButton}
+            onPress={() => {
+              router.replace('/home');
+            }}
+          >
             <Text style={styles.homeButtonText}>Go Home</Text>
           </TouchableOpacity>
         </View>
@@ -1034,6 +1044,18 @@ const OrderTrackingScreen: React.FC = () => {
                   </Text>
                 )}
               </View>
+            </View>
+          ) : getStatusInfo().showMap ? (
+            <View style={styles.statusImageContainer}>
+              <Image
+                source={getStatusInfo().fallbackImage || STATUS_IMAGES.out_for_delivery}
+                style={styles.statusImage}
+                resizeMode="contain"
+              />
+              <Text style={styles.statusDisplayTitle}>{getStatusInfo().title}</Text>
+              <Text style={styles.statusDisplaySubtitle}>
+                {getStatusInfo().subtitle || 'Hang tight! Your rider is heading your way.'}
+              </Text>
             </View>
           ) : (
             // Show status image for other states

@@ -108,9 +108,7 @@ module.exports = {
       // Also expose to JS runtime for reverse geocoding fallback
       googleMapsApiKey: GOOGLE_MAPS_API_KEY,
       stripePublishableKey: STRIPE_PUBLISHABLE_KEY,
-      eas: {
-        projectId: '7c1dc10b-045b-40b5-a441-e4730b5dd93d',
-      },
+      eas: {},
     },
   },
 };
