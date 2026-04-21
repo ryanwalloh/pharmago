@@ -50,3 +50,9 @@ Thumbs.db
 # Logs
 *.log
 backend/logs/
+
+# Local docs and helper assets
+docs/
+test-scripts/
+variables/
+capstone-details-snippet
