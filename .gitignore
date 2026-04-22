@@ -1,6 +1,8 @@
 # Environment variables
 backend/.env
 .env
+.env.compose
+.env.compose.example
 .env.local
 .env.production
 
