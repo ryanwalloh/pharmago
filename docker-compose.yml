@@ -5,9 +5,9 @@ services:
     image: postgres:16
     container_name: pharmago_postgres
     environment:
-      POSTGRES_DB: pharmago
-      POSTGRES_USER: superpharmago        # updated username
-      POSTGRES_PASSWORD: pharmagoldenkey  # updated password
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
       - "5432:5432"
     volumes:
@@ -61,8 +61,8 @@ services:
     image: dpage/pgadmin4:8
     container_name: pharmago_pgadmin
     environment:
-      PGADMIN_DEFAULT_EMAIL: admin@local.dev
-      PGADMIN_DEFAULT_PASSWORD: admin123
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
       PGADMIN_CONFIG_SERVER_MODE: 'False'
       PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: 'False'
       PGADMIN_CONFIG_ENHANCED_COOKIE_PROTECTION: 'False'

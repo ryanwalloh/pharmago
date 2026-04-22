@@ -5,6 +5,9 @@ backend/.env
 .env.compose.example
 .env.local
 .env.production
+.history/
+node_modules/
+
 
 # History files
 .history/
